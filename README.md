@@ -81,52 +81,54 @@ build\NeonCoreConsole.exe   debug/test 控制台，包含 SelfTest
 dist\NeonCore\NeonCore.exe  交付用 release GUI，不包含测试逻辑
 ```
 
-测试代码位于 `tests/SelfTest.h`，只在 `src/main.cpp` 的 `#ifdef DEBUG` 分支里包含；`-DDEBUG` 只用于 `test` 目标。
+测试代码位于 `src/tests/SelfTest.h`，只在 `src/app/main.cpp` 的 `#ifdef DEBUG` 分支里包含；`-DDEBUG` 只用于 `test` 目标。
 
 ## 代码结构
 
 ```text
 cpp/
 ├─ src/
-│  ├─ base/
-│  │  ├─ Base.h                唯一的 I/O 基础设施接口类
-│  │  └─ Base.cpp              输入状态、音频、字体和绘制原语的隐藏实现
-│  ├─ Arena/
-│  │  ├─ Arena.h / Arena.cpp   模块入口：组合组件、推进/绘制战场
-│  │  ├─ Fighter.h              Player/Enemy 的共同虚接口
-│  │  ├─ Player.h / Player.cpp 玩家战斗者
-│  │  ├─ Enemy.h / Enemy.cpp   敌人战斗者、Boss
-│  │  ├─ Bullet.h / Bullet.cpp 子弹实体
-│  │  ├─ Portal.h / Portal.cpp 传送门实体
-│  │  ├─ Pickup.h / Pickup.cpp 掉落实体
-│  │  ├─ Particle.h / Particle.cpp 粒子实体
-│  │  ├─ FloatingText.h / FloatingText.cpp 飘字实体
-│  │  ├─ Shockwave.h / Shockwave.cpp 冲击波实体
-│  │  ├─ Collision.h / Collision.cpp 碰撞事件
-│  │  ├─ Kill.h / Kill.cpp     击杀事件
-│  │  ├─ BossState.h / BossState.cpp Boss 阶段状态
-│  │  └─ Score.h / Score.cpp   分数/击杀状态
-│  ├─ Game.h / Game.cpp         状态机与模块编排
-│  ├─ Waves.h / Waves.cpp       波次表和出生节奏
-│  ├─ Upgrades.h / Upgrades.cpp 强化池、抽取与应用
-│  ├─ Renderer.h / Renderer.cpp 背景、发光、HUD、卡片、结算界面
-│  ├─ Random.h / Random.cpp     可注入随机数
-│  ├─ Math.h / Math.cpp         向量与几何
-│  ├─ GameConfig.h              全局尺寸常量
-│  └─ main.cpp                  QWidget 窗口、输入桥接、release 入口
-├─ tests/
-│  └─ SelfTest.h                仅 -DDEBUG 测试构建包含的测试/截图逻辑
-├─ build.bat                    调用 mingw32-make -j12 deploy
-├─ Makefile                     mingw32-make -j12 并行构建
+│  ├─ app/
+│  │  ├─ Arena/
+│  │  │  ├─ Arena.h / Arena.cpp   模块入口：组合 4 个组件
+│  │  │  ├─ Events.h / Events.cpp 组件：碰撞 + 击杀（单个 class）
+│  │  │  ├─ State.h / State.cpp   组件：Boss 阶段 + 分数 + 玩家失败
+│  │  │  ├─ Combatants/
+│  │  │  │  ├─ Combatants.h/.cpp  组件：玩家、敌人、Boss
+│  │  │  │  ├─ Player.h/.cpp      玩家类型
+│  │  │  │  └─ Enemy.h/.cpp       敌人类型、Boss
+│  │  │  └─ Entities/
+│  │  │     ├─ Entities.h/.cpp    组件：实体容器
+│  │  │     ├─ Bullet / Portal / Pickup
+│  │  │     └─ Particle / FloatingText / Shockwave
+│  │  ├─ Base/
+│  │  │  ├─ Base.h / Base.cpp     模块入口：组合 Input / Audio / Paint
+│  │  │  ├─ Input/Input.h/.cpp    组件：键鼠状态
+│  │  │  ├─ Audio/Audio.h/.cpp    组件：程序化 WAV + 音效池
+│  │  │  └─ Paint/Paint.h/.cpp    组件：颜色/字体/绘制原语
+│  │  ├─ Game.h / Game.cpp        状态机与模块编排
+│  │  ├─ Waves.h / Waves.cpp      波次表和出生节奏
+│  │  ├─ Upgrades.h / Upgrades.cpp 强化池、抽取与应用
+│  │  ├─ Renderer.h / Renderer.cpp 背景、发光、HUD、卡片、结算界面
+│  │  ├─ Random.h / Random.cpp    可注入随机数
+│  │  ├─ Math.h / Math.cpp        向量与几何
+│  │  ├─ GameConfig.h             全局尺寸常量
+│  │  └─ main.cpp                 QWidget 窗口、输入桥接、release 入口
+│  ├─ include/
+│  │  └─ Fighter.h                Player/Enemy 的公共虚接口
+│  └─ tests/
+│     └─ SelfTest.h               仅 -DDEBUG 测试构建包含的测试/截图逻辑
+├─ build.bat                      调用 mingw32-make -j12 deploy
+├─ Makefile                       mingw32-make -j12 并行构建
 ├─ run.bat
-├─ ARCHITECTURE.md              模块边界、依赖和扩展指南
+├─ ARCHITECTURE.md                模块边界、依赖和扩展指南
 ├─ screenshots/
-└─ dist/NeonCore/               交付用 release GUI + 运行库
+└─ dist/NeonCore/                 交付用 release GUI + 运行库
 ```
 
-`src/base/` 只对外提供一个 `Base.h` / 一个 `Base` 类；其中的键鼠状态、QSoundEffect、WAV 生成、QFontDatabase 等细节都封装在 `Base.cpp` 的私有 `Impl` 里。业务模块只看到输入查询、音效播放和绘制原语。
+`src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Paint` 三个 `namespace base` 组件。`Base.h` 仍只暴露 Base 的输入/音频/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Paint` 的 QFontDatabase 细节都在各自组件内。
 
-`src/Arena/` 是模块目录：`Arena` 是全局模块类，`Arena/` 下的 `Fighter` 是 `Player` / `Enemy` 共同的虚接口；`Player`、`Enemy`、`Bullet`、`Portal`、`Pickup`、`Particle`、`Collision`、`Kill`、`BossState`、`Score` 等是 `namespace arena` 中的组件类。组件由 `Arena` 组合，外部模块只通过 `Arena` 的公共接口访问战斗世界。
+`src/app/Arena/` 是模块目录：`Arena` 是全局模块类，只组合 `Combatants`、`Entities`、`Events`、`State` 四个 `namespace arena` 组件。`Fighter` 放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段、分数和玩家失败。
 
 渲染使用 Qt 的 `QPainter`：所有形状、发光、粒子、文字和 UI 都由代码绘制，不加载外部图片。音效由代码生成 WAV 后通过 `QSoundEffect` 播放。
 
@@ -164,12 +166,12 @@ mingw32-make -j12 test
 .\build\NeonCoreConsole.exe --window-test screenshots/window.png
 ```
 
-`NeonCoreConsole.exe` 和 `tests/SelfTest.h` 只存在于 debug/test 构建；`dist\NeonCore` 只交付 release `NeonCore.exe`，不包含测试逻辑。
+`NeonCoreConsole.exe` 和 `src/tests/SelfTest.h` 只存在于 debug/test 构建；`dist\NeonCore` 只交付 release `NeonCore.exe`，不包含测试逻辑。
 
 ## 说明
 
 - C++ 版使用 Qt 6 的字体渲染，字形和抗锯齿效果与 pygame 版略有差异；布局、配色和逻辑保持一致。
-- 中文使用系统微软雅黑/黑体。若字体缺失，可在 `src/base/Base.cpp` 的 `Base::initialize()` 中更换字体路径。
+- 中文使用系统微软雅黑/黑体。若字体缺失，可在 `src/app/Base/Paint/Paint.cpp` 的 `Paint::initialize()` 中更换字体路径。
 - 第三方运行库：Qt 6（LGPLv3）与 FFmpeg（LGPLv2.1+）。分发时请保留相应的许可证信息，见 [`THIRD_PARTY.txt`](THIRD_PARTY.txt)。
 
 更多画面：[标题](screenshots/title.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)

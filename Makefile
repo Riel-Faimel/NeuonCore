@@ -25,7 +25,7 @@ INCS := -I$(QTDIR)/include/QtWidgets \
         -I$(QTDIR)/include/QtNetwork \
         -I$(QTDIR)/include/QtCore \
         -I$(QTDIR)/mkspecs/win32-g++ \
-        -Isrc
+        -Isrc/app -Isrc/include
 DEFS := -DQT_WIDGETS_LIB -DQT_MULTIMEDIA_LIB -DQT_GUI_LIB \
         -DQT_CORE_LIB -DQT_NETWORK_LIB -DWIN32 -DWIN64 -D_WIN64 \
         -DMINGW_HAS_SECURE_API=1 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -DNDEBUG
@@ -35,15 +35,22 @@ LIBS := -L$(QTDIR)/lib \
         -luser32 -lkernel32 -lgdi32 -lwinmm -limm32 -lversion \
         -ldwmapi -luxtheme -lmsimg32 -static-libgcc -static-libstdc++
 
-ROOT_SRC := Math Random Waves Upgrades Renderer Game
-ROOT_OBJS := $(addprefix $(BUILD)/,$(addsuffix .o,$(ROOT_SRC)))
-ARENA_COMPONENTS := Arena Player Enemy Bullet Portal Pickup Particle \
-                    FloatingText Shockwave Collision Kill BossState Score
-ARENA_OBJS := $(addprefix $(BUILD)/Arena_,$(addsuffix .o,$(ARENA_COMPONENTS)))
+APP_SRC := Math Random Waves Upgrades Renderer Game
+APP_OBJS := $(addprefix $(BUILD)/app/,$(addsuffix .o,$(APP_SRC)))
+BASE_COMPONENTS := Base Input/Input Audio/Audio Paint/Paint
+BASE_OBJS := $(addprefix $(BUILD)/app/Base/,$(addsuffix .o,$(BASE_COMPONENTS)))
+MAIN_RELEASE_OBJ := $(BUILD)/app/main_release.o
+MAIN_TEST_OBJ := $(BUILD)/app/main_test.o
 
-SHARED_OBJS := $(BUILD)/Base.o $(ROOT_OBJS) $(ARENA_OBJS)
-RELEASE_OBJS := $(SHARED_OBJS) $(BUILD)/main_release.o
-TEST_OBJS := $(SHARED_OBJS) $(BUILD)/main_test.o
+ARENA_COMPONENTS := Arena Combatants/Combatants Entities/Entities Events State \
+                    Combatants/Player Combatants/Enemy \
+                    Entities/Bullet Entities/Portal Entities/Pickup \
+                    Entities/Particle Entities/FloatingText Entities/Shockwave
+ARENA_OBJS := $(addprefix $(BUILD)/app/Arena/,$(addsuffix .o,$(ARENA_COMPONENTS)))
+
+SHARED_OBJS := $(BASE_OBJS) $(APP_OBJS) $(ARENA_OBJS)
+RELEASE_OBJS := $(SHARED_OBJS) $(MAIN_RELEASE_OBJ)
+TEST_OBJS := $(SHARED_OBJS) $(MAIN_TEST_OBJ)
 DEPS := $(RELEASE_OBJS:.o=.d) $(TEST_OBJS:.o=.d)
 
 .PHONY: all release test deploy clean
@@ -54,24 +61,32 @@ test: $(BUILD)/NeonCoreConsole.exe
 
 $(BUILD):
 	@if not exist "$(BUILD_WIN)" mkdir "$(BUILD_WIN)"
+	@if not exist "$(BUILD_WIN)\app" mkdir "$(BUILD_WIN)\app"
+	@if not exist "$(BUILD_WIN)\app\Base" mkdir "$(BUILD_WIN)\app\Base"
+	@if not exist "$(BUILD_WIN)\app\Base\Input" mkdir "$(BUILD_WIN)\app\Base\Input"
+	@if not exist "$(BUILD_WIN)\app\Base\Audio" mkdir "$(BUILD_WIN)\app\Base\Audio"
+	@if not exist "$(BUILD_WIN)\app\Base\Paint" mkdir "$(BUILD_WIN)\app\Base\Paint"
+	@if not exist "$(BUILD_WIN)\app\Arena" mkdir "$(BUILD_WIN)\app\Arena"
+	@if not exist "$(BUILD_WIN)\app\Arena\Combatants" mkdir "$(BUILD_WIN)\app\Arena\Combatants"
+	@if not exist "$(BUILD_WIN)\app\Arena\Entities" mkdir "$(BUILD_WIN)\app\Arena\Entities"
 
-$(BUILD)/Base.o: src/base/Base.cpp | $(BUILD)
+$(BASE_OBJS): $(BUILD)/app/Base/%.o: src/app/Base/%.cpp | $(BUILD)
 	@echo [CXX] $<
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
-$(ROOT_OBJS): $(BUILD)/%.o: src/%.cpp | $(BUILD)
+$(APP_OBJS): $(BUILD)/app/%.o: src/app/%.cpp | $(BUILD)
 	@echo [CXX] $<
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
-$(ARENA_OBJS): $(BUILD)/Arena_%.o: src/Arena/%.cpp | $(BUILD)
+$(ARENA_OBJS): $(BUILD)/app/Arena/%.o: src/app/Arena/%.cpp | $(BUILD)
 	@echo [CXX] $<
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
-$(BUILD)/main_release.o: src/main.cpp | $(BUILD)
+$(MAIN_RELEASE_OBJ): src/app/main.cpp | $(BUILD)
 	@echo [CXX] $< (release)
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
-$(BUILD)/main_test.o: src/main.cpp | $(BUILD)
+$(MAIN_TEST_OBJ): src/app/main.cpp | $(BUILD)
 	@echo [CXX] $< (debug/tests)
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -DDEBUG -c $< -o $@
 
