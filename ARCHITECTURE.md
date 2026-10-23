@@ -17,6 +17,7 @@
    - 模块类在全局命名空间：`GameConfig / Math / Random / Base / Arena / Waves / Upgrades / Renderer / Game / GameWindow / SelfTest`。
    - `Arena` 的组件在 `namespace arena`：`Combatants / Entities / Events / State`。
    - `Base` 的组件在 `namespace base`：`Input / Audio / Paint`。
+- `Math` / `Random` 是 `src/lib/` 下的通用库模块，不依赖应用层。
    - `Fighter / Player / Enemy / Bullet / ...` 是组件内部使用的接口和类型，不再各自算一个组件。
    - 组件由模块组合，模块对全局负责；外部模块不直接持有或调用 namespace 内的组件。
    - `src/app/Base/` 的 `Base.h` 仍是唯一对外模块接口；`Base.cpp` 通过 PIMPL 组合 `Input`/`Audio`，静态绘制接口转发 `Paint`。
@@ -377,8 +378,8 @@ struct BossPattern {
 
 ```text
 src/app/GameConfig.h
-src/app/Math.h / Math.cpp
-src/app/Random.h / Random.cpp
+src/lib/Math.h / Math.cpp
+src/lib/Random.h / Random.cpp
 src/app/Base/Base.h / Base.cpp
 src/app/Base/Input/Input.h / Input.cpp
 src/app/Base/Audio/Audio.h / Audio.cpp

@@ -25,7 +25,7 @@ INCS := -I$(QTDIR)/include/QtWidgets \
         -I$(QTDIR)/include/QtNetwork \
         -I$(QTDIR)/include/QtCore \
         -I$(QTDIR)/mkspecs/win32-g++ \
-        -Isrc/app -Isrc/include
+        -Isrc/app -Isrc/include -Isrc/lib
 DEFS := -DQT_WIDGETS_LIB -DQT_MULTIMEDIA_LIB -DQT_GUI_LIB \
         -DQT_CORE_LIB -DQT_NETWORK_LIB -DWIN32 -DWIN64 -D_WIN64 \
         -DMINGW_HAS_SECURE_API=1 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -DNDEBUG
@@ -35,8 +35,10 @@ LIBS := -L$(QTDIR)/lib \
         -luser32 -lkernel32 -lgdi32 -lwinmm -limm32 -lversion \
         -ldwmapi -luxtheme -lmsimg32 -static-libgcc -static-libstdc++
 
-APP_SRC := Math Random Waves Upgrades Renderer Game
+APP_SRC := Waves Upgrades Renderer Game
 APP_OBJS := $(addprefix $(BUILD)/app/,$(addsuffix .o,$(APP_SRC)))
+LIB_SRC := Math Random
+LIB_OBJS := $(addprefix $(BUILD)/lib/,$(addsuffix .o,$(LIB_SRC)))
 BASE_COMPONENTS := Base Input/Input Audio/Audio Paint/Paint
 BASE_OBJS := $(addprefix $(BUILD)/app/Base/,$(addsuffix .o,$(BASE_COMPONENTS)))
 MAIN_RELEASE_OBJ := $(BUILD)/app/main_release.o
@@ -48,7 +50,7 @@ ARENA_COMPONENTS := Arena Combatants/Combatants Entities/Entities Events State \
                     Entities/Particle Entities/FloatingText Entities/Shockwave
 ARENA_OBJS := $(addprefix $(BUILD)/app/Arena/,$(addsuffix .o,$(ARENA_COMPONENTS)))
 
-SHARED_OBJS := $(BASE_OBJS) $(APP_OBJS) $(ARENA_OBJS)
+SHARED_OBJS := $(BASE_OBJS) $(LIB_OBJS) $(APP_OBJS) $(ARENA_OBJS)
 RELEASE_OBJS := $(SHARED_OBJS) $(MAIN_RELEASE_OBJ)
 TEST_OBJS := $(SHARED_OBJS) $(MAIN_TEST_OBJ)
 DEPS := $(RELEASE_OBJS:.o=.d) $(TEST_OBJS:.o=.d)
@@ -62,6 +64,7 @@ test: $(BUILD)/NeonCoreConsole.exe
 $(BUILD):
 	@if not exist "$(BUILD_WIN)" mkdir "$(BUILD_WIN)"
 	@if not exist "$(BUILD_WIN)\app" mkdir "$(BUILD_WIN)\app"
+	@if not exist "$(BUILD_WIN)\lib" mkdir "$(BUILD_WIN)\lib"
 	@if not exist "$(BUILD_WIN)\app\Base" mkdir "$(BUILD_WIN)\app\Base"
 	@if not exist "$(BUILD_WIN)\app\Base\Input" mkdir "$(BUILD_WIN)\app\Base\Input"
 	@if not exist "$(BUILD_WIN)\app\Base\Audio" mkdir "$(BUILD_WIN)\app\Base\Audio"
@@ -71,6 +74,10 @@ $(BUILD):
 	@if not exist "$(BUILD_WIN)\app\Arena\Entities" mkdir "$(BUILD_WIN)\app\Arena\Entities"
 
 $(BASE_OBJS): $(BUILD)/app/Base/%.o: src/app/Base/%.cpp | $(BUILD)
+	@echo [CXX] $<
+	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
+
+$(LIB_OBJS): $(BUILD)/lib/%.o: src/lib/%.cpp | $(BUILD)
 	@echo [CXX] $<
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 

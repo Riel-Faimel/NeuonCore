@@ -110,10 +110,11 @@ cpp/
 │  │  ├─ Waves.h / Waves.cpp      波次表和出生节奏
 │  │  ├─ Upgrades.h / Upgrades.cpp 强化池、抽取与应用
 │  │  ├─ Renderer.h / Renderer.cpp 背景、发光、HUD、卡片、结算界面
-│  │  ├─ Random.h / Random.cpp    可注入随机数
-│  │  ├─ Math.h / Math.cpp        向量与几何
 │  │  ├─ GameConfig.h             全局尺寸常量
 │  │  └─ main.cpp                 QWidget 窗口、输入桥接、release 入口
+│  ├─ lib/
+│  │  ├─ Math.h / Math.cpp        向量与几何
+│  │  └─ Random.h / Random.cpp    可注入随机数
 │  ├─ include/
 │  │  └─ Fighter.h                Player/Enemy 的公共虚接口
 │  └─ tests/
@@ -129,6 +130,8 @@ cpp/
 `src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Paint` 三个 `namespace base` 组件。`Base.h` 仍只暴露 Base 的输入/音频/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Paint` 的 QFontDatabase 细节都在各自组件内。
 
 `src/app/Arena/` 是模块目录：`Arena` 是全局模块类，只组合 `Combatants`、`Entities`、`Events`、`State` 四个 `namespace arena` 组件。`Fighter` 放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段、分数和玩家失败。
+
+`src/lib/` 放不依赖应用层的通用模块：`Math`（向量/几何）和 `Random`（可注入随机数）。
 
 渲染使用 Qt 的 `QPainter`：所有形状、发光、粒子、文字和 UI 都由代码绘制，不加载外部图片。音效由代码生成 WAV 后通过 `QSoundEffect` 播放。
 
