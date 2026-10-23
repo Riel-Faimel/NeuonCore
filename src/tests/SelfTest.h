@@ -3,7 +3,7 @@
 // 测试专用代码：只在 -DDEBUG 构建中由 main.cpp 包含。
 // 交付的 NeonCore.exe 不包含这里的任何逻辑。
 
-#include "Game.h"
+#include "Games/Games.h"
 #include "Base/Base.h"
 
 #include <QDir>
@@ -18,11 +18,11 @@
 
 class SelfTest {
 public:
-    static void simulate(Game &game, float seconds, bool shoot)
+    static void simulate(Games &game, float seconds, bool shoot)
     {
         const int steps = int(seconds * 60.0f);
         for (int i = 0; i < steps; ++i) {
-            if (game.state() == Game::State::Playing && shoot
+            if (game.state() == Games::State::Playing && shoot
                 && game.arena_.player().alive) {
                 game.arena_.combatants_.player().state.invuln =
                     std::max(game.arena_.combatants_.player().state.invuln, 2.0f);
@@ -48,22 +48,22 @@ public:
         }
     }
 
-    static bool autoplay(Game &game, float maxSeconds)
+    static bool autoplay(Games &game, float maxSeconds)
     {
         const int maxSteps = int(maxSeconds * 60.0f);
         for (int i = 0; i < maxSteps; ++i) {
-            if (game.state() == Game::State::Victory) {
+            if (game.state() == Games::State::Victory) {
                 return true;
             }
-            if (game.state() == Game::State::GameOver
-                || game.state() == Game::State::Title) {
+            if (game.state() == Games::State::GameOver
+                || game.state() == Games::State::Title) {
                 return false;
             }
-            if (game.state() == Game::State::Upgrade) {
+            if (game.state() == Games::State::Upgrade) {
                 game.selectUpgrade(0);
                 continue;
             }
-            if (game.state() == Game::State::Playing) {
+            if (game.state() == Games::State::Playing) {
                 game.arena_.combatants_.player().state.invuln = 999.0f;
                 arena::Enemy *target = nullptr;
                 float best = 1e9f;
@@ -145,43 +145,43 @@ public:
         const bool audioRequested = qEnvironmentVariableIsSet("NEON_AUDIO_TEST");
         log(QStringLiteral("Creating game (offscreen, audio %1)")
                 .arg(audioRequested ? QStringLiteral("enabled") : QStringLiteral("disabled")));
-        Game game(audioRequested);
+        Games game(audioRequested);
         log(QStringLiteral("Audio initialized: %1")
                 .arg(game.audioEnabled() ? QStringLiteral("yes") : QStringLiteral("no")));
         if (audioRequested) {
             game.toggleMute();
         }
 
-        success &= require(game.state() == Game::State::Title, QStringLiteral("boots into title"));
+        success &= require(game.state() == Games::State::Title, QStringLiteral("boots into title"));
         game.update(1.0f / 60.0f);
         game.render();
 
         log(QStringLiteral("Input flow"));
         game.keyPress(Qt::Key_Return);
         game.keyRelease(Qt::Key_Return);
-        success &= require(game.state() == Game::State::Playing,
+        success &= require(game.state() == Games::State::Playing,
                            QStringLiteral("enter starts the run"));
         game.keyPress(Qt::Key_Escape);
         game.keyRelease(Qt::Key_Escape);
-        success &= require(game.state() == Game::State::Paused,
+        success &= require(game.state() == Games::State::Paused,
                            QStringLiteral("escape pauses"));
         game.keyPress(Qt::Key_P);
         game.keyRelease(Qt::Key_P);
-        success &= require(game.state() == Game::State::Playing,
+        success &= require(game.state() == Games::State::Playing,
                            QStringLiteral("p resumes"));
 
         game.upgrades_.open();
-        game.state_ = Game::State::Upgrade;
+        game.state_ = Games::State::Upgrade;
         game.renderer_.upgradeIndexAt(Math::Vec2(300, 400));
         game.mousePressLeft(Math::Vec2(300, 400));
         game.mouseReleaseLeft();
-        success &= require(game.state() == Game::State::Playing,
+        success &= require(game.state() == Games::State::Playing,
                            QStringLiteral("mouse click selects an upgrade"));
 
         game.showTitle();
         log(QStringLiteral("Starting run"));
         game.startRun();
-        success &= require(game.state() == Game::State::Playing,
+        success &= require(game.state() == Games::State::Playing,
                            QStringLiteral("run starts"));
         success &= require(game.waves_.currentWave() == 1,
                            QStringLiteral("starts at wave 1"));
@@ -194,11 +194,11 @@ public:
         game.arena_.entities_.enemyBullets().clear();
         for (int i = 0; i < 70; ++i) {
             game.update(1.0f / 60.0f);
-            if (game.state() == Game::State::Upgrade) {
+            if (game.state() == Games::State::Upgrade) {
                 break;
             }
         }
-        success &= require(game.state() == Game::State::Upgrade,
+        success &= require(game.state() == Games::State::Upgrade,
                            QStringLiteral("wave clear opens upgrade screen"));
         success &= require(game.upgrades_.offers().size() == 3,
                            QStringLiteral("offers three upgrades"));
@@ -206,7 +206,7 @@ public:
 
         const Arena::PlayerState before = game.arena_.player();
         game.selectUpgrade(0);
-        success &= require(game.state() == Game::State::Playing,
+        success &= require(game.state() == Games::State::Playing,
                            QStringLiteral("upgrade resumes play"));
         success &= require(game.waves_.currentWave() == 2,
                            QStringLiteral("advances to wave 2"));
@@ -234,7 +234,7 @@ public:
         success &= require(game.arena_.bossDefeated(),
                            QStringLiteral("boss death starts victory sequence"));
         simulate(game, 2.0f, false);
-        success &= require(game.state() == Game::State::Victory,
+        success &= require(game.state() == Games::State::Victory,
                            QStringLiteral("victory screen reached"));
         game.render();
 
@@ -244,11 +244,11 @@ public:
         game.arena_.combatants_.player().takeDamage(
             game.arena_, arena::Damage{9999.0f, false, arena::DamageSource::Bullet});
         game.update(1.0f / 60.0f);
-        success &= require(game.state() == Game::State::GameOver,
+        success &= require(game.state() == Games::State::GameOver,
                            QStringLiteral("lethal damage ends run"));
         game.render();
         game.startRun();
-        success &= require(game.state() == Game::State::Playing
+        success &= require(game.state() == Games::State::Playing
                                && game.waves_.currentWave() == 1,
                            QStringLiteral("restart works"));
 
@@ -261,7 +261,7 @@ public:
         game.showTitle();
         game.update(1.0f / 60.0f);
         game.render();
-        success &= require(game.state() == Game::State::Title,
+        success &= require(game.state() == Games::State::Title,
                            QStringLiteral("returns to title"));
 
         log(success ? QStringLiteral("ALL C++ SMOKE TESTS PASSED")
@@ -276,7 +276,7 @@ public:
         if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
             return 1;
         }
-        Game game(false);
+        Games game(false);
         auto save = [&](const QString &name) {
             game.render();
             const QString path = dir.filePath(name);
@@ -295,7 +295,7 @@ public:
         save(QStringLiteral("title.png"));
 
         game.startRun();
-        game.state_ = Game::State::Playing;
+        game.state_ = Games::State::Playing;
         game.runTime_ = 112.0f;
         game.waves_.start(4);
         game.waves_.queue_ = {QStringLiteral("drone"), QStringLiteral("spitter")};
@@ -375,7 +375,7 @@ public:
         save(QStringLiteral("upgrade.png"));
 
         game.startRun();
-        game.state_ = Game::State::Playing;
+        game.state_ = Games::State::Playing;
         game.waves_.start(8);
         game.waves_.queue_.clear();
         game.waves_.waveTotal_ = 16;
@@ -431,7 +431,7 @@ public:
         save(QStringLiteral("victory.png"));
 
         game.startRun();
-        game.state_ = Game::State::Playing;
+        game.state_ = Games::State::Playing;
         game.waves_.start(3);
         game.waves_.queue_.clear();
         game.waves_.waveTotal_ = 12;

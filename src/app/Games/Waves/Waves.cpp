@@ -1,9 +1,11 @@
-#include "Waves.h"
+#include "Games/Waves/Waves.h"
 
 #include "Arena/Arena.h"
 #include "Random.h"
 
 #include <algorithm>
+
+namespace games {
 
 Waves::Waves(Random &random, Arena &arena) : random_(random), arena_(arena) {}
 
@@ -117,3 +119,5 @@ std::vector<QString> Waves::buildPlan(int wave) const
     }
     return plan;
 }
+
+} // namespace games

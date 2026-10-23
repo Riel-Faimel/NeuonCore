@@ -1,10 +1,12 @@
-#include "Upgrades.h"
+#include "Games/Upgrades/Upgrades.h"
 
 #include "Arena/Arena.h"
 #include "Random.h"
 #include "Base/Base.h"
 
 #include <algorithm>
+
+namespace games {
 
 Upgrades::Upgrades(Random &random, Arena &arena, Base &base)
     : random_(random), arena_(arena), base_(base)
@@ -140,3 +142,5 @@ void Upgrades::applyEffect(const QString &key)
         player.critChance = std::min(0.60f, player.critChance + 0.12f);
     }
 }
+
+} // namespace games

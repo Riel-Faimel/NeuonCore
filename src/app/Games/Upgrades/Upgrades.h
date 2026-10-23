@@ -9,8 +9,11 @@
 class Arena;
 class Base;
 class Random;
+class SelfTest;
 
-// Upgrades 模块：封装强化池、可选性判断、抽取、叠加与应用。
+namespace games {
+
+// Upgrades 组件：封装强化池、可选性判断、抽取、叠加与应用。
 // 工具：Random（洗牌）、Arena（读取/修改玩家状态与播放反馈）、Base（音效）。
 // 封装：强化定义、上限、等级计数、效果分支。
 // 暴露：开启三选一、应用某张卡、当前候选卡、已叠加等级。
@@ -36,7 +39,7 @@ public:
     bool isOpen() const { return open_; }
 
 private:
-    friend class SelfTest;
+    friend class ::SelfTest;
 
     struct Definition {
         QString key;
@@ -57,3 +60,5 @@ private:
     std::vector<Offer> offers_;
     bool open_ = false;
 };
+
+} // namespace games

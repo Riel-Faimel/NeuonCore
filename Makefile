@@ -35,8 +35,10 @@ LIBS := -L$(QTDIR)/lib \
         -luser32 -lkernel32 -lgdi32 -lwinmm -limm32 -lversion \
         -ldwmapi -luxtheme -lmsimg32 -static-libgcc -static-libstdc++
 
-APP_SRC := Waves Upgrades Renderer Game
+APP_SRC := Renderer
 APP_OBJS := $(addprefix $(BUILD)/app/,$(addsuffix .o,$(APP_SRC)))
+GAMES_COMPONENTS := Games Waves/Waves Upgrades/Upgrades
+GAMES_OBJS := $(addprefix $(BUILD)/app/Games/,$(addsuffix .o,$(GAMES_COMPONENTS)))
 LIB_SRC := Math Random
 LIB_OBJS := $(addprefix $(BUILD)/lib/,$(addsuffix .o,$(LIB_SRC)))
 BASE_COMPONENTS := Base Input/Input Audio/Audio Paint/Paint
@@ -50,7 +52,7 @@ ARENA_COMPONENTS := Arena Combatants/Combatants Entities/Entities Events State \
                     Entities/Particle Entities/FloatingText Entities/Shockwave
 ARENA_OBJS := $(addprefix $(BUILD)/app/Arena/,$(addsuffix .o,$(ARENA_COMPONENTS)))
 
-SHARED_OBJS := $(BASE_OBJS) $(LIB_OBJS) $(APP_OBJS) $(ARENA_OBJS)
+SHARED_OBJS := $(BASE_OBJS) $(LIB_OBJS) $(APP_OBJS) $(GAMES_OBJS) $(ARENA_OBJS)
 RELEASE_OBJS := $(SHARED_OBJS) $(MAIN_RELEASE_OBJ)
 TEST_OBJS := $(SHARED_OBJS) $(MAIN_TEST_OBJ)
 DEPS := $(RELEASE_OBJS:.o=.d) $(TEST_OBJS:.o=.d)
@@ -69,6 +71,9 @@ $(BUILD):
 	@if not exist "$(BUILD_WIN)\app\Base\Input" mkdir "$(BUILD_WIN)\app\Base\Input"
 	@if not exist "$(BUILD_WIN)\app\Base\Audio" mkdir "$(BUILD_WIN)\app\Base\Audio"
 	@if not exist "$(BUILD_WIN)\app\Base\Paint" mkdir "$(BUILD_WIN)\app\Base\Paint"
+	@if not exist "$(BUILD_WIN)\app\Games" mkdir "$(BUILD_WIN)\app\Games"
+	@if not exist "$(BUILD_WIN)\app\Games\Waves" mkdir "$(BUILD_WIN)\app\Games\Waves"
+	@if not exist "$(BUILD_WIN)\app\Games\Upgrades" mkdir "$(BUILD_WIN)\app\Games\Upgrades"
 	@if not exist "$(BUILD_WIN)\app\Arena" mkdir "$(BUILD_WIN)\app\Arena"
 	@if not exist "$(BUILD_WIN)\app\Arena\Combatants" mkdir "$(BUILD_WIN)\app\Arena\Combatants"
 	@if not exist "$(BUILD_WIN)\app\Arena\Entities" mkdir "$(BUILD_WIN)\app\Arena\Entities"
@@ -78,6 +83,10 @@ $(BASE_OBJS): $(BUILD)/app/Base/%.o: src/app/Base/%.cpp | $(BUILD)
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
 $(LIB_OBJS): $(BUILD)/lib/%.o: src/lib/%.cpp | $(BUILD)
+	@echo [CXX] $<
+	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
+
+$(GAMES_OBJS): $(BUILD)/app/Games/%.o: src/app/Games/%.cpp | $(BUILD)
 	@echo [CXX] $<
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 

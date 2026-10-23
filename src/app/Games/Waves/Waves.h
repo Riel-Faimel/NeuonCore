@@ -6,8 +6,11 @@
 
 class Arena;
 class Random;
+class SelfTest;
 
-// Waves 模块：封装波次表、出生队列和推进节奏。
+namespace games {
+
+// Waves 组件：封装波次表、出生队列和推进节奏。
 // 工具：Random（洗牌）、Arena（生成传送门/统计剩余敌人）。
 // 封装：敌人组合、Boss 波判定、出生间隔。
 // 暴露：开始/推进波次、当前波、总波数、剩余威胁、是否清空。
@@ -28,7 +31,7 @@ public:
     bool isBossWave() const;
 
 private:
-    friend class SelfTest;
+    friend class ::SelfTest;
 
     struct Composition {
         QString kind;
@@ -46,3 +49,5 @@ private:
     int waveTotal_ = 0;
     float spawnTimer_ = 0.0f;
 };
+
+} // namespace games

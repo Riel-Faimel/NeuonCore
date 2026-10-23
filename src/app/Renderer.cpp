@@ -1,9 +1,10 @@
 #include "Renderer.h"
 
 #include "Arena/Arena.h"
-#include "Game.h"
+#include "Games/Games.h"
 #include "Random.h"
-#include "Waves.h"
+#include "Games/Upgrades/Upgrades.h"
+#include "Games/Waves/Waves.h"
 #include "Base/Base.h"
 
 #include <QFontMetricsF>
@@ -268,8 +269,8 @@ void Renderer::drawSparks(QPainter &world, QPainter &glow) const
     }
 }
 
-void Renderer::render(const Game &game, const Arena &arena, const Waves &waves,
-                      const Upgrades &upgrades)
+void Renderer::render(const Games &game, const Arena &arena, const games::Waves &waves,
+                      const games::Upgrades &upgrades)
 {
     world_.fill(Qt::transparent);
     glow_.fill(Qt::transparent);
@@ -282,7 +283,7 @@ void Renderer::render(const Game &game, const Arena &arena, const Waves &waves,
         worldPainter.drawImage(0, 0, background_);
         drawStars(worldPainter, glowPainter);
 
-        if (game.state() == Game::State::Title) {
+        if (game.state() == Games::State::Title) {
             drawTitleArt(worldPainter, glowPainter);
         } else {
             arena.draw(worldPainter, glowPainter);
@@ -313,29 +314,29 @@ void Renderer::render(const Game &game, const Arena &arena, const Waves &waves,
     }
 
     switch (game.state()) {
-    case Game::State::Title:
+    case Games::State::Title:
         drawTitleUI(painter);
         break;
-    case Game::State::Playing:
+    case Games::State::Playing:
         drawHUD(painter, arena, waves);
         drawBossBar(painter, arena);
         drawWaveBanner(painter);
         drawReticle(painter);
         drawPlayHints(painter);
         break;
-    case Game::State::Paused:
+    case Games::State::Paused:
         drawHUD(painter, arena, waves);
         drawBossBar(painter, arena);
         drawPauseOverlay(painter, arena, waves);
         drawPlayHints(painter);
         break;
-    case Game::State::Upgrade:
+    case Games::State::Upgrade:
         drawUpgradeOverlay(painter, upgrades, waves);
         break;
-    case Game::State::GameOver:
+    case Games::State::GameOver:
         drawGameOverOverlay(painter, game, arena, waves);
         break;
-    case Game::State::Victory:
+    case Games::State::Victory:
         drawVictoryOverlay(painter, game, arena, waves);
         break;
     }
@@ -475,7 +476,7 @@ void Renderer::drawTitleUI(QPainter &painter)
                 QStringLiteral("midright"), 165);
 }
 
-void Renderer::drawHUD(QPainter &painter, const Arena &arena, const Waves &waves)
+void Renderer::drawHUD(QPainter &painter, const Arena &arena, const games::Waves &waves)
 {
     const Arena::PlayerState &player = arena.player();
     painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, 100), QColor(3, 8, 17, 208));
@@ -660,8 +661,8 @@ int Renderer::upgradeIndexAt(const Math::Vec2 &pos) const
     return -1;
 }
 
-void Renderer::drawUpgradeOverlay(QPainter &painter, const Upgrades &upgrades,
-                                  const Waves &waves)
+void Renderer::drawUpgradeOverlay(QPainter &painter, const games::Upgrades &upgrades,
+                                  const games::Waves &waves)
 {
     painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
                      QColor(2, 5, 12, 208));
@@ -692,7 +693,7 @@ void Renderer::drawUpgradeOverlay(QPainter &painter, const Upgrades &upgrades,
 }
 
 void Renderer::drawUpgradeCard(QPainter &painter, int index,
-                               const Upgrades::Offer &offer,
+                               const games::Upgrades::Offer &offer,
                                const QRectF &rect, bool hovered)
 {
     const QColor color = offer.color;
@@ -776,7 +777,7 @@ void Renderer::drawUpgradeCard(QPainter &painter, int index,
                 QStringLiteral("center"), 235);
 }
 
-void Renderer::drawPauseOverlay(QPainter &painter, const Arena &arena, const Waves &waves)
+void Renderer::drawPauseOverlay(QPainter &painter, const Arena &arena, const games::Waves &waves)
 {
     Q_UNUSED(arena);
     painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
@@ -807,8 +808,8 @@ void Renderer::drawPauseOverlay(QPainter &painter, const Arena &arena, const Wav
                 QStringLiteral("center"), 190);
 }
 
-void Renderer::drawGameOverOverlay(QPainter &painter, const Game &game,
-                                   const Arena &arena, const Waves &waves)
+void Renderer::drawGameOverOverlay(QPainter &painter, const Games &game,
+                                   const Arena &arena, const games::Waves &waves)
 {
     painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
                      QColor(2, 3, 9, 212));
@@ -834,8 +835,8 @@ void Renderer::drawGameOverOverlay(QPainter &painter, const Game &game,
                 {GameConfig::ScreenWidth / 2.0f, 618}, QStringLiteral("center"), 170);
 }
 
-void Renderer::drawVictoryOverlay(QPainter &painter, const Game &game,
-                                  const Arena &arena, const Waves &waves)
+void Renderer::drawVictoryOverlay(QPainter &painter, const Games &game,
+                                  const Arena &arena, const games::Waves &waves)
 {
     painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
                      QColor(2, 7, 13, 190));
@@ -861,8 +862,8 @@ void Renderer::drawVictoryOverlay(QPainter &painter, const Game &game,
                 {GameConfig::ScreenWidth / 2.0f, 618}, QStringLiteral("center"), 180);
 }
 
-void Renderer::drawRunStats(QPainter &painter, const Game &game,
-                            const Arena &arena, const Waves &waves, float top)
+void Renderer::drawRunStats(QPainter &painter, const Games &game,
+                            const Arena &arena, const games::Waves &waves, float top)
 {
     const int minutes = int(game.runTime()) / 60;
     const int seconds = int(game.runTime()) % 60;

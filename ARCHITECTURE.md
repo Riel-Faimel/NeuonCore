@@ -1,144 +1,141 @@
 # 星核协议 C++ 架构
 
-这份文档只描述 **C++ / Qt 6 版** 的结构。目标是让后续加机制时，知道“这件事应该由谁决定”，而不是在 `Game` 里继续堆分支。
+这份文档只描述 **C++ / Qt 6 版** 的结构。目标是让后续加机制时，知道“这件事应该由谁决定”，而不是继续往中心类里堆分支。
 
 ## 设计原则
 
 1. **一个工作只做一次**
-   - 波次组成只由 `Waves` 决定。
-   - 强化池、可选性和强化效果只由 `Upgrades` 决定。
-   - 敌人 AI、碰撞、Boss 阶段、分数只由 `Arena` 决定。
-   - 画面布局和表现反馈只由 `Renderer` 决定。
-   - 输入、音频、字体和绘制原语只由 `Base` 保存和提供。
-   - `Game` 只负责状态机与调用顺序，不负责具体战斗或 UI 细节。
+   - 波次组成由 `games::Waves` 决定。
+   - 强化池、可选性和强化效果由 `games::Upgrades` 决定。
+   - 敌人 AI、碰撞、Boss 阶段、分数由 `Arena` 及其组件决定。
+   - 画面布局和表现反馈由 `Renderer` 决定。
+   - 输入、音频、字体和绘制原语由 `Base` 及其组件提供。
+   - `Games` 只负责状态机、组件组合和调用顺序。
 
-2. **模块是全局单体类，组件是 namespace 中的单体类**
+2. **模块是全局类，组件是 namespace 中的类**
    - 除 `main` / `WinMain` 外，没有自由函数。
-   - 模块类在全局命名空间：`GameConfig / Math / Random / Base / Arena / Waves / Upgrades / Renderer / Game / GameWindow / SelfTest`。
-   - `Arena` 的组件在 `namespace arena`：`Combatants / Entities / Events / State`。
+   - 全局模块类：`GameConfig / Math / Random / Base / Arena / Games / Renderer / GameWindow / SelfTest`。
    - `Base` 的组件在 `namespace base`：`Input / Audio / Paint`。
-- `Math` / `Random` 是 `src/lib/` 下的通用库模块，不依赖应用层。
-   - `Fighter / Player / Enemy / Bullet / ...` 是组件内部使用的接口和类型，不再各自算一个组件。
-   - 组件由模块组合，模块对全局负责；外部模块不直接持有或调用 namespace 内的组件。
-   - `src/app/Base/` 的 `Base.h` 仍是唯一对外模块接口；`Base.cpp` 通过 PIMPL 组合 `Input`/`Audio`，静态绘制接口转发 `Paint`。
+   - `Games` 的组件在 `namespace games`：`Waves / Upgrades`。
+   - `Arena` 的组件在 `namespace arena`：`Combatants / Entities / Events / State`。
+   - 组件由模块组合；外部模块只依赖模块的公共接口。
 
 3. **每个模块回答三个问题**
    - 它从哪里获得工具？
    - 它自己封装哪些逻辑？
    - 它对外提供哪些工具？
 
-4. **Arena 内部按类别拆成 4 个组件**
-   - 战斗者：`Combatants`
-   - 实体：`Entities`
-   - 事件：`Events`
-   - 游戏状态：`State`
-   - `Arena` 只组合这 4 个组件并编排顺序；Player、Enemy、Bullet 等是组件内部类型，不是独立组件。
-
-## 模块总览
-
-| 模块 | 获得工具 | 封装职责 | 对外暴露 |
-| --- | --- | --- | --- |
-| `GameConfig` | 无 | 屏幕、战场边界、帧率常量 | 只读常量 |
-| `Math` | 无 | `Vec2`、clamp、ease、线段圆碰撞 | 向量/几何静态工具 |
-| `Random` | seed | 一个可注入的随机引擎 | `real`、`integer`、`shuffle` |
-| `Base` | Qt 事件 / QPainter / QFont / Qt Multimedia | 组合 `Input` / `Audio` / `Paint`；对外提供键鼠查询、音效播放、静态颜色/字体/绘制工具 | 输入查询、`playSound`/`toggleMute`、静态字体/颜色/绘制工具 |
-| `Arena` | `Random`、`Base`、`namespace arena` 组件 | 组合玩家、敌人、Boss、子弹、传送门、掉落、粒子、碰撞、击杀、Boss 阶段和分数 | `update`、`draw`、`spawnPortal`、玩家状态、Boss 信息、反馈 |
-| `Waves` | `Random`、`Arena` | 波次组成、Boss 波、出生队列、间隔 | `start`、`update`、当前/总波数、剩余威胁、清空判断 |
-| `Upgrades` | `Random`、`Arena`、`Base` | 强化定义、上限、随机三选一、效果应用、等级计数 | `open`、`apply`、候选卡、等级查询 |
-| `Renderer` | `Random`、`Base`、各模块只读状态 | 背景/星空/发光合成、标题、HUD、Boss 血条、强化卡、暂停/结算、震屏/闪屏/横幅 | `update`、`render`、`frame`、`shake`、`flash`、`showBanner`、卡片命中 |
-| `Game` | 上述模块 | Title/Playing/Upgrade/Paused/GameOver/Victory 状态迁移、调用顺序、通关计时 | `update`、`render`、输入转发、`state`、`runTime`、`frame` |
-| `GameWindow` | `Game`、Qt QWidget/QTimer | 真实窗口、DPI、把 `Game::frame()` 画到窗口 | Qt 窗口生命周期 |
-| `SelfTest` | 所有模块（测试用途） | 自动测试、离屏截图、真实窗口测试 | 测试入口 |
-
-## 依赖方向
+## 目录
 
 ```text
-main.cpp
-└─ GameWindow ──────────────► Game
-                              ├─ Random
-                              ├─ Base        I/O：输入 / 音频 / 字体 / 绘制
-                              ├─ Arena ◄────────┐
-                              ├─ Waves ─────────┤
-                              ├─ Upgrades ──────┘
-                              └─ Renderer ──────► Base / Random
-
-Arena ──────► Random, Base
-Waves ──────► Random, Arena
-Upgrades ───► Random, Arena, Base
-Renderer ───► Game(只读), Arena(只读), Waves(只读), Upgrades(只读), Base, Random
+cpp/src/
+├─ app/
+│  ├─ Base/
+│  │  ├─ Base.h / Base.cpp
+│  │  ├─ Input/Input.h/.cpp
+│  │  ├─ Audio/Audio.h/.cpp
+│  │  └─ Paint/Paint.h/.cpp
+│  ├─ Arena/
+│  │  ├─ Arena.h / Arena.cpp
+│  │  ├─ Events.h / Events.cpp
+│  │  ├─ State.h / State.cpp
+│  │  ├─ Combatants/
+│  │  │  ├─ Combatants.h/.cpp
+│  │  │  ├─ Player.h/.cpp
+│  │  │  └─ Enemy.h/.cpp
+│  │  └─ Entities/
+│  │     ├─ Entities.h/.cpp
+│  │     ├─ Bullet.h/.cpp
+│  │     ├─ Portal.h/.cpp
+│  │     ├─ Pickup.h/.cpp
+│  │     ├─ Particle.h/.cpp
+│  │     ├─ FloatingText.h/.cpp
+│  │     └─ Shockwave.h/.cpp
+│  ├─ Games/
+│  │  ├─ Games.h / Games.cpp
+│  │  ├─ Waves/Waves.h/.cpp
+│  │  └─ Upgrades/Upgrades.h/.cpp
+│  ├─ Renderer.h / Renderer.cpp
+│  ├─ GameConfig.h
+│  └─ main.cpp
+├─ lib/
+│  ├─ Math.h / Math.cpp
+│  └─ Random.h / Random.cpp
+├─ include/
+│  └─ Fighter.h
+└─ tests/
+   └─ SelfTest.h
 ```
 
-依赖是单向的：
+## 模块与组件
 
-- `Base` 不知道游戏业务，只负责输入、声音和绘制原语。
-- `Arena` 不知道 `Game` 和 `Renderer`。
-- `Waves` 不知道 UI。
-- `Upgrades` 不知道 UI；`Renderer` 负责画候选卡。
-- `Renderer` 只读业务状态，不修改战斗。
-- `Game` 不直接接触敌人类、子弹类、卡牌布局或绘制原语。
+### Base
 
-## Base 组件
+`Base` 是全局模块类，组合 3 个 `namespace base` 组件：
 
-`src/app/Base/` 是模块目录。`Base` 是全局模块类，组合 3 个 `namespace base` 组件：
+| 组件 | 职责 |
+| --- | --- |
+| `Input` | 键鼠状态、移动轴、射击状态 |
+| `Audio` | 程序化 WAV、QSoundEffect 池、静音 |
+| `Paint` | 颜色、字体、文字排版、发光、条形/面板等绘制原语 |
 
-| 组件 | 文件 | 职责 |
-| --- | --- | --- |
-| `Input` | `Input/Input.h/.cpp` | 键鼠状态、移动轴、射击状态、鼠标查询 |
-| `Audio` | `Audio/Audio.h/.cpp` | 程序化 WAV、QSoundEffect 池、静音 |
-| `Paint` | `Paint/Paint.h/.cpp` | 颜色、字体、文字排版、发光、条形/面板等绘制原语 |
+`Base::Impl` 持有 `base::Input` 和 `base::Audio`；静态绘制/颜色/字体接口转发给 `base::Paint`。`Base.h` 不暴露组件头。
 
-组合关系：
+### Games
 
-```text
-Base
-├─ base::Input input_       // Base::Impl 内
-├─ base::Audio audio_       // Base::Impl 内
-└─ base::Paint              // 静态绘制/颜色/字体组件
-```
+`Games` 是全局模块类，组合 2 个 `namespace games` 组件：
 
-`Base` 仍然是业务模块唯一看到的 I/O 接口：
+| 组件 | 职责 |
+| --- | --- |
+| `Waves` | 波次表、Boss 波、出生队列、出生间隔 |
+| `Upgrades` | 强化定义、可选性、三选一、叠加、效果应用 |
 
-- 输入方法转发 `Input`；
-- 音频方法转发 `Audio`；
-- 静态颜色/字体/绘制方法转发 `Paint`；
-- `Base.h` 不 include 三个组件头，只暴露 Base 自己。
+`Games` 还拥有 `Base`、`Arena`、`Renderer`、`Random`，负责：
 
-`Input` 和 `Audio` 是 `Base::Impl` 的成员，`Paint` 是无状态静态组件。
+- Title / Playing / Upgrade / Paused / GameOver / Victory 状态迁移；
+- 将输入转发给 `Base` / `Arena`；
+- 推进 `Arena` 和 `games::Waves`；
+- 波次清空后打开 `games::Upgrades`；
+- 把 `Arena::Feedback` 转发给 `Renderer`。
 
-## Arena 组件
+### Arena
 
-`src/app/Arena/` 是模块目录。`Arena` 是全局模块类，下面只有 4 个 `namespace arena` 组件：
+`Arena` 是全局模块类，组合 4 个 `namespace arena` 组件：
 
-| 组件 | 文件 | 职责 |
-| --- | --- | --- |
-| `Combatants` | `Combatants.h/.cpp` | 玩家、敌人容器、Boss 指针；推进战斗者和绘制战斗者 |
-| `Entities` | `Entities.h/.cpp` | 子弹、传送门、掉落、粒子、飘字、冲击波；推进实体和绘制实体 |
-| `Events` | `Events.h/.cpp` | 碰撞、接触伤害、敌人分离、击杀事件（一个 class） |
-| `State` | `State.h/.cpp` | Boss 阶段、Boss 击败、玩家失败、总分/击杀数 |
+| 组件 | 职责 |
+| --- | --- |
+| `Combatants` | 玩家、敌人容器、Boss 指针；推进/绘制战斗者 |
+| `Entities` | 子弹、传送门、掉落、粒子、飘字、冲击波 |
+| `Events` | 碰撞、接触伤害、敌人分离、击杀 |
+| `State` | Boss 阶段、Boss 击败、玩家失败、分数/击杀数 |
 
-组件内部类型（不是组件）：
+`Arena` 只编排顺序并汇总 `Feedback`。
 
-| 类型 | 文件 | 职责 |
-| --- | --- | --- |
-| `Fighter` | `Fighter.h` | Player / Enemy 的共同抽象接口 |
-| `Player` / `PlayerState` | `Player.h/.cpp` | 玩家移动、瞄准、冲刺、射击、受伤、玩家绘制 |
-| `Enemy` / `EnemyStats` | `Enemy.h/.cpp` | 单只敌人的属性、AI、开火、受击、敌人绘制（Boss 也是 kind） |
-| `Bullet` | `Bullet.h/.cpp` | 子弹位置、寿命、移动、拖尾绘制 |
-| `Portal` | `Portal.h/.cpp` | 出生倒计时、生成敌人、传送门绘制 |
-| `Pickup` | `Pickup.h/.cpp` | 掉落吸附、治疗、治疗飘字 |
-| `Particle` | `Particle.h/.cpp` | 粒子运动和发光绘制 |
-| `FloatingText` | `FloatingText.h/.cpp` | 伤害/治疗飘字 |
-| `Shockwave` | `Shockwave.h/.cpp` | 冲击波扩散绘制 |
+### Renderer
 
-### Fighter 接口
+只读 `Games` / `Arena` / `games::Waves` / `games::Upgrades` / `Base` / `Random`，负责：
 
-`arena::Fighter` 是 `Player` 和 `Enemy` 的共同抽象，不是带共享字段的实体基类。
+- 背景、星空、发光合成；
+- 标题、HUD、Boss 血条、波次横幅；
+- 强化卡布局与命中测试；
+- 暂停、失败、胜利界面；
+- 震屏、闪屏、横幅状态。
+
+### lib / include / tests
+
+- `src/lib/Math.h/.cpp`：向量、clamp、ease、线段圆碰撞。
+- `src/lib/Random.h/.cpp`：可注入随机引擎。
+- `src/include/Fighter.h`：Player / Enemy 的共同虚接口。
+- `src/tests/SelfTest.h`：只在 `-DDEBUG` 构建中由 `main.cpp` 包含。
+
+## Fighter 接口
+
+`Player` / `Enemy` 都实现 `arena::Fighter`：
 
 ```cpp
 namespace arena {
 
 enum class DamageSource { Bullet, Shock, Contact };
-
 struct Damage {
     float amount = 0.0f;
     bool critical = false;
@@ -164,244 +161,105 @@ public:
 }
 ```
 
-设计取舍：
+接口只放共同动作和只读查询，不把 `PlayerState` / `Enemy` 字段塞进基类。`Enemy::fireAimed` 是 private helper，不进入接口。
 
-- **`shoot` 是共同动作，`fireAimed` 不是。**
-  `Player::shoot` 发射玩家子弹；`Enemy::shoot` 执行这只敌人的标准攻击。Boss 的多发瞄准、Spitter 的抖动射击仍然由 `Enemy` 内部的 private `fireAimed` / 分支实现，不把 `count/spread/bulletSpeed` 这些敌人专用参数塞进接口。
-- **`takeDamage` 用 `Damage` 值对象。**
-  Player 只需要 `amount`；Enemy 还需要 `critical`（是否显示暴击飘字）和 `source`（子弹命中音效）。以前是一个 `float + bool + QString` 的长参数表，现在调用方只传一个 `Damage`。
-- **`draw` 带 `const Arena&`。**
-  Enemy 需要读取玩家位置来决定朝向；Player 忽略这个参数。这样两边共用同一个签名，不需要通过全局状态取玩家位置。
-- **只放只读访问器，不放共享字段。**
-  `PlayerState` 有升级、冲刺、暴击、多发等字段；`Enemy` 有 AI、攻击计时、Boss 标记、分数等字段。强行抽一个公共 `FighterState` 只会制造一个臃肿基类，并把 `protected` 数据泄露给两边。共同点通过 `position / collisionRadius / isAlive` 查询，差异留在各自类内。
-- **不给所有字段加 virtual setter。**
-  外部读操作走接口；Arena 内部需要写操作时，通过组合它的组件直接完成。
-- **`die` 是动作，不是删除。**
-  `Player::die` 负责玩家死亡表现并标记 `State`；`Enemy::die` 只把死亡交给 `Events::handleKill`。两者都通过同一个虚入口被调用。
-- **Arena 不存 `vector<Fighter>` 取代 `vector<Enemy>`。**
-  `Events`、`State` 需要敌人的 `score/kind/boss/wave`，这些不是 Fighter 的共性。`Combatants` 保留具体的 Player/Enemy 所有权，只在共同操作上使用 `Fighter&` 或 `const Fighter*`（更新、绘制、碰撞伤害），不做 `dynamic_cast`。
-
-组合关系：
+## 依赖方向
 
 ```text
-Arena
-├─ arena::Combatants combatants_   // Player + vector<Enemy> + boss
-├─ arena::Entities entities_       // bullets / portals / pickups / particles / texts / waves
-├─ arena::Events events_           // collision + kill
-└─ arena::State state_             // boss phases + score + player defeat
+GameWindow
+└─ Games
+   ├─ Base ─────► base::Input / Audio / Paint
+   ├─ Arena ────► arena::Combatants / Entities / Events / State
+   ├─ games::Waves ─────► Arena, Random
+   ├─ games::Upgrades ──► Arena, Base, Random
+   ├─ Renderer ─────────► Games/Arena/Waves/Upgrades(只读), Base, Random
+   └─ Random
 ```
 
-`Arena` 负责：
-- 何时推进哪个组件；
-- 组件之间的顺序（玩家→传送门→玩家子弹→敌方子弹→敌人→接触→掉落→清理→特效）；
-- 向 Game/Renderer 暴露只读快照；
-- 把组件产生的表现结果汇总成 `Feedback`。
+依赖是单向的：
 
-组件负责自己的规则：
-- `Combatants` 只管战斗者的生命周期、AI 推进和绘制；
-- `Entities` 只管子弹/传送门/掉落/粒子的生命周期和绘制；
-- `Events` 一个 class 同时处理碰撞与击杀，不再拆成两个组件；
-- `State` 一个 class 同时处理 Boss 阶段、击败标志、分数和玩家失败标志。
+- `Games` 知道业务模块；业务模块不知道 `Games`。
+- `Games` 只通过 `Arena` 公共接口访问战斗世界。
+- `Waves` / `Upgrades` 不知道 UI。
+- `Renderer` 只读业务状态。
+- `Base` 不知道游戏业务。
+- `lib` 不依赖 `app`。
 
-因此加“击杀掉金币”“Boss 第四阶段”“新碰撞类型”时，不需要把逻辑塞回 `Arena` 的 update 大函数。
-
-## 一帧的顺序
+## 一帧顺序
 
 ```text
 GameWindow::tick()
-├─ 计算 dt（上限 1/30）
-├─ Game::update(dt)
-│  ├─ Renderer::update(dt, titleActive)   // 星空、闪烁、震屏、横幅计时
-│  ├─ Title:      无游戏逻辑
+├─ Games::update(dt)
+│  ├─ Renderer::update(dt, titleActive)
 │  ├─ Playing:
-│  │  ├─ Arena::update(dt)                  // 玩家→传送门→子弹→敌人→接触→掉落→清理
-│  │  ├─ Waves::update(dt)                // 从队列生成新的传送门
-│  │  ├─ Game 消费 Arena 的 Feedback       // 闪屏/震屏
+│  │  ├─ Arena::update(dt)       // 玩家→传送门→子弹→敌人→接触→掉落→清理→特效
+│  │  ├─ games::Waves::update(dt) // 生成传送门
+│  │  ├─ Feedback → Renderer
 │  │  ├─ 玩家死亡 → GameOver
 │  │  ├─ Boss 死亡 → Victory 延迟
-│  │  └─ 波次清空 → 0.85s 后进入 Upgrade
-│  ├─ Upgrade: Upgrades 候选卡已就绪
-│  ├─ Paused: 冻结所有更新
-│  ├─ GameOver / Victory: 只推进表现和 Arena 视觉
-│  └─ 胜利延迟到点 → Victory
-├─ Game::render()
-│  └─ Renderer::render(game, arena, waves, upgrades)
-└─ QWidget::update() → paintEvent 把 frame_ 画到窗口
+│  │  └─ 波次清空 → 0.85s 后 Upgrade
+│  ├─ Upgrade: games::Upgrades 候选卡
+│  ├─ Paused: 冻结
+│  └─ GameOver / Victory: 只推进表现
+├─ Games::render()
+│  └─ Renderer::render(...)
+└─ QWidget::update()
 ```
 
-### 状态机
+## 加机制应该改哪里
 
-```text
-Title
-  └─ Enter / 点击 → Playing
+### 加强化
 
-Playing
-  ├─ ESC / P → Paused
-  ├─ 波次清空 → Upgrade
-  ├─ 玩家 HP=0 → GameOver
-  └─ Boss 死亡 → 1.65s 后 Victory
+只改 `src/app/Games/Upgrades/`：
 
-Upgrade
-  └─ 选择强化 → Playing（下一波）
+1. `Upgrades::catalog()` 加定义。
+2. `Upgrades::eligible()` 加限制。
+3. `Upgrades::applyEffect()` 加效果。
+4. 新字段加到 `arena::PlayerState`。
 
-Paused
-  ├─ P / ESC → Playing
-  └─ Q → Title
+`Renderer` 自动画卡片，`Games` 不用改。
 
-GameOver / Victory
-  ├─ R / Enter → Playing
-  └─ ESC / Q → Title
-```
+### 加波次
 
-## 数据所有权
+只改 `src/app/Games/Waves/`：
 
-- `Arena` 模块组合 4 个组件：
-  - `arena::Combatants`：`Player`、`std::vector<std::unique_ptr<Enemy>>`、`boss_`
-  - `arena::Entities`：`Bullet`、`Portal`、`Pickup`、`Particle`、`FloatingText`、`Shockwave`
-  - `arena::Events`：碰撞与击杀事件
-  - `arena::State`：Boss 阶段、Boss 击败、玩家失败、总分/击杀数
-  - `Feedback`
-- `Waves` 独占波次队列、当前波、总敌人数量。
-- `Upgrades` 独占强化定义、等级计数、候选卡。
-- `Renderer` 独占所有 QImage、星空、闪光/震动、横幅和卡片布局。
-- `Game` 独占状态机、`runTime_`、胜利延迟。
-- `Base` 独占键鼠状态、音效池、字体和绘制原语。
-- `Random` 独占随机引擎。
+- `buildPlan()` 加组合；
+- `TotalWaves` 是唯一的波数来源；
+- HUD/结算通过 `Waves::totalWaves()` 读取。
 
-组件位于 `src/app/Arena/`，`Game` / `Renderer` / `Waves` / `Upgrades` 不直接使用它们。外部模块只通过 `Arena` 的公共接口访问战斗世界；Arena 内部才组合组件。Player/Enemy/Bullet 等是组件内部类型，不再各自算组件。
+### 加敌人 / 状态 / 事件
 
-## 后续加机制应该改哪里
+- 敌人：`src/app/Arena/Combatants/Enemy.*` + `Waves::buildPlan`。
+- 状态：`src/app/Arena/State.*`。
+- 碰撞/击杀：`src/app/Arena/Events.*`。
+- 实体：`src/app/Arena/Entities/*`。
 
-### 1. 加一个数值型强化
+### 加 IO / 音频 / 绘制原语
 
-只需要改 `Upgrades`：
-
-1. 在 `Upgrades::catalog()` 加一条定义。
-2. 在 `Upgrades::eligible()` 加可选性限制（如果需要）。
-3. 在 `Upgrades::applyEffect()` 加效果。
-4. 如果效果需要新字段，把字段加到 `arena::PlayerState`。
-
-`Renderer` 会自动画卡片，`Game` 不需要改。
-
-### 2. 加状态效果（减速、燃烧、中毒、易伤）
-
-只改 `Arena/Enemy.*`，不要改 `Game` 或 `Renderer`：
-
-- 短期：给 `arena::Enemy` 加 `slowTimer` 等字段，在 `Enemy::update` 和 `takeDamage` 中处理。
-- 多个状态：在 `src/app/Arena/` 新增一个 `StatusEffect` 组件，由 `Arena` 组合并在 `updateEnemies` 中 tick。
-- 如果想在 HUD 显示状态，给 `Arena::BossInfo` / 玩家快照加只读字段，再由 `Renderer` 读取。
-
-这就是“一个工作只做一次”：状态逻辑不会漏到 Game 里。
-
-### 3. 加一个新敌人
-
-改 `src/app/Arena/Enemy.*` 和 `Waves`：
-
-1. `arena::Enemy::statsFor()` 加属性表项。
-2. `arena::Enemy::update()` 加行为分支。
-3. `arena::Enemy::drawBody()` 加外观。
-4. `arena::Events::handleKill()` 加掉落/分裂。
-5. `Waves::buildPlan()` 把它加入波次表。
-
-外部模块不需要知道这个敌人的存在。
-
-### 4. 加一个新 Boss / 多 Boss
-
-当前 Boss 仍是 `arena::Enemy` 的一个特殊分支（`kind == "boss"`），阶段状态在 `arena::State`。如果只加一个 Boss，继续在 `src/app/Arena/` 内完成即可；如果要加多个 Boss，建议在 `src/app/Arena/` 下新增 `BossPattern` 类型，并让 `State` 持有它：
-
-```cpp
-namespace arena {
-enum class BossKind { VoidDevourer, ... };
-struct BossPattern {
-    float preferredDistance;
-    float aimedInterval;
-    float radialInterval;
-    int radialCount;
-    ...
-};
-}
-```
-
-这只影响 `src/app/Arena/` 内部，不改变 `Game` 和 `Renderer` 的接口。
-
-### 5. 加波次 / 无尽模式
-
-总波数只在 `Waves::TotalWaves` 一处定义。HUD 和结算通过 `Waves::totalWaves()` 读取。
-
-- 加第 9 波：改 `Waves::buildPlan` 和 `Waves::TotalWaves`。
-- 无尽模式：把 `TotalWaves` 改成运行配置，`Waves::start` 后由 Game 在波次清空时决定“继续还是结算”。
-- 不需要再改 HUD、Renderer 的 `/08` 或 `/8`，这些已经由 `Waves` 提供。
-
-### 6. 加新武器 / 子弹行为
-
-改 `Arena`：
-
-- 在 `arena::PlayerState` 加武器状态。
-- 在 `arena::Player::shoot` 里决定发射方式。
-- 在 `arena::Bullet` 和 `arena::Events::resolvePlayerBullets` 里加弹道/命中行为。
-- 在 `Upgrades` 里加武器相关强化。
-
-### 7. 加界面/模式
-
-- 状态迁移加在 `Game`。
-- 新的绘制层加在 `Renderer`。
-- 新的输入动作由 `Game` 解释，`Base` 只提供键鼠状态。
-- 不要把新的战斗计算放回 Game。
-
-## 当前已知的边界
-
-- 数值表仍是 C++ 静态表，不是外部 JSON；改平衡需要重新编译。
-- 敌人/强化/音效仍以字符串 ID 传递，未来可以改成 `enum class EnemyKind / UpgradeId / SoundId`。
-- `Arena` 对 `namespace arena` 内部组件开放内部访问；组件属于同一模块。`Upgrades` 是唯一一个模块外业务 friend，因为强化效果要直接修改玩家属性。`SelfTest` 的 friend 是测试专用口。
-- `Arena` 同时负责战斗组件编排和战斗世界绘制；这是刻意的，避免把组件内部状态暴露给 Renderer。若以后战场视觉极其复杂，再考虑把绘制拆分出去。
-- 没有 ECS。以当前规模，这比 ECS 更直接。
+- 输入：`src/app/Base/Input/`。
+- 音频：`src/app/Base/Audio/`。
+- 字体/颜色/绘制：`src/app/Base/Paint/`。
+- `Base` 只保留转发接口。
 
 ## 测试与交付
 
-测试代码独立在 `src/tests/SelfTest.h`，不在 `src/` 的 release 编译单元里：
+测试代码在 `src/tests/SelfTest.h`，只在 debug/test 构建中由 `main.cpp` 包含：
 
 ```cpp
-// src/app/main.cpp
 #ifdef DEBUG
 #include "../tests/SelfTest.h"
 #endif
 ```
 
-- `main.cpp` 的参数解析、`--smoke-test` / `--capture` / `--window-test` 分支都在 `#ifdef DEBUG` 内。
-- Makefile 的 `test` 目标用 `-DDEBUG` 编译 `build/app/main_test.o`，生成 `build/NeonCoreConsole.exe`。
-- 默认 `all` / `release` 目标只编译 `build/app/main_release.o`，不包含测试头；`build/NeonCore.exe` 里没有 `SelfTest`。
-- `deploy` 只复制 release `NeonCore.exe`，并从 `dist/NeonCore` 删除旧的测试用 `NeonCoreConsole.exe`。
+- `mingw32-make -j12` → release `build/NeonCore.exe`，不编译测试。
+- `mingw32-make -j12 test` → `-DDEBUG` 测试控制台。
+- `mingw32-make -j12 deploy` → 只复制 release GUI 到 `dist/NeonCore`。
+- `dist/NeonCore` 不包含测试逻辑。
 
-因此交付的 `dist/NeonCore/NeonCore.exe` 不包含测试逻辑；测试控制台只存在于开发构建目录。
+## 已知边界
 
-## 文件地图
-
-```text
-src/app/GameConfig.h
-src/lib/Math.h / Math.cpp
-src/lib/Random.h / Random.cpp
-src/app/Base/Base.h / Base.cpp
-src/app/Base/Input/Input.h / Input.cpp
-src/app/Base/Audio/Audio.h / Audio.cpp
-src/app/Base/Paint/Paint.h / Paint.cpp
-src/app/Arena/Arena.h / Arena.cpp
-src/include/Fighter.h
-src/app/Arena/Combatants/Combatants.h / Combatants.cpp
-src/app/Arena/Entities/Entities.h / Entities.cpp
-src/app/Arena/Events.h / Events.cpp
-src/app/Arena/State.h / State.cpp
-src/app/Arena/Combatants/Player.h / Player.cpp
-src/app/Arena/Combatants/Enemy.h / Enemy.cpp
-src/app/Arena/Entities/Bullet.h / Bullet.cpp
-src/app/Arena/Entities/Portal.h / Portal.cpp
-src/app/Arena/Entities/Pickup.h / Pickup.cpp
-src/app/Arena/Entities/Particle.h / Particle.cpp
-src/app/Arena/Entities/FloatingText.h / FloatingText.cpp
-src/app/Arena/Entities/Shockwave.h / Shockwave.cpp
-src/app/Waves.h / Waves.cpp
-src/app/Upgrades.h / Upgrades.cpp
-src/app/Renderer.h / Renderer.cpp
-src/app/Game.h / Game.cpp
-src/app/main.cpp
-src/tests/SelfTest.h          # 仅 -DDEBUG 测试构建包含
-```
+- 数值表仍是 C++ 静态表，不是 JSON。
+- 敌人/强化/音效仍用字符串 ID。
+- `Arena` 对 `games::Upgrades` 开放玩家状态编辑权限；这是必要的模块间 friend。
+- 组件之间的 private 访问通过 friend 完成；它们属于同一个模块。
+- 没有 ECS。当前 4 个 Arena 组件 + 2 个 Games 组件的粒度更适合这个规模。

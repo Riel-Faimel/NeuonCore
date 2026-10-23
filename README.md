@@ -106,9 +106,10 @@ cpp/
 │  │  │  ├─ Input/Input.h/.cpp    组件：键鼠状态
 │  │  │  ├─ Audio/Audio.h/.cpp    组件：程序化 WAV + 音效池
 │  │  │  └─ Paint/Paint.h/.cpp    组件：颜色/字体/绘制原语
-│  │  ├─ Game.h / Game.cpp        状态机与模块编排
-│  │  ├─ Waves.h / Waves.cpp      波次表和出生节奏
-│  │  ├─ Upgrades.h / Upgrades.cpp 强化池、抽取与应用
+│  │  ├─ Games/
+│  │  │  ├─ Games.h / Games.cpp   模块入口：状态机与组件编排
+│  │  │  ├─ Waves/Waves.h/.cpp    组件：波次表和出生节奏
+│  │  │  └─ Upgrades/Upgrades.h/.cpp 组件：强化池、抽取与应用
 │  │  ├─ Renderer.h / Renderer.cpp 背景、发光、HUD、卡片、结算界面
 │  │  ├─ GameConfig.h             全局尺寸常量
 │  │  └─ main.cpp                 QWidget 窗口、输入桥接、release 入口
@@ -128,6 +129,8 @@ cpp/
 ```
 
 `src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Paint` 三个 `namespace base` 组件。`Base.h` 仍只暴露 Base 的输入/音频/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Paint` 的 QFontDatabase 细节都在各自组件内。
+
+`src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades` 两个 `namespace games` 组件，并拥有 `Base`、`Arena`、`Renderer`。`Waves` 只生成波次/传送门，`Upgrades` 只管理强化，`Games` 负责状态机和调用顺序。
 
 `src/app/Arena/` 是模块目录：`Arena` 是全局模块类，只组合 `Combatants`、`Entities`、`Events`、`State` 四个 `namespace arena` 组件。`Fighter` 放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段、分数和玩家失败。
 

@@ -2,7 +2,7 @@
 
 #include "GameConfig.h"
 #include "Math.h"
-#include "Upgrades.h"
+#include "Games/Upgrades/Upgrades.h"
 
 #include <QColor>
 #include <QImage>
@@ -15,10 +15,13 @@
 
 class Arena;
 class Base;
-class Game;
+class Games;
 class Random;
+
+namespace games {
 class Upgrades;
 class Waves;
+}
 
 // Renderer 模块：封装整个画面表现。
 // 工具：Random（抖动/标题粒子）、Base（输入/音频/字体/绘制）、各业务模块的只读状态。
@@ -30,8 +33,8 @@ public:
 
     void initialize();
     void update(float dt, bool titleActive);
-    void render(const Game &game, const Arena &arena, const Waves &waves,
-                const Upgrades &upgrades);
+    void render(const Games &game, const Arena &arena, const games::Waves &waves,
+                const games::Upgrades &upgrades);
     const QImage &frame() const { return frame_; }
 
     void shake(float amount);
@@ -73,22 +76,22 @@ private:
     void drawSparks(QPainter &world, QPainter &glow) const;
     void drawTitleArt(QPainter &world, QPainter &glow);
     void drawTitleUI(QPainter &painter);
-    void drawHUD(QPainter &painter, const Arena &arena, const Waves &waves);
+    void drawHUD(QPainter &painter, const Arena &arena, const games::Waves &waves);
     void drawBossBar(QPainter &painter, const Arena &arena);
     void drawWaveBanner(QPainter &painter);
     void drawPlayHints(QPainter &painter);
     void drawReticle(QPainter &painter) const;
-    void drawUpgradeOverlay(QPainter &painter, const Upgrades &upgrades,
-                            const Waves &waves);
+    void drawUpgradeOverlay(QPainter &painter, const games::Upgrades &upgrades,
+                            const games::Waves &waves);
     void drawUpgradeCard(QPainter &painter, int index,
-                         const Upgrades::Offer &offer, const QRectF &rect, bool hovered);
-    void drawPauseOverlay(QPainter &painter, const Arena &arena, const Waves &waves);
-    void drawGameOverOverlay(QPainter &painter, const Game &game,
-                             const Arena &arena, const Waves &waves);
-    void drawVictoryOverlay(QPainter &painter, const Game &game,
-                            const Arena &arena, const Waves &waves);
-    void drawRunStats(QPainter &painter, const Game &game,
-                      const Arena &arena, const Waves &waves, float top);
+                         const games::Upgrades::Offer &offer, const QRectF &rect, bool hovered);
+    void drawPauseOverlay(QPainter &painter, const Arena &arena, const games::Waves &waves);
+    void drawGameOverOverlay(QPainter &painter, const Games &game,
+                             const Arena &arena, const games::Waves &waves);
+    void drawVictoryOverlay(QPainter &painter, const Games &game,
+                            const Arena &arena, const games::Waves &waves);
+    void drawRunStats(QPainter &painter, const Games &game,
+                      const Arena &arena, const games::Waves &waves, float top);
     QRectF cardRect(int index) const;
 
     Random &random_;

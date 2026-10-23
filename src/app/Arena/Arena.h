@@ -11,7 +11,10 @@
 class Base;
 class Random;
 class SelfTest;
+
+namespace games {
 class Upgrades;
+}
 
 // Arena 是全局模块类，只组合 4 个组件：
 // arena::Combatants / Entities / Events / State。
@@ -60,7 +63,7 @@ public:
 
 private:
     friend class SelfTest;
-    friend class Upgrades;
+    friend class games::Upgrades;
     friend class arena::Player;
     friend class arena::Enemy;
     friend class arena::Combatants;

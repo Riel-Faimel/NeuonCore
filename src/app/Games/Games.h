@@ -3,19 +3,19 @@
 #include "Arena/Arena.h"
 #include "Random.h"
 #include "Renderer.h"
-#include "Upgrades.h"
-#include "Waves.h"
+#include "Games/Upgrades/Upgrades.h"
+#include "Games/Waves/Waves.h"
 #include "Base/Base.h"
 
 #include <QImage>
 
 class SelfTest;
 
-// Game 模块：只做游戏状态编排。
+// Games 模块：只做游戏状态编排。
 // 工具：Arena（战斗）、Waves（波次）、Upgrades（强化）、Renderer（表现）、Base（IO）、Random。
 // 封装：Title/Playing/Upgrade/Paused/GameOver/Victory 状态迁移、通关计时、输出调用顺序。
 // 暴露：输入转发、update/render、状态与最终帧。
-class Game {
+class Games {
 public:
     enum class State {
         Title,
@@ -26,11 +26,11 @@ public:
         Victory,
     };
 
-    explicit Game(bool enableAudio = true);
-    ~Game();
+    explicit Games(bool enableAudio = true);
+    ~Games();
 
-    Game(const Game &) = delete;
-    Game &operator=(const Game &) = delete;
+    Games(const Games &) = delete;
+    Games &operator=(const Games &) = delete;
 
     void update(float dt);
     void render();
@@ -67,8 +67,8 @@ private:
     Random random_;
     Base base_;
     Arena arena_;
-    Waves waves_;
-    Upgrades upgrades_;
+    games::Waves waves_;
+    games::Upgrades upgrades_;
     Renderer renderer_;
 
     State state_ = State::Title;

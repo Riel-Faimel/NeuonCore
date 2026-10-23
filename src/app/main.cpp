@@ -1,4 +1,4 @@
-#include "Game.h"
+#include "Games/Games.h"
 #include "Base/Base.h"
 
 #include <QApplication>
@@ -167,14 +167,14 @@ private:
 
     void updateCursorShape()
     {
-        const bool needBlank = game_.state() == Game::State::Playing;
+        const bool needBlank = game_.state() == Games::State::Playing;
         if (needBlank != cursorHidden_) {
             cursorHidden_ = needBlank;
             setCursor(needBlank ? Qt::BlankCursor : Qt::ArrowCursor);
         }
     }
 
-    Game game_;
+    Games game_;
     QTimer timer_;
     QElapsedTimer clock_;
     bool cursorHidden_ = false;

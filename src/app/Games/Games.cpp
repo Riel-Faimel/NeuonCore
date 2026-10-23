@@ -1,10 +1,10 @@
-#include "Game.h"
+#include "Games/Games.h"
 
 #include <Qt>
 
 #include <algorithm>
 
-Game::Game(bool enableAudio)
+Games::Games(bool enableAudio)
     : arena_(random_, base_), waves_(random_, arena_),
       upgrades_(random_, arena_, base_), renderer_(random_, base_)
 {
@@ -16,9 +16,9 @@ Game::Game(bool enableAudio)
     showTitle();
 }
 
-Game::~Game() = default;
+Games::~Games() = default;
 
-void Game::showTitle()
+void Games::showTitle()
 {
     state_ = State::Title;
     runTime_ = 0.0f;
@@ -32,7 +32,7 @@ void Game::showTitle()
     renderer_.resetTransient();
 }
 
-void Game::startRun()
+void Games::startRun()
 {
     runTime_ = 0.0f;
     victoryPending_ = false;
@@ -50,7 +50,7 @@ void Game::startRun()
     startWave(1);
 }
 
-void Game::startWave(int wave)
+void Games::startWave(int wave)
 {
     waves_.start(wave);
     arena_.beginWave();
@@ -67,7 +67,7 @@ void Game::startWave(int wave)
     }
 }
 
-void Game::enterUpgrade()
+void Games::enterUpgrade()
 {
     arena_.clearProjectiles();
     if (!upgrades_.open()) {
@@ -77,7 +77,7 @@ void Game::enterUpgrade()
     renderer_.flash(Base::Cyan, 28);
 }
 
-void Game::selectUpgrade(int index)
+void Games::selectUpgrade(int index)
 {
     if (state_ != State::Upgrade || index < 0
         || index >= int(upgrades_.offers().size())) {
@@ -96,7 +96,7 @@ void Game::selectUpgrade(int index)
     startWave(waves_.currentWave() + 1);
 }
 
-void Game::update(float dt)
+void Games::update(float dt)
 {
     if (state_ != State::Paused) {
         renderer_.update(dt, state_ == State::Title);
@@ -142,12 +142,12 @@ void Game::update(float dt)
     }
 }
 
-void Game::render()
+void Games::render()
 {
     renderer_.render(*this, arena_, waves_, upgrades_);
 }
 
-void Game::applyFeedback(const Arena::Feedback &feedback)
+void Games::applyFeedback(const Arena::Feedback &feedback)
 {
     if (feedback.hasFlash) {
         renderer_.flash(feedback.color, feedback.alpha);
@@ -157,7 +157,7 @@ void Game::applyFeedback(const Arena::Feedback &feedback)
     }
 }
 
-void Game::checkWaveClear(float dt)
+void Games::checkWaveClear(float dt)
 {
     if (victoryPending_ || !waves_.isCleared()) {
         waveClearTimer_ = 0.0f;
@@ -184,7 +184,7 @@ void Game::checkWaveClear(float dt)
     }
 }
 
-void Game::triggerVictory()
+void Games::triggerVictory()
 {
     if (victoryPending_ || state_ != State::Playing) {
         return;
@@ -201,7 +201,7 @@ void Game::triggerVictory()
     base_.playSound(QStringLiteral("victory"));
 }
 
-void Game::finishVictory()
+void Games::finishVictory()
 {
     if (state_ == State::Victory) {
         return;
@@ -211,7 +211,7 @@ void Game::finishVictory()
     renderer_.burstConfetti();
 }
 
-void Game::triggerGameOver()
+void Games::triggerGameOver()
 {
     if (state_ != State::Playing) {
         return;
@@ -223,7 +223,7 @@ void Game::triggerGameOver()
     base_.playSound(QStringLiteral("defeat"));
 }
 
-void Game::keyPress(int key, bool autoRepeat)
+void Games::keyPress(int key, bool autoRepeat)
 {
     base_.keyPress(key);
     if (autoRepeat) {
@@ -236,17 +236,17 @@ void Game::keyPress(int key, bool autoRepeat)
     handleKeydown(key);
 }
 
-void Game::keyRelease(int key)
+void Games::keyRelease(int key)
 {
     base_.keyRelease(key);
 }
 
-void Game::mouseMove(const Math::Vec2 &position)
+void Games::mouseMove(const Math::Vec2 &position)
 {
     base_.mouseMove(position);
 }
 
-void Game::mousePressLeft(const Math::Vec2 &position)
+void Games::mousePressLeft(const Math::Vec2 &position)
 {
     base_.mousePressLeft(position);
     if (state_ == State::Title) {
@@ -259,17 +259,17 @@ void Game::mousePressLeft(const Math::Vec2 &position)
     }
 }
 
-void Game::mouseReleaseLeft()
+void Games::mouseReleaseLeft()
 {
     base_.mouseReleaseLeft();
 }
 
-void Game::clearInput()
+void Games::clearInput()
 {
     base_.clear();
 }
 
-void Game::toggleMute()
+void Games::toggleMute()
 {
     const bool muted = base_.toggleMute();
     if (!muted) {
@@ -277,7 +277,7 @@ void Game::toggleMute()
     }
 }
 
-void Game::handleKeydown(int key)
+void Games::handleKeydown(int key)
 {
     if (state_ == State::Title) {
         if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Space) {
