@@ -1,0 +1,23 @@
+NEON CORE / 星核协议 — 第三方组件说明
+
+C++ / Qt 6 版本在构建和运行目录中使用了以下第三方组件：
+
+1. Qt 6.10.2
+   - 网站: https://www.qt.io/
+   - 许可证: GNU Lesser General Public License v3 (LGPLv3)
+   - 用途: 窗口、2D 渲染、字体、音频播放
+   - 动态链接使用 Qt DLL；可以替换 dist/NeonCore 中对应的 Qt DLL。
+
+2. FFmpeg 7.1.2（由 Qt Multimedia 使用）
+   - 网站: https://ffmpeg.org/
+   - 许可证: GNU Lesser General Public License v2.1 or later (LGPLv2.1+)
+   - 用途: Qt Multimedia 媒体后端
+   - 动态链接使用 avcodec / avformat / avutil / swresample / swscale DLL。
+
+3. MinGW-w64 运行时
+   - libgcc_s_seh-1.dll, libstdc++-6.dll, libwinpthread-1.dll
+   - 许可证: GPL / LGPL 例外条款，随工具链分发。
+
+游戏自身的源代码（main.py、cpp/src/*）不属于上述第三方组件。
+
+完整的许可证文本请参考 Qt 和 FFmpeg 官方发行包中的 LICENSES 目录及对应网站。
