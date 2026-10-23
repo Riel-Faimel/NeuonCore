@@ -8,13 +8,14 @@
    - 波次组成由 `games::Waves` 决定。
    - 强化池、可选性和强化效果由 `games::Upgrades` 决定。
    - 敌人 AI、碰撞、Boss 阶段、分数由 `Arena` 及其组件决定。
-   - 画面布局和表现反馈由 `Renderer` 决定。
+   - 画面布局和局内表现反馈由 `Renderer` 决定。
+   - 主菜单、关卡选择和对局结算由 `Menu` 决定。
    - 输入、音频、字体和绘制原语由 `Base` 及其组件提供。
-   - `Games` 只负责状态机、组件组合和调用顺序。
+   - `Games` 只负责一局游戏的局内状态机、组件组合和调用顺序。
 
 2. **模块是全局类，组件是 namespace 中的类**
    - 除 `main` / `WinMain` 外，没有自由函数。
-   - 全局模块类：`GameConfig / Math / Random / Base / Arena / Games / Renderer / GameWindow / SelfTest`。
+   - 全局模块类：`GameConfig / Math / Random / Base / Arena / Games / Menu / Renderer / GameWindow / SelfTest`。
    - `Base` 的组件在 `namespace base`：`Input / Audio / Paint`。
    - `Games` 的组件在 `namespace games`：`Waves / Upgrades`。
    - `Arena` 的组件在 `namespace arena`：`Combatants / Entities / Events / State`。
@@ -55,6 +56,7 @@ cpp/src/
 │  │  ├─ Games.h / Games.cpp
 │  │  ├─ Waves/Waves.h/.cpp
 │  │  └─ Upgrades/Upgrades.h/.cpp
+│  ├─ Menu/Menu.h / Menu.cpp
 │  ├─ Renderer.h / Renderer.cpp
 │  ├─ GameConfig.h
 │  └─ main.cpp
@@ -92,11 +94,24 @@ cpp/src/
 
 `Games` 还拥有 `Base`、`Arena`、`Renderer`、`Random`，负责：
 
-- Title / Playing / Upgrade / Paused / GameOver / Victory 状态迁移；
+- 一局内的 `Idle / Playing / Upgrade / Paused / Victory / Defeat` 状态；
 - 将输入转发给 `Base` / `Arena`；
 - 推进 `Arena` 和 `games::Waves`；
 - 波次清空后打开 `games::Upgrades`；
-- 把 `Arena::Feedback` 转发给 `Renderer`。
+- 把 `Arena::Feedback` 转发给 `Renderer`；
+- 把胜负结果交给 `Menu`，自己不再画标题或结算。
+
+### Menu
+
+`Menu` 是顶层界面模块，持有 `Games`，负责：
+
+- 主菜单和关卡选择；
+- 创建不同关卡配置（标准协议从第 1 波开始，核心突袭从第 8 波开始）；
+- 把主菜单/局内/结算输入路由给 `Games`；
+- 在对局结束后读取 `Games` 的得分、击杀、波次、时间；
+- 绘制失败/胜利结算界面和“重新部署/返回主菜单”操作。
+
+`Menu` 不参与战斗、波次或强化计算。
 
 ### Arena
 
@@ -115,11 +130,13 @@ cpp/src/
 
 只读 `Games` / `Arena` / `games::Waves` / `games::Upgrades` / `Base` / `Random`，负责：
 
-- 背景、星空、发光合成；
-- 标题、HUD、Boss 血条、波次横幅；
+- 局内背景、星空、发光合成；
+- 局内 HUD、Boss 血条、波次横幅；
 - 强化卡布局与命中测试；
-- 暂停、失败、胜利界面；
+- 暂停界面；
 - 震屏、闪屏、横幅状态。
+
+标题、失败/胜利结算、对局统计不在 Renderer 中，由 `Menu` 绘制。
 
 ### lib / include / tests
 
@@ -167,21 +184,23 @@ public:
 
 ```text
 GameWindow
-└─ Games
-   ├─ Base ─────► base::Input / Audio / Paint
-   ├─ Arena ────► arena::Combatants / Entities / Events / State
-   ├─ games::Waves ─────► Arena, Random
-   ├─ games::Upgrades ──► Arena, Base, Random
-   ├─ Renderer ─────────► Games/Arena/Waves/Upgrades(只读), Base, Random
-   └─ Random
+└─ Menu
+   └─ Games
+      ├─ Base ─────► base::Input / Audio / Paint
+      ├─ Arena ────► arena::Combatants / Entities / Events / State
+      ├─ games::Waves ─────► Arena, Random
+      ├─ games::Upgrades ──► Arena, Base, Random
+      ├─ Renderer ─────────► Games/Arena/Waves/Upgrades(只读), Base, Random
+      └─ Random
 ```
 
 依赖是单向的：
 
-- `Games` 知道业务模块；业务模块不知道 `Games`。
+- `Menu` 持有 `Games`，负责主菜单、关卡选择和结算。
+- `Games` 只负责一局内的逻辑，不知道 `Menu`。
 - `Games` 只通过 `Arena` 公共接口访问战斗世界。
 - `Waves` / `Upgrades` 不知道 UI。
-- `Renderer` 只读业务状态。
+- `Renderer` 只读局内业务状态，不再画标题和结算。
 - `Base` 不知道游戏业务。
 - `lib` 不依赖 `app`。
 
@@ -189,20 +208,19 @@ GameWindow
 
 ```text
 GameWindow::tick()
-├─ Games::update(dt)
-│  ├─ Renderer::update(dt, titleActive)
-│  ├─ Playing:
-│  │  ├─ Arena::update(dt)       // 玩家→传送门→子弹→敌人→接触→掉落→清理→特效
-│  │  ├─ games::Waves::update(dt) // 生成传送门
-│  │  ├─ Feedback → Renderer
-│  │  ├─ 玩家死亡 → GameOver
-│  │  ├─ Boss 死亡 → Victory 延迟
-│  │  └─ 波次清空 → 0.85s 后 Upgrade
-│  ├─ Upgrade: games::Upgrades 候选卡
-│  ├─ Paused: 冻结
-│  └─ GameOver / Victory: 只推进表现
-├─ Games::render()
-│  └─ Renderer::render(...)
+├─ Menu::update(dt)
+│  ├─ Main:   菜单动画
+│  ├─ Match:  Games::update(dt)
+│  │          ├─ Renderer::update(dt)
+│  │          ├─ Playing: Arena→Waves→Feedback→胜负/波次判断
+│  │          ├─ Upgrade: games::Upgrades 候选卡
+│  │          ├─ Paused: 冻结
+│  │          └─ Victory/Defeat: 只推进视觉
+│  └─ Result: Games::update(dt) 继续退场表现
+├─ Menu::render()
+│  ├─ Main:   绘制菜单
+│  ├─ Match:  Games::render() → Renderer
+│  └─ Result: Games::render() + Menu 结算覆盖层
 └─ QWidget::update()
 ```
 
@@ -225,7 +243,21 @@ GameWindow::tick()
 
 - `buildPlan()` 加组合；
 - `TotalWaves` 是唯一的波数来源；
-- HUD/结算通过 `Waves::totalWaves()` 读取。
+- HUD 通过 `Waves::totalWaves()` 读取，结算通过 `Games` 的快照读取。
+
+### 加关卡
+
+改 `src/app/Menu/Menu.cpp` 的 `levels_`：
+
+```cpp
+{id, name, subtitle, startWave}
+```
+
+`Menu` 负责创建 `Games`、选择起始波次；`Games` 只接收 `Level` 并开始一局。
+
+### 加一个结算字段
+
+只改 `Menu::drawResult()`；数据通过 `Games` 的只读 getter 获取。Renderer 不参与结算。
 
 ### 加敌人 / 状态 / 事件
 
@@ -263,3 +295,4 @@ GameWindow::tick()
 - `Arena` 对 `games::Upgrades` 开放玩家状态编辑权限；这是必要的模块间 friend。
 - 组件之间的 private 访问通过 friend 完成；它们属于同一个模块。
 - 没有 ECS。当前 4 个 Arena 组件 + 2 个 Games 组件的粒度更适合这个规模。
+- `Menu` 只做界面/关卡创建，不读取 `Arena` 内部实体；它通过 `Games` 的 getter 获取对局信息。

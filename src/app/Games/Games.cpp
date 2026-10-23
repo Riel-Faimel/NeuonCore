@@ -13,27 +13,13 @@ Games::Games(bool enableAudio)
         base_.initAudio();
     }
     renderer_.initialize();
-    showTitle();
 }
 
 Games::~Games() = default;
 
-void Games::showTitle()
+void Games::start(const Level &level)
 {
-    state_ = State::Title;
-    runTime_ = 0.0f;
-    victoryPending_ = false;
-    victoryTimer_ = 0.0f;
-    waveClearTimer_ = 0.0f;
-    waveClearAnnounced_ = false;
-    arena_.reset();
-    waves_.reset();
-    upgrades_.reset();
-    renderer_.resetTransient();
-}
-
-void Games::startRun()
-{
+    level_ = level;
     runTime_ = 0.0f;
     victoryPending_ = false;
     victoryTimer_ = 0.0f;
@@ -47,7 +33,7 @@ void Games::startRun()
     base_.setMouseActive(true);
     base_.playSound(QStringLiteral("ui"));
     renderer_.flash(Base::Cyan, 35);
-    startWave(1);
+    startWave(level_.startWave);
 }
 
 void Games::startWave(int wave)
@@ -98,12 +84,15 @@ void Games::selectUpgrade(int index)
 
 void Games::update(float dt)
 {
+    if (state_ == State::Idle) {
+        return;
+    }
     if (state_ != State::Paused) {
-        renderer_.update(dt, state_ == State::Title);
+        renderer_.update(dt);
     }
 
     switch (state_) {
-    case State::Title:
+    case State::Idle:
         break;
     case State::Playing: {
         if (victoryPending_) {
@@ -121,7 +110,7 @@ void Games::update(float dt)
         applyFeedback(arena_.takeFeedback());
 
         if (arena_.playerDefeated()) {
-            triggerGameOver();
+            triggerDefeat();
             break;
         }
         if (arena_.bossDefeated()) {
@@ -135,7 +124,7 @@ void Games::update(float dt)
         break;
     case State::Paused:
         break;
-    case State::GameOver:
+    case State::Defeat:
     case State::Victory:
         arena_.updateVisuals(dt);
         break;
@@ -211,12 +200,12 @@ void Games::finishVictory()
     renderer_.burstConfetti();
 }
 
-void Games::triggerGameOver()
+void Games::triggerDefeat()
 {
     if (state_ != State::Playing) {
         return;
     }
-    state_ = State::GameOver;
+    state_ = State::Defeat;
     victoryPending_ = false;
     renderer_.shake(20.0f);
     renderer_.flash(Base::Red, 120);
@@ -249,9 +238,7 @@ void Games::mouseMove(const Math::Vec2 &position)
 void Games::mousePressLeft(const Math::Vec2 &position)
 {
     base_.mousePressLeft(position);
-    if (state_ == State::Title) {
-        startRun();
-    } else if (state_ == State::Upgrade) {
+    if (state_ == State::Upgrade) {
         const int index = renderer_.upgradeIndexAt(position);
         if (index >= 0) {
             selectUpgrade(index);
@@ -279,11 +266,7 @@ void Games::toggleMute()
 
 void Games::handleKeydown(int key)
 {
-    if (state_ == State::Title) {
-        if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Space) {
-            startRun();
-        }
-    } else if (state_ == State::Playing) {
+    if (state_ == State::Playing) {
         if (key == Qt::Key_Escape || key == Qt::Key_P) {
             state_ = State::Paused;
             base_.playSound(QStringLiteral("ui"));
@@ -294,8 +277,6 @@ void Games::handleKeydown(int key)
         if (key == Qt::Key_Escape || key == Qt::Key_P) {
             state_ = State::Playing;
             base_.playSound(QStringLiteral("ui"));
-        } else if (key == Qt::Key_Q) {
-            showTitle();
         }
     } else if (state_ == State::Upgrade) {
         if (key == Qt::Key_1) {
@@ -304,14 +285,6 @@ void Games::handleKeydown(int key)
             selectUpgrade(1);
         } else if (key == Qt::Key_3) {
             selectUpgrade(2);
-        }
-    } else if (state_ == State::GameOver || state_ == State::Victory) {
-        if (key == Qt::Key_R) {
-            startRun();
-        } else if (key == Qt::Key_Escape || key == Qt::Key_Q) {
-            showTitle();
-        } else if (key == Qt::Key_Return || key == Qt::Key_Enter) {
-            startRun();
         }
     }
 }

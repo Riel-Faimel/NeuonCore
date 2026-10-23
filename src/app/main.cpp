@@ -1,4 +1,4 @@
-#include "Games/Games.h"
+#include "Menu/Menu.h"
 #include "Base/Base.h"
 
 #include <QApplication>
@@ -35,7 +35,7 @@
 
 class GameWindow : public QWidget {
 public:
-    explicit GameWindow(QWidget *parent = nullptr) : QWidget(parent), game_(true)
+    explicit GameWindow(QWidget *parent = nullptr) : QWidget(parent), menu_(true)
     {
         setWindowTitle(QStringLiteral("星核协议 · NEON CORE"));
         qreal pixelRatio = 1.0;
@@ -65,7 +65,7 @@ public:
         }
         setWindowIcon(QIcon(icon));
 
-        game_.render();
+        menu_.render();
         clock_.start();
         timer_.setTimerType(Qt::PreciseTimer);
         timer_.setInterval(16);
@@ -79,33 +79,33 @@ protected:
         Q_UNUSED(event);
         QPainter painter(this);
         painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
-        painter.drawImage(rect(), game_.frame());
+        painter.drawImage(rect(), menu_.frame());
     }
 
     void keyPressEvent(QKeyEvent *event) override
     {
-        game_.keyPress(event->key(), event->isAutoRepeat());
+        menu_.keyPress(event->key(), event->isAutoRepeat());
         event->accept();
     }
 
     void keyReleaseEvent(QKeyEvent *event) override
     {
         if (!event->isAutoRepeat()) {
-            game_.keyRelease(event->key());
+            menu_.keyRelease(event->key());
         }
         event->accept();
     }
 
     void mouseMoveEvent(QMouseEvent *event) override
     {
-        game_.mouseMove(toGamePos(event->position()));
+        menu_.mouseMove(toGamePos(event->position()));
         event->accept();
     }
 
     void mousePressEvent(QMouseEvent *event) override
     {
         if (event->button() == Qt::LeftButton) {
-            game_.mousePressLeft(toGamePos(event->position()));
+            menu_.mousePressLeft(toGamePos(event->position()));
             event->accept();
         }
     }
@@ -113,14 +113,14 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override
     {
         if (event->button() == Qt::LeftButton) {
-            game_.mouseReleaseLeft();
+            menu_.mouseReleaseLeft();
             event->accept();
         }
     }
 
     void focusOutEvent(QFocusEvent *event) override
     {
-        game_.clearInput();
+        menu_.clearInput();
         QWidget::focusOutEvent(event);
     }
 
@@ -159,22 +159,22 @@ private:
         }
         dt = Math::clamp(dt, 0.0f, 1.0f / 30.0f);
 
-        game_.update(dt);
-        game_.render();
+        menu_.update(dt);
+        menu_.render();
         updateCursorShape();
         update();
     }
 
     void updateCursorShape()
     {
-        const bool needBlank = game_.state() == Games::State::Playing;
+        const bool needBlank = menu_.inMatch();
         if (needBlank != cursorHidden_) {
             cursorHidden_ = needBlank;
             setCursor(needBlank ? Qt::BlankCursor : Qt::ArrowCursor);
         }
     }
 
-    Games game_;
+    Menu menu_;
     QTimer timer_;
     QElapsedTimer clock_;
     bool cursorHidden_ = false;

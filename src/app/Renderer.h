@@ -32,7 +32,7 @@ public:
     Renderer(Random &random, Base &base);
 
     void initialize();
-    void update(float dt, bool titleActive);
+    void update(float dt);
     void render(const Games &game, const Arena &arena, const games::Waves &waves,
                 const games::Upgrades &upgrades);
     const QImage &frame() const { return frame_; }
@@ -74,8 +74,6 @@ private:
     void updateSparks(float dt);
     void drawStars(QPainter &world, QPainter &glow) const;
     void drawSparks(QPainter &world, QPainter &glow) const;
-    void drawTitleArt(QPainter &world, QPainter &glow);
-    void drawTitleUI(QPainter &painter);
     void drawHUD(QPainter &painter, const Arena &arena, const games::Waves &waves);
     void drawBossBar(QPainter &painter, const Arena &arena);
     void drawWaveBanner(QPainter &painter);
@@ -86,12 +84,6 @@ private:
     void drawUpgradeCard(QPainter &painter, int index,
                          const games::Upgrades::Offer &offer, const QRectF &rect, bool hovered);
     void drawPauseOverlay(QPainter &painter, const Arena &arena, const games::Waves &waves);
-    void drawGameOverOverlay(QPainter &painter, const Games &game,
-                             const Arena &arena, const games::Waves &waves);
-    void drawVictoryOverlay(QPainter &painter, const Games &game,
-                            const Arena &arena, const games::Waves &waves);
-    void drawRunStats(QPainter &painter, const Games &game,
-                      const Arena &arena, const games::Waves &waves, float top);
     QRectF cardRect(int index) const;
 
     Random &random_;
@@ -104,9 +96,7 @@ private:
     std::vector<Star> stars_;
     std::vector<Spark> sparks_;
     float time_ = 0.0f;
-    float titleTime_ = 0.0f;
     float uiTime_ = 0.0f;
-    float sparkTimer_ = 0.0f;
 
     float shake_ = 0.0f;
     QColor flashColor_;

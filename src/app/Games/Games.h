@@ -8,22 +8,28 @@
 #include "Base/Base.h"
 
 #include <QImage>
+#include <QString>
 
 class SelfTest;
 
-// Games 模块：只做游戏状态编排。
-// 工具：Arena（战斗）、Waves（波次）、Upgrades（强化）、Renderer（表现）、Base（IO）、Random。
-// 封装：Title/Playing/Upgrade/Paused/GameOver/Victory 状态迁移、通关计时、输出调用顺序。
-// 暴露：输入转发、update/render、状态与最终帧。
+// Games 模块：只负责一局游戏的逻辑。
+// 主菜单、关卡选择、结算界面由 Menu 模块负责。
 class Games {
 public:
+    struct Level {
+        QString id;
+        QString name;
+        QString subtitle;
+        int startWave = 1;
+    };
+
     enum class State {
-        Title,
+        Idle,
         Playing,
         Upgrade,
         Paused,
-        GameOver,
         Victory,
+        Defeat,
     };
 
     explicit Games(bool enableAudio = true);
@@ -32,11 +38,17 @@ public:
     Games(const Games &) = delete;
     Games &operator=(const Games &) = delete;
 
+    void start(const Level &level);
     void update(float dt);
     void render();
 
     State state() const { return state_; }
     float runTime() const { return runTime_; }
+    const Level &level() const { return level_; }
+    int score() const { return arena_.score(); }
+    int kills() const { return arena_.kills(); }
+    int currentWave() const { return waves_.currentWave(); }
+    int totalWaves() const { return waves_.totalWaves(); }
     const QImage &frame() const { return renderer_.frame(); }
 
     void keyPress(int key, bool autoRepeat = false);
@@ -52,15 +64,13 @@ public:
 private:
     friend class SelfTest;
 
-    void showTitle();
-    void startRun();
     void startWave(int wave);
     void enterUpgrade();
     void selectUpgrade(int index);
     void checkWaveClear(float dt);
     void triggerVictory();
     void finishVictory();
-    void triggerGameOver();
+    void triggerDefeat();
     void handleKeydown(int key);
     void applyFeedback(const Arena::Feedback &feedback);
 
@@ -71,7 +81,8 @@ private:
     games::Upgrades upgrades_;
     Renderer renderer_;
 
-    State state_ = State::Title;
+    Level level_;
+    State state_ = State::Idle;
     float runTime_ = 0.0f;
     bool victoryPending_ = false;
     float victoryTimer_ = 0.0f;

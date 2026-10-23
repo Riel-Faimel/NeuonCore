@@ -80,8 +80,6 @@ void Renderer::resetTransient()
     flashAlpha_ = 0.0f;
     bannerTimer_ = 0.0f;
     sparks_.clear();
-    titleTime_ = 0.0f;
-    sparkTimer_ = 0.0f;
 }
 
 void Renderer::burstConfetti()
@@ -100,37 +98,13 @@ void Renderer::burstConfetti()
     }
 }
 
-void Renderer::update(float dt, bool titleActive)
+void Renderer::update(float dt)
 {
     time_ += dt;
     uiTime_ += dt;
-    if (titleActive) {
-        titleTime_ += dt;
-    }
     updateStars(dt);
     updateSparks(dt);
 
-    if (titleActive) {
-        sparkTimer_ -= dt;
-        if (sparkTimer_ <= 0.0f) {
-            sparkTimer_ = random_.real(0.035f, 0.09f);
-            const float angle = random_.real(0.0f, Math::Tau);
-            const float radius = random_.real(185.0f, 310.0f);
-            const Math::Vec2 center(GameConfig::ScreenWidth / 2.0f,
-                                    GameConfig::ScreenHeight / 2.0f - 55.0f);
-            const Math::Vec2 pos = center
-                + Math::Vec2(std::cos(angle), std::sin(angle)) * radius;
-            const Math::Vec2 tangent(-std::sin(angle), std::cos(angle));
-            const Math::Vec2 velocity = tangent * random_.real(12.0f, 35.0f)
-                                        + Math::Vec2(random_.real(-8.0f, 8.0f),
-                                                     random_.real(-20.0f, -5.0f));
-            const std::array<QColor, 3> colors = {
-                Base::Cyan, Base::CyanSoft, QColor(154, 134, 255)};
-            sparks_.push_back(Spark{pos, velocity, random_.real(0.6f, 1.4f), 1.4f,
-                                    random_.real(1.0f, 2.8f), 0.8f, 0.0f,
-                                    colors[size_t(random_.integer(0, 2))]});
-        }
-    }
     if (sparks_.size() > 300) {
         sparks_.erase(sparks_.begin(), sparks_.begin() + (sparks_.size() - 300));
     }
@@ -282,12 +256,7 @@ void Renderer::render(const Games &game, const Arena &arena, const games::Waves 
         glowPainter.setRenderHint(QPainter::Antialiasing, true);
         worldPainter.drawImage(0, 0, background_);
         drawStars(worldPainter, glowPainter);
-
-        if (game.state() == Games::State::Title) {
-            drawTitleArt(worldPainter, glowPainter);
-        } else {
-            arena.draw(worldPainter, glowPainter);
-        }
+        arena.draw(worldPainter, glowPainter);
         drawSparks(worldPainter, glowPainter);
     }
 
@@ -314,9 +283,6 @@ void Renderer::render(const Games &game, const Arena &arena, const games::Waves 
     }
 
     switch (game.state()) {
-    case Games::State::Title:
-        drawTitleUI(painter);
-        break;
     case Games::State::Playing:
         drawHUD(painter, arena, waves);
         drawBossBar(painter, arena);
@@ -333,147 +299,12 @@ void Renderer::render(const Games &game, const Arena &arena, const games::Waves 
     case Games::State::Upgrade:
         drawUpgradeOverlay(painter, upgrades, waves);
         break;
-    case Games::State::GameOver:
-        drawGameOverOverlay(painter, game, arena, waves);
-        break;
     case Games::State::Victory:
-        drawVictoryOverlay(painter, game, arena, waves);
+    case Games::State::Defeat:
+        break;
+    case Games::State::Idle:
         break;
     }
-}
-
-void Renderer::drawTitleArt(QPainter &world, QPainter &glow)
-{
-    const Math::Vec2 center(GameConfig::ScreenWidth / 2.0f,
-                            GameConfig::ScreenHeight / 2.0f - 60.0f);
-
-    struct RingDef {
-        float radius;
-        float speed;
-        QColor color;
-        float span;
-    };
-    const std::array<RingDef, 3> rings = {{
-        {295.0f, 0.10f, Base::CyanSoft, 1.4f},
-        {255.0f, -0.16f, QColor(126, 94, 190), 0.7f},
-        {215.0f, 0.24f, Base::CyanSoft, 2.0f},
-    }};
-    for (size_t index = 0; index < rings.size(); ++index) {
-        const RingDef &ring = rings[index];
-        const float start = titleTime_ * ring.speed + float(index) * 1.7f;
-        Base::arcRadians(world, center, ring.radius, start, ring.span,
-                          Base::withAlpha(ring.color, 90), 1.0f);
-        Base::arcRadians(glow, center, ring.radius, start, ring.span,
-                          Base::shade(ring.color, 0.15f), 2.0f);
-        const float dotAngle = start + ring.span;
-        const Math::Vec2 dot = center
-            + Math::Vec2(std::cos(dotAngle), std::sin(dotAngle)) * ring.radius;
-        Base::fillCircle(world, dot, 2.0f, Base::withAlpha(ring.color, 160));
-        Base::glow(glow, dot, 8.0f, ring.color, 0.7f);
-    }
-
-    for (int index = 0; index < 3; ++index) {
-        const float radius = 160.0f + index * 38.0f;
-        const float angle = -titleTime_ * (0.05f + index * 0.02f) + index;
-        Base::arcRadians(world, center, radius, angle, angle + 2.3f,
-                          QColor(25, 69, 85), 1.0f);
-    }
-
-    const Math::Vec2 core = center + Math::Vec2(0.0f, 5.0f);
-    Base::glow(glow, core, 25.0f, Base::Cyan, 1.6f);
-    Base::fillCircle(world, core, 3.0f, QColor(180, 249, 255));
-}
-
-void Renderer::drawTitleUI(QPainter &painter)
-{
-    Base::text(painter, Base::techTinyFont(),
-                QStringLiteral("SECTOR 07  //  DEEP SPACE DEFENSE GRID"),
-                QColor(121, 176, 194),
-                {GameConfig::ScreenWidth / 2.0f, 118}, QStringLiteral("center"), 185);
-    Base::glowText(painter, Base::titleFont(), QStringLiteral("星核协议"),
-                    Base::White,
-                    {GameConfig::ScreenWidth / 2.0f, 218}, QStringLiteral("center"));
-    Base::text(painter, Base::techFont(),
-                QStringLiteral("N E O N   C O R E   P R O T O C O L"),
-                Base::Cyan,
-                {GameConfig::ScreenWidth / 2.0f, 290}, QStringLiteral("center"), 230);
-
-    const float lineY = 330.0f;
-    Base::strokeLine(painter, {GameConfig::ScreenWidth / 2.0f - 220.0f, lineY},
-                      {GameConfig::ScreenWidth / 2.0f - 34.0f, lineY},
-                      QColor(44, 105, 123), 1.0f);
-    Base::strokeLine(painter, {GameConfig::ScreenWidth / 2.0f + 34.0f, lineY},
-                      {GameConfig::ScreenWidth / 2.0f + 220.0f, lineY},
-                      QColor(44, 105, 123), 1.0f);
-    Base::text(painter, Base::smallFont(), QStringLiteral("07"), Base::Muted,
-                {GameConfig::ScreenWidth / 2.0f, lineY}, QStringLiteral("center"), 180);
-    Base::text(painter, Base::bodyFont(),
-                QStringLiteral("你是最后一位守夜人。守住这片光。"), Base::Text,
-                {GameConfig::ScreenWidth / 2.0f, 368}, QStringLiteral("center"), 220);
-
-    const float pulse = 0.5f + 0.5f * std::sin(uiTime_ * 2.4f);
-    const QRectF button(GameConfig::ScreenWidth / 2.0f - 168.0f, 425.0f, 336.0f, 58.0f);
-    const Math::Vec2 mouse = base_.mousePosition();
-    const bool hovered = button.contains(QPointF(mouse.x, mouse.y));
-    Base::panel(painter, button, hovered ? Base::Cyan : QColor(67, 158, 180),
-                 hovered ? 210 : 155, 10, QColor(6, 18, 30));
-    if (hovered) {
-        painter.save();
-        painter.setBrush(Qt::NoBrush);
-        QPen pen(Base::withAlpha(Base::Cyan, 34));
-        pen.setWidthF(2.0f);
-        painter.setPen(pen);
-        painter.drawRoundedRect(button.adjusted(-9, -9, 9, 9), 14, 14);
-        painter.restore();
-    }
-    Base::text(painter, Base::mediumFont(), QStringLiteral("按 ENTER 开始部署"),
-                hovered ? Base::White : QColor(215, 243, 250),
-                {GameConfig::ScreenWidth / 2.0f, button.center().y()},
-                QStringLiteral("center"));
-    Base::text(painter, Base::tinyFont(), QStringLiteral("或点击任意位置"), Base::Muted,
-                {GameConfig::ScreenWidth / 2.0f, float(button.bottom()) + 22.0f},
-                QStringLiteral("center"), 170 + int(45 * pulse));
-
-    struct ControlDef {
-        QString key;
-        QString label;
-        float width;
-    };
-    const std::array<ControlDef, 3> controls = {{
-        {QStringLiteral("W A S D"), QStringLiteral("移动"), 170.0f},
-        {QStringLiteral("鼠标 / J"), QStringLiteral("射击"), 190.0f},
-        {QStringLiteral("SPACE"), QStringLiteral("冲刺"), 170.0f},
-    }};
-    float total = 24.0f;
-    for (const ControlDef &control : controls) {
-        total += control.width;
-    }
-    float x = GameConfig::ScreenWidth / 2.0f - total / 2.0f;
-    for (const ControlDef &control : controls) {
-        const QRectF rect(x, 566, control.width, 42);
-        Base::panel(painter, rect, QColor(39, 75, 91), 130, 8, QColor(6, 12, 22));
-        const bool chineseKey = control.key.contains(QChar(0x9F20))
-                                || control.key.contains(QChar(0x6807));
-        Base::text(painter,
-                    chineseKey ? Base::smallFont() : Base::techSmallFont(),
-                    control.key, Base::Cyan,
-                    {float(rect.center().x()), float(rect.center().y()) - 7.0f},
-                    QStringLiteral("center"));
-        Base::text(painter, Base::tinyFont(), control.label, Base::Muted,
-                    {float(rect.center().x()), float(rect.center().y()) + 10.0f},
-                    QStringLiteral("center"));
-        x += control.width + 12.0f;
-    }
-
-    Base::text(painter, Base::techTinyFont(),
-                QStringLiteral("V1.0  //  PROCEDURAL AUDIO + VISUALS"),
-                QColor(66, 97, 118),
-                {36, GameConfig::ScreenHeight - 30.0f}, QStringLiteral("midleft"), 165);
-    const QString muteText = base_.muted() ? QStringLiteral("M  已静音")
-                                           : QStringLiteral("M  音效开");
-    Base::text(painter, Base::tinyFont(), muteText, QColor(91, 128, 149),
-                {GameConfig::ScreenWidth - 36.0f, GameConfig::ScreenHeight - 30.0f},
-                QStringLiteral("midright"), 165);
 }
 
 void Renderer::drawHUD(QPainter &painter, const Arena &arena, const games::Waves &waves)
@@ -808,87 +639,3 @@ void Renderer::drawPauseOverlay(QPainter &painter, const Arena &arena, const gam
                 QStringLiteral("center"), 190);
 }
 
-void Renderer::drawGameOverOverlay(QPainter &painter, const Games &game,
-                                   const Arena &arena, const games::Waves &waves)
-{
-    painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
-                     QColor(2, 3, 9, 212));
-    Base::strokeLine(painter, {GameConfig::ScreenWidth / 2.0f - 250, 118},
-                      {GameConfig::ScreenWidth / 2.0f + 250, 118}, Base::Red, 1.0f);
-    Base::text(painter, Base::techSmallFont(),
-                QStringLiteral("MISSION FAILED  //  CORE SIGNAL LOST"), Base::Red,
-                {GameConfig::ScreenWidth / 2.0f, 152}, QStringLiteral("center"), 220);
-    Base::glowText(painter, Base::bigFont(), QStringLiteral("防线失守"),
-                    QColor(255, 119, 133),
-                    {GameConfig::ScreenWidth / 2.0f, 222}, QStringLiteral("center"));
-    Base::text(painter, Base::bodyFont(), QStringLiteral("星核在黑暗中熄灭。"),
-                QColor(183, 205, 219),
-                {GameConfig::ScreenWidth / 2.0f, 278}, QStringLiteral("center"), 215);
-    drawRunStats(painter, game, arena, waves, 390.0f);
-    Base::text(painter, Base::mediumFont(),
-                QStringLiteral("按  R  重新部署        ESC  返回标题"),
-                QColor(235, 244, 250),
-                {GameConfig::ScreenWidth / 2.0f, 574}, QStringLiteral("center"), 235);
-    Base::text(painter, Base::techTinyFont(),
-                QStringLiteral("TRY AGAIN  //  THE CORE STILL NEEDS YOU"),
-                QColor(113, 143, 160),
-                {GameConfig::ScreenWidth / 2.0f, 618}, QStringLiteral("center"), 170);
-}
-
-void Renderer::drawVictoryOverlay(QPainter &painter, const Games &game,
-                                  const Arena &arena, const games::Waves &waves)
-{
-    painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
-                     QColor(2, 7, 13, 190));
-    Base::strokeLine(painter, {GameConfig::ScreenWidth / 2.0f - 250, 118},
-                      {GameConfig::ScreenWidth / 2.0f + 250, 118}, Base::Cyan, 1.0f);
-    Base::text(painter, Base::techSmallFont(),
-                QStringLiteral("MISSION COMPLETE  //  CORE STABILIZED"), Base::Green,
-                {GameConfig::ScreenWidth / 2.0f, 152}, QStringLiteral("center"), 230);
-    Base::glowText(painter, Base::bigFont(), QStringLiteral("星核已稳定"),
-                    QColor(151, 255, 220),
-                    {GameConfig::ScreenWidth / 2.0f, 222}, QStringLiteral("center"));
-    Base::text(painter, Base::bodyFont(), QStringLiteral("你守住了最后一道光。"),
-                QColor(194, 232, 232),
-                {GameConfig::ScreenWidth / 2.0f, 278}, QStringLiteral("center"), 225);
-    drawRunStats(painter, game, arena, waves, 390.0f);
-    Base::text(painter, Base::mediumFont(),
-                QStringLiteral("按  R  再次出击        ESC  返回标题"),
-                QColor(235, 250, 250),
-                {GameConfig::ScreenWidth / 2.0f, 574}, QStringLiteral("center"), 235);
-    Base::text(painter, Base::techTinyFont(),
-                QStringLiteral("ALL HOSTILES CLEARED  //  SIGNAL RESTORED"),
-                QColor(126, 185, 177),
-                {GameConfig::ScreenWidth / 2.0f, 618}, QStringLiteral("center"), 180);
-}
-
-void Renderer::drawRunStats(QPainter &painter, const Games &game,
-                            const Arena &arena, const games::Waves &waves, float top)
-{
-    const int minutes = int(game.runTime()) / 60;
-    const int seconds = int(game.runTime()) % 60;
-    const QString timeText = QStringLiteral("%1:%2")
-                                 .arg(minutes, 2, 10, QChar('0'))
-                                 .arg(seconds, 2, 10, QChar('0'));
-    const std::array<std::pair<QString, QString>, 4> stats = {{
-        {QStringLiteral("最终得分"), QLocale(QLocale::English).toString(arena.score())},
-        {QStringLiteral("到达波次"),
-         QStringLiteral("%1 / %2").arg(waves.currentWave()).arg(waves.totalWaves())},
-        {QStringLiteral("击破目标"), QString::number(arena.kills())},
-        {QStringLiteral("存活时间"), timeText},
-    }};
-    constexpr float totalWidth = 760.0f;
-    constexpr float cell = totalWidth / 4.0f;
-    const float start = GameConfig::ScreenWidth / 2.0f - totalWidth / 2.0f;
-    for (int i = 0; i < 4; ++i) {
-        const float cx = start + cell * i + cell / 2.0f;
-        if (i > 0) {
-            Base::strokeLine(painter, {start + cell * i, top + 4},
-                              {start + cell * i, top + 92}, QColor(44, 67, 83), 1.0f);
-        }
-        Base::text(painter, Base::tinyFont(), stats[size_t(i)].first, Base::Muted,
-                    {cx, top}, QStringLiteral("center"), 190);
-        Base::text(painter, Base::largeFont(), stats[size_t(i)].second, Base::White,
-                    {cx, top + 27}, QStringLiteral("center"));
-    }
-}

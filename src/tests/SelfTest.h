@@ -3,7 +3,7 @@
 // 测试专用代码：只在 -DDEBUG 构建中由 main.cpp 包含。
 // 交付的 NeonCore.exe 不包含这里的任何逻辑。
 
-#include "Games/Games.h"
+#include "Menu/Menu.h"
 #include "Base/Base.h"
 
 #include <QDir>
@@ -55,8 +55,8 @@ public:
             if (game.state() == Games::State::Victory) {
                 return true;
             }
-            if (game.state() == Games::State::GameOver
-                || game.state() == Games::State::Title) {
+            if (game.state() == Games::State::Defeat
+                || game.state() == Games::State::Idle) {
                 return false;
             }
             if (game.state() == Games::State::Upgrade) {
@@ -145,42 +145,44 @@ public:
         const bool audioRequested = qEnvironmentVariableIsSet("NEON_AUDIO_TEST");
         log(QStringLiteral("Creating game (offscreen, audio %1)")
                 .arg(audioRequested ? QStringLiteral("enabled") : QStringLiteral("disabled")));
-        Games game(audioRequested);
+        Menu menu(audioRequested);
+        Games &game = menu.games_;
         log(QStringLiteral("Audio initialized: %1")
                 .arg(game.audioEnabled() ? QStringLiteral("yes") : QStringLiteral("no")));
         if (audioRequested) {
             game.toggleMute();
         }
 
-        success &= require(game.state() == Games::State::Title, QStringLiteral("boots into title"));
-        game.update(1.0f / 60.0f);
-        game.render();
+        success &= require(menu.screen() == Menu::Screen::Main,
+                           QStringLiteral("boots into main menu"));
+        menu.update(1.0f / 60.0f);
+        menu.render();
 
         log(QStringLiteral("Input flow"));
-        game.keyPress(Qt::Key_Return);
-        game.keyRelease(Qt::Key_Return);
+        menu.keyPress(Qt::Key_Return);
+        menu.keyRelease(Qt::Key_Return);
         success &= require(game.state() == Games::State::Playing,
                            QStringLiteral("enter starts the run"));
-        game.keyPress(Qt::Key_Escape);
-        game.keyRelease(Qt::Key_Escape);
+        menu.keyPress(Qt::Key_Escape);
+        menu.keyRelease(Qt::Key_Escape);
         success &= require(game.state() == Games::State::Paused,
                            QStringLiteral("escape pauses"));
-        game.keyPress(Qt::Key_P);
-        game.keyRelease(Qt::Key_P);
+        menu.keyPress(Qt::Key_P);
+        menu.keyRelease(Qt::Key_P);
         success &= require(game.state() == Games::State::Playing,
                            QStringLiteral("p resumes"));
 
         game.upgrades_.open();
         game.state_ = Games::State::Upgrade;
         game.renderer_.upgradeIndexAt(Math::Vec2(300, 400));
-        game.mousePressLeft(Math::Vec2(300, 400));
-        game.mouseReleaseLeft();
+        menu.mousePressLeft(Math::Vec2(300, 400));
+        menu.mouseReleaseLeft();
         success &= require(game.state() == Games::State::Playing,
                            QStringLiteral("mouse click selects an upgrade"));
 
-        game.showTitle();
+        menu.returnToMenu();
         log(QStringLiteral("Starting run"));
-        game.startRun();
+        menu.startLevel(0);
         success &= require(game.state() == Games::State::Playing,
                            QStringLiteral("run starts"));
         success &= require(game.waves_.currentWave() == 1,
@@ -222,7 +224,7 @@ public:
                            QStringLiteral("upgrade changes a stat"));
 
         log(QStringLiteral("Boss and victory"));
-        game.startRun();
+        menu.startLevel(0);
         game.waves_.start(8);
         game.waves_.queue_.clear();
         game.arena_.beginWave();
@@ -236,33 +238,47 @@ public:
         simulate(game, 2.0f, false);
         success &= require(game.state() == Games::State::Victory,
                            QStringLiteral("victory screen reached"));
-        game.render();
+        menu.update(0.0f);
+        success &= require(menu.screen() == Menu::Screen::Result,
+                           QStringLiteral("menu enters victory result"));
+        menu.render();
 
         log(QStringLiteral("Game over"));
-        game.startRun();
+        menu.startLevel(0);
         game.arena_.combatants_.player().state.invuln = 0.0f;
         game.arena_.combatants_.player().takeDamage(
             game.arena_, arena::Damage{9999.0f, false, arena::DamageSource::Bullet});
         game.update(1.0f / 60.0f);
-        success &= require(game.state() == Games::State::GameOver,
+        success &= require(game.state() == Games::State::Defeat,
                            QStringLiteral("lethal damage ends run"));
-        game.render();
-        game.startRun();
+        menu.update(0.0f);
+        success &= require(menu.screen() == Menu::Screen::Result,
+                           QStringLiteral("menu enters defeat result"));
+        menu.render();
+        menu.startLevel(0);
         success &= require(game.state() == Games::State::Playing
                                && game.waves_.currentWave() == 1,
                            QStringLiteral("restart works"));
 
         log(QStringLiteral("Autoplay full 8-wave run"));
-        game.startRun();
+        menu.startLevel(0);
         const bool autoplayVictory = autoplay(game, 240.0f);
         success &= require(autoplayVictory,
                            QStringLiteral("autoplay clears all 8 waves and the boss"));
 
-        game.showTitle();
-        game.update(1.0f / 60.0f);
-        game.render();
-        success &= require(game.state() == Games::State::Title,
-                           QStringLiteral("returns to title"));
+        menu.returnToMenu();
+        menu.update(1.0f / 60.0f);
+        menu.render();
+        success &= require(menu.screen() == Menu::Screen::Main,
+                           QStringLiteral("returns to main menu"));
+
+        menu.keyPress(Qt::Key_2);
+        success &= require(menu.screen() == Menu::Screen::Match
+                               && game.currentWave() == 8,
+                           QStringLiteral("boss-rush level starts at wave 8"));
+        menu.returnToMenu();
+        success &= require(menu.screen() == Menu::Screen::Main,
+                           QStringLiteral("level 2 returns to menu"));
 
         log(success ? QStringLiteral("ALL C++ SMOKE TESTS PASSED")
                     : QStringLiteral("SMOKE TESTS FAILED"));
@@ -276,25 +292,25 @@ public:
         if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
             return 1;
         }
-        Games game(false);
+        Menu menu(false);
+        Games &game = menu.games_;
         auto save = [&](const QString &name) {
-            game.render();
+            menu.render();
             const QString path = dir.filePath(name);
-            if (!game.frame().save(path)) {
+            if (!menu.frame().save(path)) {
                 std::fprintf(stderr, "Failed to save %s\n", path.toUtf8().constData());
             } else {
                 std::printf("%s\n", path.toUtf8().constData());
             }
         };
 
-        game.showTitle();
         for (int i = 0; i < 120; ++i) {
-            game.update(1.0f / 60.0f);
+            menu.update(1.0f / 60.0f);
         }
-        game.base_.mouseMove({GameConfig::ScreenWidth / 2.0f, 454.0f});
+        menu.mouseMove({GameConfig::ScreenWidth / 2.0f, 454.0f});
         save(QStringLiteral("title.png"));
 
-        game.startRun();
+        menu.startLevel(0);
         game.state_ = Games::State::Playing;
         game.runTime_ = 112.0f;
         game.waves_.start(4);
@@ -334,7 +350,8 @@ public:
             }
             ++enemyIndex;
         }
-        game.arena_.entities_.portals().emplace_back(QStringLiteral("spitter"), Math::Vec2(1160, 615), 4);
+        game.arena_.entities_.portals().emplace_back(QStringLiteral("spitter"),
+                                                     Math::Vec2(1160, 615), 4);
         game.arena_.entities_.spawnPickup(game.arena_, {360, 315}, 16);
         game.arena_.combatants_.player().shoot(game.arena_);
         game.arena_.entities_.playerBullets().emplace_back(
@@ -374,7 +391,7 @@ public:
         game.base_.mouseMove({640, 390});
         save(QStringLiteral("upgrade.png"));
 
-        game.startRun();
+        menu.startLevel(0);
         game.state_ = Games::State::Playing;
         game.waves_.start(8);
         game.waves_.queue_.clear();
@@ -396,8 +413,10 @@ public:
         bossPlayer.invuln = 99.0f;
         game.base_.mouseMove({850, 380});
         game.arena_.combatants_.spawnEnemy(game.arena_, QStringLiteral("boss"), {870, 365}, 8);
-        game.arena_.combatants_.boss()->hp = game.arena_.combatants_.boss()->maxHp * 0.63f;
-        game.arena_.combatants_.boss()->hpDisplay = game.arena_.combatants_.boss()->maxHp * 0.74f;
+        game.arena_.combatants_.boss()->hp =
+            game.arena_.combatants_.boss()->maxHp * 0.63f;
+        game.arena_.combatants_.boss()->hpDisplay =
+            game.arena_.combatants_.boss()->maxHp * 0.74f;
         game.arena_.combatants_.spawnEnemy(game.arena_, QStringLiteral("drone"), {680, 250}, 8);
         game.arena_.combatants_.spawnEnemy(game.arena_, QStringLiteral("drone"), {740, 540}, 8);
         game.arena_.combatants_.spawnEnemy(game.arena_, QStringLiteral("tank"), {1020, 500}, 8);
@@ -412,7 +431,8 @@ public:
         }
         bossPlayer.fireFlash = 0.04f;
         game.arena_.combatants_.player().shoot(game.arena_);
-        game.arena_.entities_.spawnBurst(game.arena_, game.arena_.combatants_.boss()->pos, Base::Magenta, 12, 150.0f, 0.8f);
+        game.arena_.entities_.spawnBurst(game.arena_, game.arena_.combatants_.boss()->pos,
+                                         Base::Magenta, 12, 150.0f, 0.8f);
         game.renderer_.showBanner(QStringLiteral("最终波次"),
                                   QStringLiteral("警告：检测到「虚空吞噬者」"),
                                   2.8f, Base::Magenta, QStringLiteral("FINAL WAVE"));
@@ -428,9 +448,10 @@ public:
         for (int i = 0; i < 120; ++i) {
             game.update(1.0f / 60.0f);
         }
+        menu.update(0.0f);
         save(QStringLiteral("victory.png"));
 
-        game.startRun();
+        menu.startLevel(0);
         game.state_ = Games::State::Playing;
         game.waves_.start(3);
         game.waves_.queue_.clear();
@@ -445,6 +466,7 @@ public:
         for (int i = 0; i < 30; ++i) {
             game.update(1.0f / 60.0f);
         }
+        menu.update(0.0f);
         save(QStringLiteral("game_over.png"));
         return 0;
     }
