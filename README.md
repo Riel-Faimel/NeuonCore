@@ -58,25 +58,30 @@ set MINGWDIR=D:\path\to\Qt\Tools\mingw1310_64
 mingw32-make -j12 deploy
 ```
 
-本机 12 核，推荐用 Makefile 并行构建，再部署到 `dist\NeonCore`：
+本机 12 核，推荐用 Makefile 并行构建：
 
 ```bat
-mingw32-make -j12
+:: 交付用 release GUI，不包含测试代码
 mingw32-make -j12 deploy
+
+:: 需要自动化测试时，构建带 -DDEBUG 的测试控制台
+mingw32-make -j12 test
 ```
 
-- `all` / 默认目标：并行编译并链接 `build\NeonCore.exe` 和 `build\NeonCoreConsole.exe`
-- `deploy`：构建后复制 exe、Qt DLL、平台/多媒体插件和 FFmpeg 依赖到 `dist\NeonCore`
+- `all` / `release` / 默认目标：只构建 `build\NeonCore.exe`，不编译 `SelfTest`
+- `test`：用 `-DDEBUG` 构建 `build\NeonCoreConsole.exe`，包含测试入口
+- `deploy`：只把 release `NeonCore.exe` 和 Qt/FFmpeg 运行时复制到 `dist\NeonCore`
 - `clean`：删除 `build`
 
-`Makefile` 直接调用 `g++`，不依赖 qmake 或 CMake。`build.bat` 保留为不依赖 make 的手动编译/部署备用路径。构建产物：
+`Makefile` 直接调用 `g++`，不依赖 qmake 或 CMake。`build.bat` 现在只是 `mingw32-make -j12 deploy` 的包装。构建产物：
 
 ```text
-build\NeonCore.exe          GUI 版本
-build\NeonCoreConsole.exe   控制台版本，用于自动化测试
-dist\NeonCore\NeonCore.exe  可直接分发运行的版本
-dist\NeonCore\NeonCoreConsole.exe  随包分发的自动化测试入口
+build\NeonCore.exe          release GUI，不包含测试逻辑
+build\NeonCoreConsole.exe   debug/test 控制台，包含 SelfTest
+dist\NeonCore\NeonCore.exe  交付用 release GUI，不包含测试逻辑
 ```
+
+测试代码位于 `tests/SelfTest.h`，只在 `src/main.cpp` 的 `#ifdef DEBUG` 分支里包含；`-DDEBUG` 只用于 `test` 目标。
 
 ## 代码结构
 
@@ -108,13 +113,15 @@ cpp/
 │  ├─ Random.h / Random.cpp     可注入随机数
 │  ├─ Math.h / Math.cpp         向量与几何
 │  ├─ GameConfig.h              全局尺寸常量
-│  └─ main.cpp                  QWidget 窗口、输入桥接、自测与截图
-├─ build.bat                    不依赖 make 的备用编译/部署脚本
+│  └─ main.cpp                  QWidget 窗口、输入桥接、release 入口
+├─ tests/
+│  └─ SelfTest.h                仅 -DDEBUG 测试构建包含的测试/截图逻辑
+├─ build.bat                    调用 mingw32-make -j12 deploy
 ├─ Makefile                     mingw32-make -j12 并行构建
 ├─ run.bat
 ├─ ARCHITECTURE.md              模块边界、依赖和扩展指南
 ├─ screenshots/
-└─ dist/NeonCore/               已打包的 Windows 运行目录
+└─ dist/NeonCore/               交付用 release GUI + 运行库
 ```
 
 `src/base/` 只对外提供一个 `Base.h` / 一个 `Base` 类；其中的键鼠状态、QSoundEffect、WAV 生成、QFontDatabase 等细节都封装在 `Base.cpp` 的私有 `Impl` 里。业务模块只看到输入查询、音效播放和绘制原语。
@@ -127,11 +134,12 @@ cpp/
 
 ## 自动化检查
 
-构建后运行控制台版本：
+先构建 `-DDEBUG` 测试控制台（不会进入 `dist`）：
 
 ```powershell
 cd cpp
-.\dist\NeonCore\NeonCoreConsole.exe --smoke-test
+mingw32-make -j12 test
+.\build\NeonCoreConsole.exe --smoke-test
 ```
 
 测试包含：
@@ -147,14 +155,16 @@ cd cpp
 重新生成离屏截图：
 
 ```powershell
-.\dist\NeonCore\NeonCoreConsole.exe --capture screenshots
+.\build\NeonCoreConsole.exe --capture screenshots
 ```
 
 真实窗口测试（会短暂打开一个窗口，然后自动截图退出）：
 
 ```powershell
-.\dist\NeonCore\NeonCoreConsole.exe --window-test screenshots/window.png
+.\build\NeonCoreConsole.exe --window-test screenshots/window.png
 ```
+
+`NeonCoreConsole.exe` 和 `tests/SelfTest.h` 只存在于 debug/test 构建；`dist\NeonCore` 只交付 release `NeonCore.exe`，不包含测试逻辑。
 
 ## 说明
 

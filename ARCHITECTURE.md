@@ -324,6 +324,24 @@ struct BossPattern {
 - `Arena` 同时负责战斗组件编排和战斗世界绘制；这是刻意的，避免把组件内部状态暴露给 Renderer。若以后战场视觉极其复杂，再考虑把绘制拆分出去。
 - 没有 ECS。以当前规模，这比 ECS 更直接。
 
+## 测试与交付
+
+测试代码独立在 `tests/SelfTest.h`，不在 `src/` 的 release 编译单元里：
+
+```cpp
+// src/main.cpp
+#ifdef DEBUG
+#include "../tests/SelfTest.h"
+#endif
+```
+
+- `main.cpp` 的参数解析、`--smoke-test` / `--capture` / `--window-test` 分支都在 `#ifdef DEBUG` 内。
+- Makefile 的 `test` 目标用 `-DDEBUG` 编译 `build/main_test.o`，生成 `build/NeonCoreConsole.exe`。
+- 默认 `all` / `release` 目标只编译 `main_release.o`，不包含测试头；`build/NeonCore.exe` 里没有 `SelfTest`。
+- `deploy` 只复制 release `NeonCore.exe`，并从 `dist/NeonCore` 删除旧的测试用 `NeonCoreConsole.exe`。
+
+因此交付的 `dist/NeonCore/NeonCore.exe` 不包含测试逻辑；测试控制台只存在于开发构建目录。
+
 ## 文件地图
 
 ```text
@@ -350,4 +368,5 @@ src/Upgrades.h / Upgrades.cpp
 src/Renderer.h / Renderer.cpp
 src/Game.h / Game.cpp
 src/main.cpp
+tests/SelfTest.h          # 仅 -DDEBUG 测试构建包含
 ```

@@ -1,2 +1,4 @@
 dist/
 screenshots/
+build/
+*_output.txt

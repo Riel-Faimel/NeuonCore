@@ -1,7 +1,8 @@
 # Neon Core C++ / Qt 6
 # Usage:
-#   mingw32-make -j12
-#   mingw32-make -j12 deploy
+#   mingw32-make -j12          release GUI (no test code)
+#   mingw32-make -j12 test     debug/test console
+#   mingw32-make -j12 deploy   release GUI + Qt runtime
 #   mingw32-make clean
 #
 # QTDIR / MINGWDIR may be overridden in the environment.
@@ -34,18 +35,22 @@ LIBS := -L$(QTDIR)/lib \
         -luser32 -lkernel32 -lgdi32 -lwinmm -limm32 -lversion \
         -ldwmapi -luxtheme -lmsimg32 -static-libgcc -static-libstdc++
 
-ROOT_SRC := Math Random Waves Upgrades Renderer Game main
+ROOT_SRC := Math Random Waves Upgrades Renderer Game
 ROOT_OBJS := $(addprefix $(BUILD)/,$(addsuffix .o,$(ROOT_SRC)))
 ARENA_COMPONENTS := Arena Player Enemy Bullet Portal Pickup Particle \
                     FloatingText Shockwave Collision Kill BossState Score
 ARENA_OBJS := $(addprefix $(BUILD)/Arena_,$(addsuffix .o,$(ARENA_COMPONENTS)))
 
-OBJS := $(BUILD)/Base.o $(ROOT_OBJS) $(ARENA_OBJS)
-DEPS := $(OBJS:.o=.d)
+SHARED_OBJS := $(BUILD)/Base.o $(ROOT_OBJS) $(ARENA_OBJS)
+RELEASE_OBJS := $(SHARED_OBJS) $(BUILD)/main_release.o
+TEST_OBJS := $(SHARED_OBJS) $(BUILD)/main_test.o
+DEPS := $(RELEASE_OBJS:.o=.d) $(TEST_OBJS:.o=.d)
 
-.PHONY: all deploy clean
+.PHONY: all release test deploy clean
 
-all: $(BUILD)/NeonCore.exe $(BUILD)/NeonCoreConsole.exe
+all: $(BUILD)/NeonCore.exe
+release: $(BUILD)/NeonCore.exe
+test: $(BUILD)/NeonCoreConsole.exe
 
 $(BUILD):
 	@if not exist "$(BUILD_WIN)" mkdir "$(BUILD_WIN)"
@@ -62,21 +67,29 @@ $(ARENA_OBJS): $(BUILD)/Arena_%.o: src/Arena/%.cpp | $(BUILD)
 	@echo [CXX] $<
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
-$(BUILD)/NeonCoreConsole.exe: $(OBJS)
-	@echo [LD] $@
-	@$(CXX) $(OBJS) -o $@ $(LIBS)
+$(BUILD)/main_release.o: src/main.cpp | $(BUILD)
+	@echo [CXX] $< (release)
+	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
-$(BUILD)/NeonCore.exe: $(OBJS)
-	@echo [LD] $@
-	@$(CXX) -mwindows $(OBJS) -o $@ $(LIBS)
+$(BUILD)/main_test.o: src/main.cpp | $(BUILD)
+	@echo [CXX] $< (debug/tests)
+	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -DDEBUG -c $< -o $@
 
-deploy: all
+$(BUILD)/NeonCoreConsole.exe: $(TEST_OBJS)
+	@echo [LD] $@ (debug/tests)
+	@$(CXX) $(TEST_OBJS) -o $@ $(LIBS)
+
+$(BUILD)/NeonCore.exe: $(RELEASE_OBJS)
+	@echo [LD] $@ (release)
+	@$(CXX) -mwindows $(RELEASE_OBJS) -o $@ $(LIBS)
+
+deploy: release
 	@if not exist "$(DIST_WIN)" mkdir "$(DIST_WIN)"
 	@if not exist "$(DIST_WIN)\platforms" mkdir "$(DIST_WIN)\platforms"
 	@if not exist "$(DIST_WIN)\multimedia" mkdir "$(DIST_WIN)\multimedia"
 	@if not exist "$(DIST_WIN)\styles" mkdir "$(DIST_WIN)\styles"
 	@copy /Y "$(BUILD_WIN)\NeonCore.exe" "$(DIST_WIN)\NeonCore.exe" >nul
-	@copy /Y "$(BUILD_WIN)\NeonCoreConsole.exe" "$(DIST_WIN)\NeonCoreConsole.exe" >nul
+	@if exist "$(DIST_WIN)\NeonCoreConsole.exe" del /Q "$(DIST_WIN)\NeonCoreConsole.exe"
 	@copy /Y "THIRD_PARTY.txt" "$(DIST_WIN)\THIRD_PARTY.txt" >nul
 	@for %%F in (Qt6Core.dll Qt6Gui.dll Qt6Widgets.dll Qt6Multimedia.dll Qt6Network.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll avcodec-61.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll) do @copy /Y "$(QTDIR_WIN)\bin\%%F" "$(DIST_WIN)\%%F" >nul
 	@copy /Y "$(QTDIR_WIN)\plugins\platforms\qwindows.dll" "$(DIST_WIN)\platforms\" >nul
