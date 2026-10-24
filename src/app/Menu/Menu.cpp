@@ -17,6 +17,7 @@
 Menu::Menu(bool enableAudio)
 {
     Base::initialize();
+    audioRequested_ = enableAudio;
     if (enableAudio) {
         base_.initAudio();
     }
@@ -26,12 +27,18 @@ Menu::Menu(bool enableAudio)
     levels_ = {
         {QStringLiteral("standard"), QStringLiteral("标准协议"),
          QStringLiteral("八波战役 · 守住星核"), 1, campaign},
-        {QStringLiteral("boss"), QStringLiteral("核心突袭"),
-         QStringLiteral("直接进入最终波次"), int(campaign.size()), campaign},
         {QStringLiteral("custom"), QStringLiteral("自定义协议"),
-         QStringLiteral("自选起始波次"), 1, campaign},
+         QStringLiteral("点击编辑台本"), 1, defaultCustomScript()},
     };
-    customScript_ = campaign;
+    customScript_ = defaultCustomScript();
+}
+
+// 自定义模式不继承战役台本：初始只有一波，波数和组成都由玩家在编辑器里定义。
+games::Script Menu::defaultCustomScript()
+{
+    games::Wave wave;
+    wave.enemies.push_back({QStringLiteral("drone"), 6});
+    return {wave};
 }
 
 // 台本是数据：每波列出敌人种类和数量，最后一波带 Boss。
@@ -60,11 +67,6 @@ games::Script Menu::standardScript()
               {QStringLiteral("tank"), 2}, {QStringLiteral("splitter"), 3},
               {QStringLiteral("boss"), 1}}),
     };
-}
-
-int Menu::maxCustomWave() const
-{
-    return std::max(1, customWaveCount());
 }
 
 Menu::~Menu() = default;
@@ -127,20 +129,6 @@ QRectF Menu::levelRect(int index) const
                         + gap * float(levels_.size() - 1);
     const float left = (GameConfig::ScreenWidth - total) / 2.0f;
     return QRectF(left + index * (width + gap), 402.0f, width, height);
-}
-
-QRectF Menu::customMinusRect() const
-{
-    const QRectF rect = levelRect(CustomLevelIndex);
-    return QRectF(float(rect.center().x()) - 126.0f, float(rect.top()) + 84.0f,
-                  30.0f, 28.0f);
-}
-
-QRectF Menu::customPlusRect() const
-{
-    const QRectF rect = levelRect(CustomLevelIndex);
-    return QRectF(float(rect.center().x()) + 96.0f, float(rect.top()) + 84.0f,
-                  30.0f, 28.0f);
 }
 
 QRectF Menu::retryRect() const
@@ -230,22 +218,31 @@ void Menu::drawMain()
                    {float(rect.left()) + 24.0f, float(rect.top()) + 54.0f},
                    QStringLiteral("topleft"));
         if (isCustomLevel(i)) {
-            drawCustomPicker(painter, rect, active);
+            Base::text(painter, Base::smallFont(),
+                       QStringLiteral("%1 波 · %2 个目标")
+                           .arg(customWaveCount())
+                           .arg(totalCustomEnemies()),
+                       Base::Muted,
+                       {float(rect.left()) + 24.0f, float(rect.top()) + 88.0f},
+                       QStringLiteral("topleft"), 215);
         } else {
             Base::text(painter, Base::smallFont(), levels_[size_t(i)].subtitle,
                        Base::Muted,
                        {float(rect.left()) + 24.0f, float(rect.top()) + 88.0f},
                        QStringLiteral("topleft"), 215);
         }
-        const QString tag = i == 0 ? QStringLiteral("CAMPAIGN")
-                            : i == 1 ? QStringLiteral("BOSS RUSH")
-                                     : QStringLiteral("E  编辑台本");
+        const QString tag = isCustomLevel(i) ? QStringLiteral("SCRIPT EDITOR")
+                                             : QStringLiteral("CAMPAIGN");
         Base::text(painter, Base::techTinyFont(), tag,
                    Base::shade(border, 0.85f),
                    {float(rect.left()) + 24.0f, float(rect.bottom()) - 20.0f},
                    QStringLiteral("midleft"), 190);
-        Base::text(painter, Base::techSmallFont(),
-                   active ? QStringLiteral("ENTER  DEPLOY") : QStringLiteral("READY"),
+        const QString action = isCustomLevel(i)
+                                   ? (active ? QStringLiteral("ENTER  EDIT")
+                                             : QStringLiteral("CLICK  EDIT"))
+                                   : (active ? QStringLiteral("ENTER  DEPLOY")
+                                             : QStringLiteral("READY"));
+        Base::text(painter, Base::techSmallFont(), action,
                    active ? Base::Cyan : Base::Muted,
                    {float(rect.right()) - 24.0f, float(rect.bottom()) - 22.0f},
                    QStringLiteral("midright"), 210);
@@ -255,7 +252,7 @@ void Menu::drawMain()
                QStringLiteral("WASD 移动    LMB / J 射击    SPACE 冲刺"),
                QColor(105, 138, 158),
                {34, GameConfig::ScreenHeight - 34.0f}, QStringLiteral("midleft"), 150);
-    if (!base_.audioEnabled()) {
+    if (audioRequested_ && !base_.audioEnabled()) {
         Base::text(painter, Base::tinyFont(), QStringLiteral("音频设备不可用"),
                    Base::Amber,
                    {34, GameConfig::ScreenHeight - 58.0f}, QStringLiteral("midleft"), 210);
@@ -264,47 +261,11 @@ void Menu::drawMain()
                                            : QStringLiteral("M 静音");
     Base::text(painter, Base::tinyFont(),
                isCustomLevel(selected_)
-                   ? QStringLiteral("← / → 调整起始波次    E 编辑台本    ENTER 开始    ")
-                         + muteHint
+                   ? QStringLiteral("↑ / ↓ 选择    ENTER 编辑台本    ") + muteHint
                    : QStringLiteral("↑ / ↓ 选择    ENTER 开始    ") + muteHint,
                base_.muted() ? Base::Amber : QColor(105, 138, 158),
                {GameConfig::ScreenWidth - 34.0f, GameConfig::ScreenHeight - 34.0f},
                QStringLiteral("midright"), 150);
-}
-
-void Menu::drawCustomPicker(QPainter &painter, const QRectF &rect, bool active)
-{
-    const QRectF minus = customMinusRect();
-    const QRectF plus = customPlusRect();
-    const QColor border = active ? Base::Cyan : QColor(48, 91, 112);
-    const QColor glyph = active ? Base::White : QColor(191, 216, 230);
-
-    Base::panel(painter, minus, border, active ? 230 : 190, 7, QColor(8, 20, 34));
-    Base::panel(painter, plus, border, active ? 230 : 190, 7, QColor(8, 20, 34));
-    Base::text(painter, Base::techSmallFont(), QStringLiteral("-"), glyph,
-               {float(minus.center().x()), float(minus.center().y())},
-               QStringLiteral("center"));
-    Base::text(painter, Base::techSmallFont(), QStringLiteral("+"), glyph,
-               {float(plus.center().x()), float(plus.center().y())},
-               QStringLiteral("center"));
-
-    const QString value = QStringLiteral("起始波次  %1 / %2")
-                              .arg(customWave_, 2, 10, QChar('0'))
-                              .arg(maxCustomWave(), 2, 10, QChar('0'));
-    Base::text(painter, Base::smallFont(), value,
-               active ? Base::Cyan : QColor(191, 216, 230),
-               {float(rect.center().x()), float(minus.center().y())},
-               QStringLiteral("center"), 225);
-}
-
-void Menu::adjustCustomWave(int delta)
-{
-    const int next = std::clamp(customWave_ + delta, 1, maxCustomWave());
-    if (next == customWave_) {
-        return;
-    }
-    customWave_ = next;
-    base_.playSound(QStringLiteral("ui"));
 }
 
 void Menu::drawResult()
@@ -388,8 +349,9 @@ void Menu::startLevel(int index)
     selected_ = index;
     Games::Level level = levels_[size_t(index)];
     if (isCustomLevel(index)) {
+        // 自定义模式：台本整体由玩家定义，永远从第 1 波开始。
         level.script = customScript_;
-        level.startWave = std::clamp(customWave_, 1, maxCustomWave());
+        level.startWave = 1;
     }
     games_ = std::make_unique<Games>(level, base_);
     screen_ = Screen::Match;
@@ -410,32 +372,19 @@ void Menu::keyPress(int key, bool autoRepeat)
         return;
     }
     if (screen_ == Screen::Main) {
-        const bool custom = isCustomLevel(selected_);
-        if (key == Qt::Key_Up || key == Qt::Key_W) {
+        if (key == Qt::Key_Up || key == Qt::Key_W || key == Qt::Key_Left) {
             selected_ = std::max(0, selected_ - 1);
-        } else if (key == Qt::Key_Down || key == Qt::Key_S) {
+        } else if (key == Qt::Key_Down || key == Qt::Key_S || key == Qt::Key_Right) {
             selected_ = std::min(int(levels_.size()) - 1, selected_ + 1);
-        } else if (key == Qt::Key_Left || key == Qt::Key_A) {
-            if (custom) {
-                adjustCustomWave(-1);
-            } else if (key == Qt::Key_Left) {
-                selected_ = std::max(0, selected_ - 1);
-            }
-        } else if (key == Qt::Key_Right || key == Qt::Key_D) {
-            if (custom) {
-                adjustCustomWave(1);
-            } else if (key == Qt::Key_Right) {
-                selected_ = std::min(int(levels_.size()) - 1, selected_ + 1);
-            }
         } else if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Space) {
-            startLevel(selected_);
+            if (isCustomLevel(selected_)) {
+                openEditor();
+            } else {
+                startLevel(selected_);
+            }
         } else if (key == Qt::Key_1) {
             startLevel(0);
         } else if (key == Qt::Key_2) {
-            startLevel(1);
-        } else if (key == Qt::Key_3) {
-            startLevel(2);
-        } else if (key == Qt::Key_E && isCustomLevel(selected_)) {
             openEditor();
         }
         return;
@@ -547,26 +496,16 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
     }
     if (screen_ == Screen::Main) {
         for (int i = 0; i < int(levels_.size()); ++i) {
+            if (!levelRect(i).contains(QPointF(position.x, position.y))) {
+                continue;
+            }
+            selected_ = i;
             if (isCustomLevel(i)) {
-                const QPointF point(position.x, position.y);
-                const bool onMinus = customMinusRect().contains(point);
-                const bool onPlus = customPlusRect().contains(point);
-                if (onMinus || onPlus) {
-                    selected_ = i;
-                    adjustCustomWave(onMinus ? -1 : 1);
-                    return;
-                }
-            }
-            if (isCustomLevel(i) && customEditRect().contains(
-                    QPointF(position.x, position.y))) {
-                selected_ = i;
                 openEditor();
-                return;
-            }
-            if (levelRect(i).contains(QPointF(position.x, position.y))) {
+            } else {
                 startLevel(i);
-                return;
             }
+            return;
         }
         return;
     }
@@ -604,7 +543,6 @@ void Menu::toggleMute()
 
 void Menu::openEditor()
 {
-    customWave_ = std::clamp(customWave_, 1, maxCustomWave());
     editorRow_ = std::clamp(editorRow_, 0, customWaveCount() - 1);
     editorColumn_ = std::clamp(editorColumn_, 0, EditorColumns - 1);
     screen_ = Screen::Editor;
@@ -731,7 +669,6 @@ void Menu::removeCustomWave()
     }
     customScript_.pop_back();
     editorRow_ = std::min(editorRow_, customWaveCount() - 1);
-    customWave_ = std::clamp(customWave_, 1, maxCustomWave());
     base_.playSound(QStringLiteral("ui"));
 }
 
@@ -792,13 +729,6 @@ QRectF Menu::editorBackRect() const
     return QRectF(EditorRight - 148.0f, 648.0f, 148.0f, 32.0f);
 }
 
-QRectF Menu::customEditRect() const
-{
-    const QRectF rect = levelRect(CustomLevelIndex);
-    return QRectF(float(rect.left()) + 16.0f, float(rect.bottom()) - 36.0f,
-                  132.0f, 26.0f);
-}
-
 void Menu::drawEditor()
 {
     frame_.fill(QColor(2, 3, 9));
@@ -834,10 +764,9 @@ void Menu::drawEditor()
                {GameConfig::ScreenWidth / 2.0f, 154}, QStringLiteral("center"), 215);
 
     Base::text(painter, Base::techSmallFont(),
-               QStringLiteral("%1 波 · %2 个目标 · 起始波次 %3")
+               QStringLiteral("%1 波 · %2 个目标")
                    .arg(customWaveCount(), 2, 10, QChar('0'))
-                   .arg(totalCustomEnemies())
-                   .arg(customWave_, 2, 10, QChar('0')),
+                   .arg(totalCustomEnemies()),
                Base::Muted, {EditorLeft, 206}, QStringLiteral("midleft"), 210);
 
     Base::text(painter, Base::techTinyFont(), QStringLiteral("WAVE"), Base::Muted,

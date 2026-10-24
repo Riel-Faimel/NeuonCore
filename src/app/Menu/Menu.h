@@ -47,7 +47,7 @@ public:
 private:
     friend class SelfTest;
 
-    static constexpr int CustomLevelIndex = 2;
+    static constexpr int CustomLevelIndex = 1;
     static constexpr int MaxCustomWaves = 12;
     static constexpr int MaxEnemyCount = 20;
     static constexpr int EditorColumns = 5;   // 四种敌人 + BOSS
@@ -67,14 +67,10 @@ private:
 
     // 默认战役台本：运行时提交给 Games，Menu 只负责写数据和选起点。
     static games::Script standardScript();
-    int maxCustomWave() const;
-    void drawCustomPicker(QPainter &painter, const QRectF &rect, bool active);
-    void adjustCustomWave(int delta);
+    // 自定义模式的初始台本：只有一波，波数由玩家在编辑器里定义。
+    static games::Script defaultCustomScript();
     bool isCustomLevel(int index) const { return index == CustomLevelIndex; }
     QRectF levelRect(int index) const;
-    QRectF customMinusRect() const;
-    QRectF customPlusRect() const;
-    QRectF customEditRect() const;
     QRectF retryRect() const;
     QRectF menuRect() const;
 
@@ -107,9 +103,9 @@ private:
     QImage frame_;
     Math::Vec2 mouse_;
     int selected_ = 0;
-    int customWave_ = 1;
     int editorRow_ = 0;
     int editorColumn_ = 0;
     float menuTime_ = 0.0f;
     bool mouseActive_ = false;
+    bool audioRequested_ = false;
 };

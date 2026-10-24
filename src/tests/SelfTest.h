@@ -307,40 +307,10 @@ public:
         success &= require(menu.screen() == Menu::Screen::Main,
                            QStringLiteral("returns to main menu"));
 
-        menu.keyPress(Qt::Key_2);
-        game = menu.games_.get();
-        const int campaignWaves = int(menu.levels_[0].script.size());
-        success &= require(menu.screen() == Menu::Screen::Match
-                               && game->currentWave() == campaignWaves,
-                           QStringLiteral("boss-rush level starts at the last wave"));
-        menu.returnToMenu();
-        success &= require(menu.screen() == Menu::Screen::Main,
-                           QStringLiteral("level 2 returns to menu"));
-
         log(QStringLiteral("Custom level"));
-        menu.keyPress(Qt::Key_Down);
-        for (int i = 0; i < campaignWaves + 4; ++i) {
-            menu.keyPress(Qt::Key_Right);
-        }
-        menu.keyPress(Qt::Key_Return);
-        game = menu.games_.get();
-        success &= require(game->state() == Games::State::Playing
-                               && game->currentWave() == campaignWaves,
-                           QStringLiteral("custom level clamps to the last wave"));
-        menu.returnToMenu();
-
-        menu.keyPress(Qt::Key_Left);
-        menu.keyPress(Qt::Key_Left);
-        menu.keyPress(Qt::Key_Return);
-        game = menu.games_.get();
-        success &= require(game->currentWave() == campaignWaves - 2,
-                           QStringLiteral("custom level starts at the chosen wave"));
-        menu.returnToMenu();
-
-        log(QStringLiteral("Script editor"));
-        menu.keyPress(Qt::Key_E);
+        menu.keyPress(Qt::Key_2);
         success &= require(menu.screen() == Menu::Screen::Editor,
-                           QStringLiteral("E opens the script editor"));
+                           QStringLiteral("custom card opens the script editor"));
         const int editedWaves = int(menu.customScript_.size());
         menu.keyPress(Qt::Key_N);
         menu.keyPress(Qt::Key_N);
@@ -357,11 +327,13 @@ public:
         menu.keyPress(Qt::Key_Return);
         game = menu.games_.get();
         success &= require(menu.screen() == Menu::Screen::Match
-                               && game->totalWaves() == editedWaves + 2,
-                           QStringLiteral("edited wave count reaches the run"));
+                               && game->totalWaves() == editedWaves + 2
+                               && game->currentWave() == 1,
+                           QStringLiteral("edited script drives the run from wave 1"));
         menu.returnToMenu();
 
-        menu.keyPress(Qt::Key_E);
+        log(QStringLiteral("Script editor"));
+        menu.keyPress(Qt::Key_2);
         for (int i = 0; i < 6; ++i) {
             menu.keyPress(Qt::Key_Right);
         }
@@ -371,9 +343,19 @@ public:
         menu.keyPress(Qt::Key_Minus);
         success &= require(!menu.waveHasBoss(menu.editorRow_),
                            QStringLiteral("editor clears the boss wave"));
+        menu.keyPress(Qt::Key_X);
+        success &= require(int(menu.customScript_.size()) == editedWaves + 1,
+                           QStringLiteral("X removes the last wave"));
         menu.keyPress(Qt::Key_Escape);
         success &= require(menu.screen() == Menu::Screen::Main,
                            QStringLiteral("escape leaves the editor"));
+
+        const QRectF customCard = menu.levelRect(Menu::CustomLevelIndex);
+        menu.mousePressLeft({float(customCard.center().x()),
+                             float(customCard.center().y())});
+        success &= require(menu.screen() == Menu::Screen::Editor,
+                           QStringLiteral("clicking the custom card opens the editor"));
+        menu.keyPress(Qt::Key_Escape);
 
         log(QStringLiteral("Submitted script"));
         games::Script shortScript;
@@ -430,17 +412,16 @@ public:
         movePointer({GameConfig::ScreenWidth / 2.0f, 454.0f});
         save(QStringLiteral("title.png"));
 
-        movePointer({1020.0f, 454.0f});
+        const QRectF customCard = menu.levelRect(Menu::CustomLevelIndex);
+        movePointer({float(customCard.center().x()), float(customCard.center().y())});
         menu.update(1.0f / 60.0f);
-        for (int i = 0; i < 3; ++i) {
-            menu.keyPress(Qt::Key_Right);
-        }
         save(QStringLiteral("custom_level.png"));
 
-        menu.keyPress(Qt::Key_E);
+        menu.keyPress(Qt::Key_Return);
         for (int i = 0; i < 2; ++i) {
-            menu.keyPress(Qt::Key_Down);
+            menu.keyPress(Qt::Key_N);
         }
+        menu.keyPress(Qt::Key_Down);
         menu.keyPress(Qt::Key_Right);
         for (int i = 0; i < 3; ++i) {
             menu.keyPress(Qt::Key_Plus);

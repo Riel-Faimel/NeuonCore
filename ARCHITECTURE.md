@@ -79,7 +79,7 @@ cpp/src/
 | 组件 | 职责 |
 | --- | --- |
 | `Input` | 键鼠状态、移动轴、射击状态 |
-| `Audio` | 程序化 WAV 音效、QSoundEffect 池、MP4 背景音乐轮转、静音 |
+| `Audio` | 程序化 WAV 音效、QSoundEffect 池、音频文件背景音乐轮转、静音 |
 | `Paint` | 颜色、字体、文字排版、发光、条形/面板等绘制原语，以及鼠标准星 |
 
 `Base::Impl` 持有 `base::Input` 和 `base::Audio`；静态绘制/颜色/字体/准星接口转发给 `base::Paint`。`Base.h` 不暴露组件头。
@@ -113,8 +113,8 @@ cpp/src/
 `Menu` 是顶层界面模块，持有进程级的 `Base`、关卡表，以及当前这一局的 `Games`，负责：
 
 - 主菜单和关卡选择；
-- 台本编辑器（`Screen::Editor`）：逐波编辑波数与四种敌人数量、设置唯一 Boss；编辑结果只存在 `customScript_` 里，部署时作为 `Games::Level.script` 提交；
-- 定义每个关卡的安排：展示信息、起始波次，以及这一局的台本（`games::Script`，标准协议从第 1 波开始，核心突袭从最后一波开始，自定义协议由菜单上的 `-` / `+` 或 `←` / `→` 选 1–12 波），开局时把 `Games::Level` 传给 `Games` 构造；
+- 台本编辑器（`Screen::Editor`）：逐波编辑波数与四种敌人数量、设置唯一 Boss；选中“自定义协议”时点击卡片或 `ENTER` 即进入编辑器。编辑结果只存在 `customScript_` 里，部署时作为 `Games::Level.script` 提交，固定从第 1 波开始；
+- 定义每个关卡的安排：展示信息、起始波次，以及这一局的台本（`games::Script`，标准协议从第 1 波开始），开局时把 `Games::Level` 传给 `Games` 构造；
 - 回到主菜单或重新部署时销毁旧的 `Games`，下一局重新构造；
 - 把主菜单/局内/结算输入路由给 `Games`；
 - 在对局结束后读取 `Games` 的得分、击杀、波次、时间；
@@ -275,7 +275,7 @@ GameWindow::paintEvent()
 
 `Menu` 负责构造 `Games`，把这条 `Level` 作为构造参数传进去；`Games` 接收后即开局，并只在内部使用它。
 
-“自定义协议”是同一套机制的动态版本：`levels_` 里放固定条目，`customWave_` 保存玩家选的起始波次，`Menu::startLevel()` 在构造前把它写进 `Level.startWave`。可选范围来自 `Games::waveCount()`，不在 `Menu` 里重复写死波数。
+“自定义协议”是同一套机制的动态版本：`levels_` 里只放展示信息，真正的台本是 `customScript_`，初始只有一波，玩家在编辑器里定义波数和每波组成；`Menu::startLevel()` 在构造前把它写进 `Level.script`，`startWave` 固定为 1。
 
 ### 加一个结算字段
 

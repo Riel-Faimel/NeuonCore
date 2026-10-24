@@ -99,8 +99,12 @@ struct Audio::Impl {
     {
         stopMusic();
         const QDir directory(musicDirectory());
+        const QStringList filters = {
+            QStringLiteral("*.mp4"), QStringLiteral("*.m4a"), QStringLiteral("*.mp3"),
+            QStringLiteral("*.flac"), QStringLiteral("*.ogg"), QStringLiteral("*.opus"),
+            QStringLiteral("*.wav"), QStringLiteral("*.aac")};
         for (const QFileInfo &entry :
-             directory.entryInfoList({QStringLiteral("*.mp4")}, QDir::Files, QDir::Name)) {
+             directory.entryInfoList(filters, QDir::Files, QDir::Name)) {
             musicFiles.append(entry.absoluteFilePath());
         }
         if (musicFiles.isEmpty()) {
@@ -119,14 +123,6 @@ struct Audio::Impl {
                              if (status == QMediaPlayer::EndOfMedia) {
                                  musicFailures = 0;
                                  playNextMusic();
-                             } else if (status == QMediaPlayer::LoadedMedia) {
-                                 // 没有音轨的 MP4（纯视频）直接跳过，别让它静音占位卡住轮转。
-                                 if (musicPlayer != nullptr && !musicPlayer->hasAudio()) {
-                                     ++musicFailures;
-                                     if (musicFailures < musicFiles.size()) {
-                                         playNextMusic();
-                                     }
-                                 }
                              } else if (status == QMediaPlayer::InvalidMedia) {
                                  ++musicFailures;
                                  if (musicFailures < musicFiles.size()) {
@@ -219,6 +215,8 @@ void Audio::init()
         output = outputs.first();
     }
     io.outputDevice = output;
+    // 先起背景音乐，再花时间生成音效 WAV：两者互不依赖，音乐可以早点响。
+    io.initMusic();
 
     // 每个进程写自己的子目录：同时开两个实例也不会覆盖对方正在加载的 WAV。
     const QString rootPath =
@@ -293,7 +291,6 @@ void Audio::init()
         io.next.insert(def.name, 0);
     }
     io.audioEnabled = !io.pools.isEmpty();
-    io.initMusic();
 }
 
 void Audio::play(const QString &name)
