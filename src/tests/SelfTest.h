@@ -161,7 +161,7 @@ public:
         log(QStringLiteral("Input flow"));
         menu.keyPress(Qt::Key_Return);
         menu.keyRelease(Qt::Key_Return);
-        game = menu.games_.get();
+        game = menu.match_.game();
         success &= require(game->state() == Games::State::Playing,
                            QStringLiteral("enter starts the run"));
         menu.keyPress(Qt::Key_Escape);
@@ -184,7 +184,7 @@ public:
         menu.returnToMenu();
         log(QStringLiteral("Starting run"));
         menu.startLevel(0);
-        game = menu.games_.get();
+        game = menu.match_.game();
         success &= require(game->state() == Games::State::Playing,
                            QStringLiteral("run starts"));
         success &= require(game->waves_.currentWave() == 1,
@@ -227,7 +227,7 @@ public:
 
         log(QStringLiteral("Boss and victory"));
         menu.startLevel(0);
-        game = menu.games_.get();
+        game = menu.match_.game();
         game->waves_.start(8);
         game->waves_.queue_.clear();
         game->arena_.beginWave();
@@ -254,7 +254,7 @@ public:
         menu.levels_.push_back({QStringLiteral("boss-mid"), QStringLiteral("中局 Boss"),
                                 QStringLiteral("测试台本"), 2, bossMid});
         menu.startLevel(int(menu.levels_.size()) - 1);
-        game = menu.games_.get();
+        game = menu.match_.game();
         success &= require(game->currentWave() == 2 && game->waves_.isBossWave(),
                            QStringLiteral("boss can sit in a middle wave"));
         success &= require(game->renderer_.bannerTitle_ == QStringLiteral("第 2 波")
@@ -277,7 +277,7 @@ public:
 
         log(QStringLiteral("Game over"));
         menu.startLevel(0);
-        game = menu.games_.get();
+        game = menu.match_.game();
         game->arena_.combatants_.player().state.invuln = 0.0f;
         game->arena_.combatants_.player().takeDamage(
             game->arena_, arena::Damage{9999.0f, false, arena::DamageSource::Bullet});
@@ -289,14 +289,14 @@ public:
                            QStringLiteral("menu enters defeat result"));
         menu.render();
         menu.startLevel(0);
-        game = menu.games_.get();
+        game = menu.match_.game();
         success &= require(game->state() == Games::State::Playing
                                && game->waves_.currentWave() == 1,
                            QStringLiteral("restart works"));
 
         log(QStringLiteral("Autoplay full 8-wave run"));
         menu.startLevel(0);
-        game = menu.games_.get();
+        game = menu.match_.game();
         const bool autoplayVictory = autoplay(*game, 240.0f);
         success &= require(autoplayVictory,
                            QStringLiteral("autoplay clears all 8 waves and the boss"));
@@ -311,21 +311,21 @@ public:
         menu.keyPress(Qt::Key_2);
         success &= require(menu.screen() == Menu::Screen::Editor,
                            QStringLiteral("custom card opens the script editor"));
-        const int editedWaves = int(menu.customScript_.size());
+        const int editedWaves = int(menu.editor_.script().size());
         menu.keyPress(Qt::Key_N);
         menu.keyPress(Qt::Key_N);
-        success &= require(int(menu.customScript_.size()) == editedWaves + 2,
+        success &= require(int(menu.editor_.script().size()) == editedWaves + 2,
                            QStringLiteral("N appends waves"));
         menu.keyPress(Qt::Key_Right);
-        const int beforeCount = menu.enemyCount(menu.editorRow_, menu.editorColumn_);
+        const int beforeCount = menu.editor_.enemyCount(menu.editor_.row(), menu.editor_.column());
         for (int i = 0; i < 3; ++i) {
             menu.keyPress(Qt::Key_Plus);
         }
-        success &= require(menu.enemyCount(menu.editorRow_, menu.editorColumn_)
+        success &= require(menu.editor_.enemyCount(menu.editor_.row(), menu.editor_.column())
                                == beforeCount + 3,
                            QStringLiteral("+ raises a cell count"));
         menu.keyPress(Qt::Key_Return);
-        game = menu.games_.get();
+        game = menu.match_.game();
         success &= require(menu.screen() == Menu::Screen::Match
                                && game->totalWaves() == editedWaves + 2
                                && game->currentWave() == 1,
@@ -338,19 +338,19 @@ public:
             menu.keyPress(Qt::Key_Right);
         }
         menu.keyPress(Qt::Key_Plus);
-        success &= require(menu.waveHasBoss(menu.editorRow_),
+        success &= require(menu.editor_.waveHasBoss(menu.editor_.row()),
                            QStringLiteral("editor toggles the boss wave"));
         menu.keyPress(Qt::Key_Minus);
-        success &= require(!menu.waveHasBoss(menu.editorRow_),
+        success &= require(!menu.editor_.waveHasBoss(menu.editor_.row()),
                            QStringLiteral("editor clears the boss wave"));
         menu.keyPress(Qt::Key_X);
-        success &= require(int(menu.customScript_.size()) == editedWaves + 1,
+        success &= require(int(menu.editor_.script().size()) == editedWaves + 1,
                            QStringLiteral("X removes the last wave"));
         menu.keyPress(Qt::Key_Escape);
         success &= require(menu.screen() == Menu::Screen::Main,
                            QStringLiteral("escape leaves the editor"));
 
-        const QRectF customCard = menu.levelRect(Menu::CustomLevelIndex);
+        const QRectF customCard = menu.main_.levelRect(Menu::CustomLevelIndex, int(menu.levels_.size()));
         menu.mousePressLeft({float(customCard.center().x()),
                              float(customCard.center().y())});
         success &= require(menu.screen() == Menu::Screen::Editor,
@@ -358,7 +358,7 @@ public:
         menu.keyPress(Qt::Key_Escape);
 
         log(QStringLiteral("Settings"));
-        const QRectF gear = menu.settingsButtonRect();
+        const QRectF gear = menu.main_.settingsButtonRect();
         menu.mousePressLeft({float(gear.center().x()), float(gear.center().y())});
         menu.mouseReleaseLeft();
         success &= require(menu.screen() == Menu::Screen::Settings,
@@ -376,7 +376,7 @@ public:
         menu.keyPress(Qt::Key_Left);
         success &= require(menu.base_.soundVolume() < 0.5f,
                            QStringLiteral("left lowers the sound volume"));
-        const QRectF musicTrack = menu.settingsTrackRect(1);
+        const QRectF musicTrack = menu.settings_.trackRect(1);
         menu.keyPress(Qt::Key_Down);
         menu.mousePressLeft({float(musicTrack.left()) + float(musicTrack.width()) * 0.25f,
                              float(musicTrack.center().y())});
@@ -395,7 +395,7 @@ public:
         menu.levels_.push_back({QStringLiteral("script-test"), QStringLiteral("测试台本"),
                                 QStringLiteral("运行时提交"), 1, shortScript});
         menu.startLevel(int(menu.levels_.size()) - 1);
-        game = menu.games_.get();
+        game = menu.match_.game();
         success &= require(game->totalWaves() == 2 && game->currentWave() == 1
                                && game->waves_.queue_.size() == 3,
                            QStringLiteral("submitted script drives the run"));
@@ -444,14 +444,14 @@ public:
 
         // 应用图标（程序化绘制）
         Base::appIcon(256).save(dir.filePath(QStringLiteral("icon.png")));
-        const QRectF settingsEntry = menu.settingsButtonRect();
+        const QRectF settingsEntry = menu.main_.settingsButtonRect();
         menu.mousePressLeft({float(settingsEntry.center().x()),
                              float(settingsEntry.center().y())});
         menu.mouseReleaseLeft();
         save(QStringLiteral("settings.png"));
         menu.keyPress(Qt::Key_Escape);
 
-        const QRectF customCard = menu.levelRect(Menu::CustomLevelIndex);
+        const QRectF customCard = menu.main_.levelRect(Menu::CustomLevelIndex, int(menu.levels_.size()));
         movePointer({float(customCard.center().x()), float(customCard.center().y())});
         menu.update(1.0f / 60.0f);
         save(QStringLiteral("custom_level.png"));
@@ -469,7 +469,7 @@ public:
         menu.keyPress(Qt::Key_Escape);
 
         menu.startLevel(0);
-        game = menu.games_.get();
+        game = menu.match_.game();
         game->state_ = Games::State::Playing;
         game->runTime_ = 112.0f;
         game->waves_.start(4);
@@ -551,7 +551,7 @@ public:
         save(QStringLiteral("upgrade.png"));
 
         menu.startLevel(0);
-        game = menu.games_.get();
+        game = menu.match_.game();
         game->state_ = Games::State::Playing;
         game->waves_.start(8);
         game->waves_.queue_.clear();
@@ -612,7 +612,7 @@ public:
         save(QStringLiteral("victory.png"));
 
         menu.startLevel(0);
-        game = menu.games_.get();
+        game = menu.match_.game();
         game->state_ = Games::State::Playing;
         game->waves_.start(3);
         game->waves_.queue_.clear();

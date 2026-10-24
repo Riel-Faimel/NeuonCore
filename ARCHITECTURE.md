@@ -58,6 +58,11 @@ cpp/src/
 │  │  ├─ Waves/Waves.h/.cpp
 │  │  └─ Upgrades/Upgrades.h/.cpp
 │  ├─ Menu/Menu.h / Menu.cpp
+│  │  ├─ Main/Main.h/.cpp         标题页组件
+│  │  ├─ Match/Match.h/.cpp       当前对局组件
+│  │  ├─ Result/Result.h/.cpp     结算覆盖层组件
+│  │  ├─ Editor/Editor.h/.cpp     台本编辑器组件
+│  │  └─ Settings/Settings.h/.cpp 音量设置组件
 │  ├─ Renderer.h / Renderer.cpp
 │  ├─ Pointer.h / Pointer.cpp
 │  ├─ app.rc
@@ -113,19 +118,26 @@ cpp/src/
 
 ### Menu
 
-`Menu` 是顶层界面模块，持有进程级的 `Base`、关卡表，以及当前这一局的 `Games`，负责：
+`Menu` 是顶层界面模块入口，结构和 `Arena` 一样：自己只持有进程级的 `Base`、关卡表、当前屏幕和输入路由，把五个界面拆成 `namespace menu` 组件：
 
-- 主菜单和关卡选择；
-- 台本编辑器（`Screen::Editor`）：逐波编辑波数与四种敌人数量、设置唯一 Boss；选中“自定义协议”时点击卡片或 `ENTER` 即进入编辑器。编辑结果只存在 `customScript_` 里，部署时作为 `Games::Level.script` 提交，固定从第 1 波开始；
-- 设置页（`Screen::Settings`）：主菜单右上角齿轮进入，调整音效 / 背景音乐音量；改动立即应用到 `Audio` / `Music` 的 `setVolume()`，并通过 `QSettings` 写入 exe 同级的 `settings.ini`；
-- 定义每个关卡的安排：展示信息、起始波次，以及这一局的台本（`games::Script`，标准协议从第 1 波开始），开局时把 `Games::Level` 传给 `Games` 构造；
-- 回到主菜单或重新部署时销毁旧的 `Games`，下一局重新构造；
-- 把主菜单/局内/结算输入路由给 `Games`；
-- 在对局结束后读取 `Games` 的得分、击杀、波次、时间；
-- 绘制失败/胜利结算界面和“重新部署/返回主菜单”操作。
+| 组件 | 职责 |
+| --- | --- |
+| `Main` | 标题页：标题、关卡卡、设置入口；选中状态和命中测试 |
+| `Match` | 持有当前这一局 `Games`：开局、推进、渲染、局内输入转发 |
+| `Result` | 结算覆盖层：只接收一份只读 `Summary`，不读取 `Games` |
+| `Editor` | 自定义台本编辑器：持有 `customScript_`，逐波表格编辑 |
+| `Settings` | 音效 / 背景音乐音量，读写 `settings.ini` |
 
-`Games` 一旦构造就接管这一局的安排，不再对外暴露；`Menu` 只保留展示用的关卡表。
-`Menu` 不参与战斗、波次或强化计算。
+`Menu` 自己只负责：
+
+- 屏幕状态机（`Main / Match / Result / Editor / Settings`）和输入路由；
+- 把 `Main` / `Editor` / `Settings` 的意图（`StartLevel / OpenEditor / Deploy / Back` 等 `Action`）翻译成开局、进编辑器、回主菜单；
+- 开局时把 `Games::Level`（展示信息 + 台本 + 起始波）交给 `Match`；回主菜单时让 `Match` 销毁这一局；
+- 给 `Result` 组装 `Summary`（胜负、得分、击杀、波次、时间）；
+- 管理关卡表 `levels_`：标准协议与自定义协议的展示信息，自定义协议部署时用 `Editor::script()` 覆盖台本、固定从第 1 波开始；
+- 启动时初始化 `Base`（音频/输入/字体）并按 `settings.ini` 恢复音量。
+
+`Games` 一旦构造就由 `Match` 持有，`Menu` 不再直接访问；`Menu` 不参与战斗、波次或强化计算，也不直接画任何屏幕（组件的 `render()` 才画）。
 
 ### Arena
 
@@ -199,25 +211,31 @@ public:
 ```text
 GameWindow
 ├─ Pointer ────────────► Base（准星画法）
-└─ Menu（持有 Base、关卡表，按局构造 Games）
-   └─ Games(Level, Base&)   ← 一局一个实例
-      ├─ Base ─────► base::Input / Audio / Paint（引用，由 Menu 持有）
-      ├─ Arena ────► arena::Combatants / Entities / Events / State
-      ├─ games::Waves ─────► Arena, Random
-      ├─ games::Upgrades ──► Arena, Base, Random
-      ├─ Renderer ─────────► Games/Arena/Waves/Upgrades(只读), Base, Random
-      └─ Random
+└─ Menu（持有 Base、关卡表，组合 5 个界面组件）
+   ├─ menu::Main ─────────► 关卡卡 / 设置入口（数据由 Menu 提供）
+   ├─ menu::Match ────────► Games(Level, Base&)   ← 一局一个实例
+   │  └─ Games
+   │     ├─ Base ─────► base::Input / Audio / Music / Paint（引用，由 Menu 持有）
+   │     ├─ Arena ────► arena::Combatants / Entities / Events / State
+   │     ├─ games::Waves ─────► Arena, Random
+   │     ├─ games::Upgrades ──► Arena, Base, Random
+   │     ├─ Renderer ─────────► Games/Arena/Waves/Upgrades(只读), Base, Random
+   │     └─ Random
+   ├─ menu::Result ───────► 只读 Summary
+   ├─ menu::Editor ───────► games::Script（自己持有）
+   └─ menu::Settings ─────► Base 音量接口 + settings.ini
 ```
 
 依赖是单向的：
 
 - `GameWindow` 持有 `Menu` 和 `Pointer`，负责把两者的结果合成到窗口上。
 - `Pointer` 只依赖 `Base` 的准星画法，不知道游戏业务。
-- `Menu` 持有 `Base`、关卡表和一局的 `Games`，负责主菜单、关卡选择和结算。
+- `Menu` 只做状态机、输入路由和关卡表；界面在 `menu::*` 组件里，`Games` 由 `menu::Match` 持有。
 - `Games` 只负责一局内的逻辑，不知道 `Menu`；一局的安排由构造参数进入，之后不再外泄。
 - `Games` 只通过 `Arena` 公共接口访问战斗世界。
 - `Waves` / `Upgrades` 不知道 UI。
 - `Renderer` 只读局内业务状态，不再画标题和结算。
+- `menu::Result` 只拿一份 `Summary`，不依赖 `Games`。
 - `Base` 不知道游戏业务。
 - `lib` 不依赖 `app`。
 
@@ -226,22 +244,22 @@ GameWindow
 ```text
 GameWindow::tick()
 ├─ Menu::update(dt)
-│  ├─ Main:   菜单动画
-│  ├─ Editor: 台本编辑（输入自处理，只推进菜单动画）
-│  ├─ Match:  Games::update(dt)
+│  ├─ Main:   菜单动画（menu::Main 自己推进时间）
+│  ├─ Editor: 输入自处理（menu::Editor），Menu 不更新
+│  ├─ Match:  menu::Match → Games::update(dt)
 │  │          ├─ Renderer::update(dt)
 │  │          ├─ Playing: Arena→Waves→Feedback→胜负/波次判断
 │  │          ├─ Upgrade: games::Upgrades 候选卡
 │  │          ├─ Paused: 冻结
 │  │          └─ Victory/Defeat: 只推进视觉
-│  └─ Result: Games::update(dt) 继续退场表现
+│  └─ Result: menu::Match 继续 Games::update(dt) 退场表现
 ├─ Pointer::update(dt)      ← 独立时钟，暂停时也推进
 ├─ Menu::render()
-│  ├─ Main:   绘制菜单
-│  ├─ Editor: 绘制台本表格
-│  ├─ Settings: 绘制设置页
-│  ├─ Match:  Games::render() → Renderer
-│  └─ Result: Games::render() + Menu 结算覆盖层
+│  ├─ Main:    menu::Main   绘制菜单
+│  ├─ Editor:  menu::Editor 绘制台本表格
+│  ├─ Settings: menu::Settings 绘制设置页
+│  ├─ Match:  menu::Match → Games::render() → Renderer
+│  └─ Result: menu::Match 画面 + menu::Result 结算覆盖层
 └─ QWidget::update()
 
 GameWindow::paintEvent()
@@ -275,16 +293,24 @@ GameWindow::paintEvent()
 改 `src/app/Menu/Menu.cpp` 的 `levels_`：
 
 ```cpp
-{id, name, subtitle, startWave}
+{id, name, subtitle, startWave, script}
 ```
 
-`Menu` 负责构造 `Games`，把这条 `Level` 作为构造参数传进去；`Games` 接收后即开局，并只在内部使用它。
+`Menu::startLevel()` 把这条 `Level` 交给 `menu::Match`，由 `Match` 构造 `Games`；`Games` 接收后即开局，并只在内部使用它。
 
-“自定义协议”是同一套机制的动态版本：`levels_` 里只放展示信息，真正的台本是 `customScript_`，初始只有一波，玩家在编辑器里定义波数和每波组成；`Menu::startLevel()` 在构造前把它写进 `Level.script`，`startWave` 固定为 1。
+“自定义协议”是同一套机制的动态版本：`levels_` 里只放展示信息，真正的台本在 `menu::Editor` 的 `script_` 里，初始只有一波，玩家在编辑器里定义波数和每波组成；`Menu::startLevel()` 在交给 `Match` 前把它写进 `Level.script`，`startWave` 固定为 1。
+
+### 加一个界面 / 界面字段
+
+每个屏幕都是一个 `menu::*` 组件（`src/app/Menu/<名字>/`）：
+
+1. 组件自己持有 UI 状态、绘制和命中测试，用返回的 `Action` 表达意图；
+2. `Menu` 的 `Screen` 枚举加一项，`render()` 里调它的 `render()`，输入路由里处理它的 `Action`；
+3. 需要的数据由 `Menu` 组装后传入（如 `Main::Card`、`Result::Summary`），组件不反向依赖 `Menu`。
 
 ### 加一个结算字段
 
-只改 `Menu::drawResult()`；数据通过 `Games` 的只读 getter 获取。Renderer 不参与结算。
+只改 `menu::Result::Summary` 和 `menu::Result::render()`；数据由 `Menu::summary()` 从 `menu::Match` 的只读 getter 组装，`Renderer` 不参与结算。
 
 ### 加敌人 / 状态 / 事件
 

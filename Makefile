@@ -39,7 +39,8 @@ APP_SRC := Renderer Pointer
 APP_OBJS := $(addprefix $(BUILD)/app/,$(addsuffix .o,$(APP_SRC)))
 GAMES_COMPONENTS := Games Waves/Waves Upgrades/Upgrades
 GAMES_OBJS := $(addprefix $(BUILD)/app/Games/,$(addsuffix .o,$(GAMES_COMPONENTS)))
-MENU_OBJ := $(BUILD)/app/Menu/Menu.o
+MENU_COMPONENTS := Menu Main/Main Match/Match Result/Result Editor/Editor Settings/Settings
+MENU_OBJS := $(addprefix $(BUILD)/app/Menu/,$(addsuffix .o,$(MENU_COMPONENTS)))
 LIB_SRC := Math Random
 LIB_OBJS := $(addprefix $(BUILD)/lib/,$(addsuffix .o,$(LIB_SRC)))
 BASE_COMPONENTS := Base Input/Input Audio/Audio Audio/Music Paint/Paint
@@ -55,7 +56,7 @@ ARENA_COMPONENTS := Arena Combatants/Combatants Entities/Entities Events State \
                     Entities/Particle Entities/FloatingText Entities/Shockwave
 ARENA_OBJS := $(addprefix $(BUILD)/app/Arena/,$(addsuffix .o,$(ARENA_COMPONENTS)))
 
-SHARED_OBJS := $(BASE_OBJS) $(LIB_OBJS) $(APP_OBJS) $(GAMES_OBJS) $(MENU_OBJ) $(ARENA_OBJS)
+SHARED_OBJS := $(BASE_OBJS) $(LIB_OBJS) $(APP_OBJS) $(GAMES_OBJS) $(MENU_OBJS) $(ARENA_OBJS)
 RELEASE_OBJS := $(SHARED_OBJS) $(MAIN_RELEASE_OBJ) $(ICON_RES_OBJ)
 TEST_OBJS := $(SHARED_OBJS) $(MAIN_TEST_OBJ)
 DEPS := $(RELEASE_OBJS:.o=.d) $(TEST_OBJS:.o=.d)
@@ -78,6 +79,11 @@ $(BUILD):
 	@if not exist "$(BUILD_WIN)\app\Games\Waves" mkdir "$(BUILD_WIN)\app\Games\Waves"
 	@if not exist "$(BUILD_WIN)\app\Games\Upgrades" mkdir "$(BUILD_WIN)\app\Games\Upgrades"
 	@if not exist "$(BUILD_WIN)\app\Menu" mkdir "$(BUILD_WIN)\app\Menu"
+	@if not exist "$(BUILD_WIN)\app\Menu\Main" mkdir "$(BUILD_WIN)\app\Menu\Main"
+	@if not exist "$(BUILD_WIN)\app\Menu\Match" mkdir "$(BUILD_WIN)\app\Menu\Match"
+	@if not exist "$(BUILD_WIN)\app\Menu\Result" mkdir "$(BUILD_WIN)\app\Menu\Result"
+	@if not exist "$(BUILD_WIN)\app\Menu\Editor" mkdir "$(BUILD_WIN)\app\Menu\Editor"
+	@if not exist "$(BUILD_WIN)\app\Menu\Settings" mkdir "$(BUILD_WIN)\app\Menu\Settings"
 	@if not exist "$(BUILD_WIN)\app\Arena" mkdir "$(BUILD_WIN)\app\Arena"
 	@if not exist "$(BUILD_WIN)\app\Arena\Combatants" mkdir "$(BUILD_WIN)\app\Arena\Combatants"
 	@if not exist "$(BUILD_WIN)\app\Arena\Entities" mkdir "$(BUILD_WIN)\app\Arena\Entities"
@@ -94,7 +100,8 @@ $(GAMES_OBJS): $(BUILD)/app/Games/%.o: src/app/Games/%.cpp | $(BUILD)
 	@echo [CXX] $<
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
-$(MENU_OBJ): src/app/Menu/Menu.cpp | $(BUILD)
+$(MENU_OBJS): $(BUILD)/app/Menu/%.o: src/app/Menu/%.cpp | $(BUILD)
+	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
 	@echo [CXX] $<
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 

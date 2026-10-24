@@ -2,47 +2,31 @@
 
 #include "Base/Base.h"
 
-#include <QCoreApplication>
-#include <QLinearGradient>
-#include <QLocale>
 #include <QPainter>
-#include <QPen>
-#include <QSettings>
 #include <Qt>
 
-#include <algorithm>
-#include <array>
-#include <cmath>
 #include <initializer_list>
 #include <utility>
 
-Menu::Menu(bool enableAudio)
+Menu::Menu(bool enableAudio) : settings_(enableAudio)
 {
     Base::initialize();
     audioRequested_ = enableAudio;
     if (enableAudio) {
         base_.initAudio();
-        loadSettings();
+        settings_.load(base_);
     }
     frame_ = QImage(GameConfig::ScreenWidth, GameConfig::ScreenHeight,
                     QImage::Format_ARGB32_Premultiplied);
-    const games::Script campaign = standardScript();
     levels_ = {
         {QStringLiteral("standard"), QStringLiteral("标准协议"),
-         QStringLiteral("八波战役 · 守住星核"), 1, campaign},
+         QStringLiteral("八波战役 · 守住星核"), 1, standardScript()},
         {QStringLiteral("custom"), QStringLiteral("自定义协议"),
-         QStringLiteral("点击编辑台本"), 1, defaultCustomScript()},
+         QStringLiteral("点击编辑台本"), 1, editor_.script()},
     };
-    customScript_ = defaultCustomScript();
 }
 
-// 自定义模式不继承战役台本：初始只有一波，波数和组成都由玩家在编辑器里定义。
-games::Script Menu::defaultCustomScript()
-{
-    games::Wave wave;
-    wave.enemies.push_back({QStringLiteral("drone"), 6});
-    return {wave};
-}
+Menu::~Menu() = default;
 
 // 台本是数据：每波列出敌人种类和数量，最后一波带 Boss。
 // 想改战役节奏只改这里，Waves / Games 不需要动。
@@ -72,298 +56,84 @@ games::Script Menu::standardScript()
     };
 }
 
-Menu::~Menu() = default;
+std::vector<menu::Main::Card> Menu::cards() const
+{
+    std::vector<menu::Main::Card> result;
+    result.reserve(levels_.size());
+    for (size_t i = 0; i < levels_.size(); ++i) {
+        menu::Main::Card card;
+        card.name = levels_[i].name;
+        card.custom = int(i) == CustomLevelIndex;
+        card.subtitle = card.custom
+                            ? QStringLiteral("%1 波 · %2 个目标")
+                                  .arg(editor_.waveCount())
+                                  .arg(editor_.totalEnemies())
+                            : levels_[i].subtitle;
+        result.push_back(card);
+    }
+    return result;
+}
+
+menu::Result::Summary Menu::summary() const
+{
+    menu::Result::Summary summary;
+    summary.victory = match_.state() == Games::State::Victory;
+    summary.levelName = level_ >= 0 && level_ < int(levels_.size())
+                            ? levels_[size_t(level_)].name
+                            : QString();
+    summary.score = match_.score();
+    summary.kills = match_.kills();
+    summary.wave = match_.wave();
+    summary.totalWaves = match_.totalWaves();
+    summary.runTime = match_.runTime();
+    return summary;
+}
 
 const QImage &Menu::frame() const
 {
-    return screen_ == Screen::Match && games_ ? games_->frame() : frame_;
+    return screen_ == Screen::Match && match_.active() ? match_.frame() : frame_;
 }
 
 void Menu::update(float dt)
 {
-    menuTime_ += dt;
-    if (screen_ == Screen::Match && games_) {
-        games_->update(dt);
-        if (games_->state() == Games::State::Victory
-            || games_->state() == Games::State::Defeat) {
+    if (screen_ == Screen::Match && match_.active()) {
+        match_.update(dt);
+        if (match_.finished()) {
             screen_ = Screen::Result;
         }
         return;
     }
-    if (screen_ == Screen::Result && games_) {
-        games_->update(dt);
+    if (screen_ == Screen::Result && match_.active()) {
+        match_.update(dt);
         return;
     }
-
-    if (screen_ == Screen::Main && mouseActive_) {
-        for (int i = 0; i < int(levels_.size()); ++i) {
-            if (levelRect(i).contains(QPointF(mouse_.x, mouse_.y))) {
-                selected_ = i;
-            }
-        }
+    if (screen_ == Screen::Main) {
+        main_.update(dt, cards(), mouse_, mouseActive_);
     }
 }
 
 void Menu::render()
 {
-    if (screen_ == Screen::Match && games_) {
-        games_->render();
+    if (screen_ == Screen::Match && match_.active()) {
+        match_.render();
         return;
     }
-    if (screen_ == Screen::Result && games_) {
-        games_->render();
-        frame_ = games_->frame().copy();
-        drawResult();
+    if (screen_ == Screen::Result && match_.active()) {
+        match_.render();
+        frame_ = match_.frame().copy();
+        QPainter painter(&frame_);
+        result_.render(painter, summary());
         return;
     }
+    QPainter painter(&frame_);
     if (screen_ == Screen::Editor) {
-        drawEditor();
-        return;
+        editor_.render(painter, base_.muted());
+    } else if (screen_ == Screen::Settings) {
+        settings_.render(painter, base_);
+    } else {
+        main_.render(painter, cards(), mouse_, mouseActive_, base_.muted(),
+                     audioRequested_ && !base_.audioEnabled());
     }
-    if (screen_ == Screen::Settings) {
-        drawSettings();
-        return;
-    }
-    drawMain();
-}
-
-QRectF Menu::levelRect(int index) const
-{
-    constexpr float width = 360.0f;
-    constexpr float height = 156.0f;
-    constexpr float gap = 26.0f;
-    const float total = width * float(levels_.size())
-                        + gap * float(levels_.size() - 1);
-    const float left = (GameConfig::ScreenWidth - total) / 2.0f;
-    return QRectF(left + index * (width + gap), 402.0f, width, height);
-}
-
-QRectF Menu::retryRect() const
-{
-    return QRectF(GameConfig::ScreenWidth / 2.0f - 270.0f, 560.0f, 250, 48);
-}
-
-QRectF Menu::menuRect() const
-{
-    return QRectF(GameConfig::ScreenWidth / 2.0f + 20.0f, 560.0f, 250, 48);
-}
-
-void Menu::drawMain()
-{
-    frame_.fill(QColor(2, 3, 9));
-    QPainter painter(&frame_);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-
-    QLinearGradient background(0, 0, 0, GameConfig::ScreenHeight);
-    background.setColorAt(0.0, QColor(5, 15, 28));
-    background.setColorAt(0.55, QColor(3, 8, 18));
-    background.setColorAt(1.0, QColor(1, 3, 8));
-    painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
-                     background);
-
-    for (int i = 0; i < 120; ++i) {
-        const float x = std::fmod(float(i) * 137.0f + 31.0f,
-                                  float(GameConfig::ScreenWidth));
-        const float y = std::fmod(float(i) * 83.0f + 17.0f,
-                                  float(GameConfig::ScreenHeight));
-        const float alpha = 35.0f + 45.0f * (0.5f + 0.5f * std::sin(menuTime_ + i));
-        Base::fillCircle(painter, {x, y}, i % 5 == 0 ? 1.8f : 1.0f,
-                         Base::withAlpha(Base::Cyan, int(alpha * 0.55f)));
-    }
-
-    painter.save();
-    painter.setPen(QPen(QColor(25, 56, 76), 1.0f));
-    for (int x = 0; x < GameConfig::ScreenWidth; x += 80) {
-        painter.drawLine(x, 0, x, GameConfig::ScreenHeight);
-    }
-    for (int y = 0; y < GameConfig::ScreenHeight; y += 80) {
-        painter.drawLine(0, y, GameConfig::ScreenWidth, y);
-    }
-    painter.restore();
-
-    Base::text(painter, Base::techTinyFont(),
-               QStringLiteral("SECTOR 07  //  DEEP SPACE DEFENSE GRID"),
-               QColor(121, 176, 194),
-               {GameConfig::ScreenWidth / 2.0f, 102}, QStringLiteral("center"), 185);
-    Base::glowText(painter, Base::titleFont(), QStringLiteral("星核协议"),
-                   Base::White,
-                   {GameConfig::ScreenWidth / 2.0f, 204}, QStringLiteral("center"));
-    Base::text(painter, Base::techFont(),
-               QStringLiteral("N E O N   C O R E   P R O T O C O L"),
-               Base::Cyan,
-               {GameConfig::ScreenWidth / 2.0f, 278}, QStringLiteral("center"), 230);
-    Base::text(painter, Base::bodyFont(),
-               QStringLiteral("选择行动。每一次部署，都会改写星核的命运。"),
-               Base::Text,
-               {GameConfig::ScreenWidth / 2.0f, 335}, QStringLiteral("center"), 220);
-
-    Base::text(painter, Base::techSmallFont(), QStringLiteral("SELECT OPERATION"),
-               Base::Muted, {GameConfig::ScreenWidth / 2.0f, 375},
-               QStringLiteral("center"), 190);
-    const float pulse = 0.5f + 0.5f * std::sin(menuTime_ * 2.6f);
-    for (int i = 0; i < int(levels_.size()); ++i) {
-        const QRectF rect = levelRect(i);
-        const bool active = selected_ == i;
-        const QColor border = active ? Base::Cyan : QColor(48, 91, 112);
-        Base::panel(painter, rect, border, active ? 235 : 190, 12,
-                    active ? QColor(8, 22, 36) : QColor(6, 13, 24));
-        if (active) {
-            painter.save();
-            painter.setBrush(Qt::NoBrush);
-            QPen pen(Base::withAlpha(Base::Cyan, int(45 + 45 * pulse)));
-            pen.setWidthF(3.0f);
-            painter.setPen(pen);
-            painter.drawRoundedRect(rect.adjusted(-7, -7, 7, 7), 16, 16);
-            painter.restore();
-        }
-        Base::text(painter, Base::techTinyFont(),
-                   QStringLiteral("0%1").arg(i + 1), border,
-                   {float(rect.left()) + 24.0f, float(rect.top()) + 24.0f},
-                   QStringLiteral("topleft"), 210);
-        Base::text(painter, Base::mediumFont(), levels_[size_t(i)].name,
-                   active ? Base::White : QColor(191, 216, 230),
-                   {float(rect.left()) + 24.0f, float(rect.top()) + 54.0f},
-                   QStringLiteral("topleft"));
-        if (isCustomLevel(i)) {
-            Base::text(painter, Base::smallFont(),
-                       QStringLiteral("%1 波 · %2 个目标")
-                           .arg(customWaveCount())
-                           .arg(totalCustomEnemies()),
-                       Base::Muted,
-                       {float(rect.left()) + 24.0f, float(rect.top()) + 88.0f},
-                       QStringLiteral("topleft"), 215);
-        } else {
-            Base::text(painter, Base::smallFont(), levels_[size_t(i)].subtitle,
-                       Base::Muted,
-                       {float(rect.left()) + 24.0f, float(rect.top()) + 88.0f},
-                       QStringLiteral("topleft"), 215);
-        }
-        const QString tag = isCustomLevel(i) ? QStringLiteral("SCRIPT EDITOR")
-                                             : QStringLiteral("CAMPAIGN");
-        Base::text(painter, Base::techTinyFont(), tag,
-                   Base::shade(border, 0.85f),
-                   {float(rect.left()) + 24.0f, float(rect.bottom()) - 20.0f},
-                   QStringLiteral("midleft"), 190);
-        const QString action = isCustomLevel(i)
-                                   ? (active ? QStringLiteral("ENTER  EDIT")
-                                             : QStringLiteral("CLICK  EDIT"))
-                                   : (active ? QStringLiteral("ENTER  DEPLOY")
-                                             : QStringLiteral("READY"));
-        Base::text(painter, Base::techSmallFont(), action,
-                   active ? Base::Cyan : Base::Muted,
-                   {float(rect.right()) - 24.0f, float(rect.bottom()) - 22.0f},
-                   QStringLiteral("midright"), 210);
-    }
-
-    // 右上角的设置入口
-    const QRectF settingsButton = settingsButtonRect();
-    const bool settingsHover = mouseActive_
-                               && settingsButton.contains(
-                                   QPointF(mouse_.x, mouse_.y));
-    Base::panel(painter, settingsButton,
-                settingsHover ? Base::Cyan : QColor(48, 91, 112),
-                settingsHover ? 235 : 195, 10, QColor(6, 14, 25));
-    Base::gear(painter,
-               {float(settingsButton.left()) + 26.0f,
-                float(settingsButton.center().y())},
-               9.0f, settingsHover ? Base::Cyan : QColor(150, 190, 205));
-    Base::text(painter, Base::smallFont(), QStringLiteral("设置"),
-               settingsHover ? Base::White : QColor(191, 216, 230),
-               {float(settingsButton.left()) + 46.0f,
-                float(settingsButton.center().y())},
-               QStringLiteral("midleft"), 220);
-
-    Base::text(painter, Base::tinyFont(),
-               QStringLiteral("WASD 移动    LMB / J 射击    SPACE 冲刺"),
-               QColor(105, 138, 158),
-               {34, GameConfig::ScreenHeight - 34.0f}, QStringLiteral("midleft"), 150);
-    if (audioRequested_ && !base_.audioEnabled()) {
-        Base::text(painter, Base::tinyFont(), QStringLiteral("音频设备不可用"),
-                   Base::Amber,
-                   {34, GameConfig::ScreenHeight - 58.0f}, QStringLiteral("midleft"), 210);
-    }
-    const QString muteHint = base_.muted() ? QStringLiteral("M 已静音")
-                                           : QStringLiteral("M 静音");
-    Base::text(painter, Base::tinyFont(),
-               isCustomLevel(selected_)
-                   ? QStringLiteral("↑ / ↓ 选择    ENTER 编辑台本    ") + muteHint
-                   : QStringLiteral("↑ / ↓ 选择    ENTER 开始    ") + muteHint,
-               base_.muted() ? Base::Amber : QColor(105, 138, 158),
-               {GameConfig::ScreenWidth - 34.0f, GameConfig::ScreenHeight - 34.0f},
-               QStringLiteral("midright"), 150);
-}
-
-void Menu::drawResult()
-{
-    if (!games_) {
-        return;
-    }
-    QPainter painter(&frame_);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    const bool victory = games_->state() == Games::State::Victory;
-    painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
-                     QColor(2, 3, 9, 210));
-    const QColor accent = victory ? Base::Cyan : Base::Red;
-    Base::strokeLine(painter, {GameConfig::ScreenWidth / 2.0f - 250, 118},
-                     {GameConfig::ScreenWidth / 2.0f + 250, 118}, accent, 1.0f);
-    Base::text(painter, Base::techSmallFont(),
-               victory ? QStringLiteral("MISSION COMPLETE  //  CORE STABILIZED")
-                       : QStringLiteral("MISSION FAILED  //  CORE SIGNAL LOST"),
-               accent, {GameConfig::ScreenWidth / 2.0f, 152},
-               QStringLiteral("center"), 230);
-    Base::glowText(painter, Base::bigFont(),
-                   victory ? QStringLiteral("星核已稳定") : QStringLiteral("防线失守"),
-                   victory ? QColor(151, 255, 220) : QColor(255, 119, 133),
-                   {GameConfig::ScreenWidth / 2.0f, 222}, QStringLiteral("center"));
-    Base::text(painter, Base::bodyFont(),
-               victory ? QStringLiteral("你守住了最后一道光。")
-                       : QStringLiteral("星核在黑暗中熄灭。"),
-               QColor(194, 224, 232),
-               {GameConfig::ScreenWidth / 2.0f, 278}, QStringLiteral("center"), 225);
-    Base::text(painter, Base::smallFont(),
-               selected_ >= 0 && selected_ < int(levels_.size())
-                   ? levels_[size_t(selected_)].name
-                   : QString(),
-               Base::Muted, {GameConfig::ScreenWidth / 2.0f, 310},
-               QStringLiteral("center"), 200);
-
-    const int minutes = int(games_->runTime()) / 60;
-    const int seconds = int(games_->runTime()) % 60;
-    const QString timeText = QStringLiteral("%1:%2")
-                                 .arg(minutes, 2, 10, QChar('0'))
-                                 .arg(seconds, 2, 10, QChar('0'));
-    const std::array<std::pair<QString, QString>, 4> stats = {{
-        {QStringLiteral("最终得分"), QLocale(QLocale::English).toString(games_->score())},
-        {QStringLiteral("到达波次"),
-         QStringLiteral("%1 / %2").arg(games_->currentWave()).arg(games_->totalWaves())},
-        {QStringLiteral("击破目标"), QString::number(games_->kills())},
-        {QStringLiteral("存活时间"), timeText},
-    }};
-    constexpr float totalWidth = 760.0f;
-    constexpr float cell = totalWidth / 4.0f;
-    const float start = GameConfig::ScreenWidth / 2.0f - totalWidth / 2.0f;
-    for (int i = 0; i < 4; ++i) {
-        const float cx = start + cell * i + cell / 2.0f;
-        if (i > 0) {
-            Base::strokeLine(painter, {start + cell * i, 390},
-                             {start + cell * i, 482}, QColor(44, 67, 83), 1.0f);
-        }
-        Base::text(painter, Base::tinyFont(), stats[size_t(i)].first, Base::Muted,
-                   {cx, 390}, QStringLiteral("center"), 190);
-        Base::text(painter, Base::largeFont(), stats[size_t(i)].second, Base::White,
-                   {cx, 417}, QStringLiteral("center"));
-    }
-
-    Base::panel(painter, retryRect(), Base::Cyan, 230, 9, QColor(7, 18, 31));
-    Base::panel(painter, menuRect(), QColor(65, 104, 124), 210, 9, QColor(7, 14, 25));
-    Base::text(painter, Base::techSmallFont(), QStringLiteral("R  重新部署"),
-               Base::Cyan,
-               {float(retryRect().center().x()), float(retryRect().center().y())},
-               QStringLiteral("center"));
-    Base::text(painter, Base::techSmallFont(), QStringLiteral("ESC  返回主菜单"),
-               QColor(190, 215, 228),
-               {float(menuRect().center().x()), float(menuRect().center().y())},
-               QStringLiteral("center"));
 }
 
 void Menu::startLevel(int index)
@@ -371,14 +141,14 @@ void Menu::startLevel(int index)
     if (index < 0 || index >= int(levels_.size())) {
         return;
     }
-    selected_ = index;
+    level_ = index;
     Games::Level level = levels_[size_t(index)];
-    if (isCustomLevel(index)) {
+    if (index == CustomLevelIndex) {
         // 自定义模式：台本整体由玩家定义，永远从第 1 波开始。
-        level.script = customScript_;
+        level.script = editor_.script();
         level.startWave = 1;
     }
-    games_ = std::make_unique<Games>(level, base_);
+    match_.start(level, base_);
     screen_ = Screen::Match;
     base_.keyRelease(Qt::Key_Escape);
 }
@@ -386,8 +156,15 @@ void Menu::startLevel(int index)
 void Menu::returnToMenu()
 {
     screen_ = Screen::Main;
-    games_.reset();
+    match_.stop();
     base_.clear();
+}
+
+void Menu::openEditor()
+{
+    editor_.prepare();
+    screen_ = Screen::Editor;
+    base_.playSound(QStringLiteral("ui"));
 }
 
 void Menu::keyPress(int key, bool autoRepeat)
@@ -396,88 +173,68 @@ void Menu::keyPress(int key, bool autoRepeat)
         toggleMute();
         return;
     }
-    if (screen_ == Screen::Main) {
-        if (key == Qt::Key_Up || key == Qt::Key_W || key == Qt::Key_Left) {
-            selected_ = std::max(0, selected_ - 1);
-        } else if (key == Qt::Key_Down || key == Qt::Key_S || key == Qt::Key_Right) {
-            selected_ = std::min(int(levels_.size()) - 1, selected_ + 1);
-        } else if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Space) {
-            if (isCustomLevel(selected_)) {
-                openEditor();
-            } else {
-                startLevel(selected_);
-            }
-        } else if (key == Qt::Key_1) {
-            startLevel(0);
-        } else if (key == Qt::Key_2) {
+    switch (screen_) {
+    case Screen::Main: {
+        const menu::Main::Command command = main_.keyPress(key, cards());
+        switch (command.action) {
+        case menu::Main::Action::StartLevel:
+            startLevel(command.level);
+            break;
+        case menu::Main::Action::OpenEditor:
             openEditor();
+            break;
+        case menu::Main::Action::OpenSettings:
+            settings_.reset();
+            screen_ = Screen::Settings;
+            base_.playSound(QStringLiteral("ui"));
+            break;
+        case menu::Main::Action::None:
+            break;
         }
-        return;
+        break;
     }
-    if (screen_ == Screen::Result) {
-        if (key == Qt::Key_R || key == Qt::Key_Return || key == Qt::Key_Enter) {
-            startLevel(selected_);
-        } else if (key == Qt::Key_Escape || key == Qt::Key_Q) {
+    case Screen::Match:
+        if (!match_.active()) {
+            break;
+        }
+        match_.keyPress(key, autoRepeat);
+        if (key == Qt::Key_Q && match_.state() == Games::State::Paused) {
             returnToMenu();
         }
-        return;
+        break;
+    case Screen::Result: {
+        const menu::Result::Action action = result_.keyPress(key);
+        if (action == menu::Result::Action::Retry) {
+            startLevel(level_);
+        } else if (action == menu::Result::Action::Back) {
+            returnToMenu();
+        }
+        break;
     }
-
-    if (screen_ == Screen::Settings) {
-        if (key == Qt::Key_Up || key == Qt::Key_W) {
-            settingsRow_ = std::max(0, settingsRow_ - 1);
-        } else if (key == Qt::Key_Down || key == Qt::Key_S) {
-            settingsRow_ = std::min(1, settingsRow_ + 1);
-        } else if (key == Qt::Key_Left || key == Qt::Key_A) {
-            adjustSettingsVolume(settingsRow_, -0.05f);
-        } else if (key == Qt::Key_Right || key == Qt::Key_D) {
-            adjustSettingsVolume(settingsRow_, 0.05f);
-        } else if (key == Qt::Key_Escape || key == Qt::Key_Q
-                   || key == Qt::Key_Return || key == Qt::Key_Enter) {
+    case Screen::Editor: {
+        const menu::Editor::Action action = editor_.keyPress(key, base_);
+        if (action == menu::Editor::Action::Deploy) {
+            startLevel(CustomLevelIndex);
+        } else if (action == menu::Editor::Action::Back) {
+            returnToMenu();
+        }
+        break;
+    }
+    case Screen::Settings: {
+        const menu::Settings::Action action = settings_.keyPress(key, base_);
+        if (action == menu::Settings::Action::Back) {
             screen_ = Screen::Main;
             base_.playSound(QStringLiteral("ui"));
         }
-        return;
+        break;
     }
-
-    if (screen_ == Screen::Editor) {
-        if (key == Qt::Key_Up || key == Qt::Key_W) {
-            editorRow_ = std::max(0, editorRow_ - 1);
-        } else if (key == Qt::Key_Down || key == Qt::Key_S) {
-            editorRow_ = std::min(customWaveCount() - 1, editorRow_ + 1);
-        } else if (key == Qt::Key_Left || key == Qt::Key_A) {
-            editorColumn_ = std::max(0, editorColumn_ - 1);
-        } else if (key == Qt::Key_Right || key == Qt::Key_D) {
-            editorColumn_ = std::min(EditorColumns - 1, editorColumn_ + 1);
-        } else if (key == Qt::Key_Plus || key == Qt::Key_Equal) {
-            adjustEditorCell(1);
-        } else if (key == Qt::Key_Minus) {
-            adjustEditorCell(-1);
-        } else if (key == Qt::Key_N) {
-            addCustomWave();
-        } else if (key == Qt::Key_X) {
-            removeCustomWave();
-        } else if (key == Qt::Key_Return || key == Qt::Key_Enter) {
-            startLevel(CustomLevelIndex);
-        } else if (key == Qt::Key_Escape || key == Qt::Key_Q) {
-            returnToMenu();
-        }
-        return;
-    }
-
-    if (!games_) {
-        return;
-    }
-    games_->keyPress(key, autoRepeat);
-    if (key == Qt::Key_Q && games_->state() == Games::State::Paused) {
-        returnToMenu();
     }
 }
 
 void Menu::keyRelease(int key)
 {
-    if (screen_ == Screen::Match && games_) {
-        games_->keyRelease(key);
+    if (screen_ == Screen::Match) {
+        match_.keyRelease(key);
     }
 }
 
@@ -485,10 +242,10 @@ void Menu::mouseMove(const Math::Vec2 &position)
 {
     mouse_ = position;
     mouseActive_ = true;
-    if (screen_ == Screen::Match && games_) {
-        games_->mouseMove(position);
-    } else if (screen_ == Screen::Settings && draggingVolume_) {
-        setSettingsVolumeFromPointer(position);
+    if (screen_ == Screen::Match) {
+        match_.mouseMove(position);
+    } else if (screen_ == Screen::Settings) {
+        settings_.mouseMove(position, base_);
     }
 }
 
@@ -496,110 +253,63 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
 {
     mouse_ = position;
     mouseActive_ = true;
-    if (screen_ == Screen::Settings) {
-        const QPointF point(position.x, position.y);
-        if (settingsBackRect().contains(point)) {
+    switch (screen_) {
+    case Screen::Main: {
+        const menu::Main::Command command = main_.mousePress(position, cards());
+        switch (command.action) {
+        case menu::Main::Action::StartLevel:
+            startLevel(command.level);
+            break;
+        case menu::Main::Action::OpenEditor:
+            openEditor();
+            break;
+        case menu::Main::Action::OpenSettings:
+            settings_.reset();
+            screen_ = Screen::Settings;
+            base_.playSound(QStringLiteral("ui"));
+            break;
+        case menu::Main::Action::None:
+            break;
+        }
+        break;
+    }
+    case Screen::Match:
+        match_.mousePressLeft(position);
+        break;
+    case Screen::Result: {
+        const menu::Result::Action action = result_.mousePress(position);
+        if (action == menu::Result::Action::Retry) {
+            startLevel(level_);
+        } else if (action == menu::Result::Action::Back) {
+            returnToMenu();
+        }
+        break;
+    }
+    case Screen::Editor: {
+        const menu::Editor::Action action = editor_.mousePress(position, base_);
+        if (action == menu::Editor::Action::Deploy) {
+            startLevel(CustomLevelIndex);
+        } else if (action == menu::Editor::Action::Back) {
+            returnToMenu();
+        }
+        break;
+    }
+    case Screen::Settings: {
+        const menu::Settings::Action action = settings_.mousePress(position, base_);
+        if (action == menu::Settings::Action::Back) {
             screen_ = Screen::Main;
             base_.playSound(QStringLiteral("ui"));
-            return;
         }
-        for (int row = 0; row < 2; ++row) {
-            if (!settingsRowRect(row).contains(point)) {
-                continue;
-            }
-            settingsRow_ = row;
-            if (settingsTrackRect(row).adjusted(-8.0f, -14.0f, 8.0f, 14.0f).contains(point)) {
-                setSettingsVolumeFromPointer(position);
-                draggingVolume_ = true;
-                if (row == 0) {
-                    base_.playSound(QStringLiteral("ui"));
-                }
-            }
-            return;
-        }
-        return;
+        break;
     }
-    if (screen_ == Screen::Editor) {
-        const QPointF point(position.x, position.y);
-        if (editorBackRect().contains(point)) {
-            returnToMenu();
-            return;
-        }
-        if (editorDeployRect().contains(point)) {
-            startLevel(CustomLevelIndex);
-            return;
-        }
-        if (editorAddWaveRect().contains(point)) {
-            addCustomWave();
-            return;
-        }
-        if (editorRemoveWaveRect().contains(point)) {
-            removeCustomWave();
-            return;
-        }
-        if (editorColumn_ < 4 && editorMinusRect().contains(point)) {
-            adjustEditorCell(-1);
-            return;
-        }
-        if (editorColumn_ < 4 && editorPlusRect().contains(point)) {
-            adjustEditorCell(1);
-            return;
-        }
-        for (int row = 0; row < customWaveCount(); ++row) {
-            for (int column = 0; column < EditorColumns; ++column) {
-                if (!editorCellRect(row, column).contains(point)) {
-                    continue;
-                }
-                editorRow_ = row;
-                editorColumn_ = column;
-                if (column == 4) {
-                    // BOSS 列整格就是开关。
-                    adjustEditorCell(1);
-                }
-                return;
-            }
-        }
-        return;
-    }
-    if (screen_ == Screen::Main) {
-        if (settingsButtonRect().contains(QPointF(position.x, position.y))) {
-            screen_ = Screen::Settings;
-            settingsRow_ = 0;
-            base_.playSound(QStringLiteral("ui"));
-            return;
-        }
-        for (int i = 0; i < int(levels_.size()); ++i) {
-            if (!levelRect(i).contains(QPointF(position.x, position.y))) {
-                continue;
-            }
-            selected_ = i;
-            if (isCustomLevel(i)) {
-                openEditor();
-            } else {
-                startLevel(i);
-            }
-            return;
-        }
-        return;
-    }
-    if (screen_ == Screen::Result) {
-        if (retryRect().contains(QPointF(position.x, position.y))) {
-            startLevel(selected_);
-        } else if (menuRect().contains(QPointF(position.x, position.y))) {
-            returnToMenu();
-        }
-        return;
-    }
-    if (games_) {
-        games_->mousePressLeft(position);
     }
 }
 
 void Menu::mouseReleaseLeft()
 {
-    draggingVolume_ = false;
-    if (screen_ == Screen::Match && games_) {
-        games_->mouseReleaseLeft();
+    settings_.mouseRelease();
+    if (screen_ == Screen::Match) {
+        match_.mouseReleaseLeft();
     }
 }
 
@@ -613,488 +323,4 @@ void Menu::toggleMute()
     if (!base_.toggleMute()) {
         base_.playSound(QStringLiteral("ui"));
     }
-}
-
-void Menu::openEditor()
-{
-    editorRow_ = std::clamp(editorRow_, 0, customWaveCount() - 1);
-    editorColumn_ = std::clamp(editorColumn_, 0, EditorColumns - 1);
-    screen_ = Screen::Editor;
-    base_.playSound(QStringLiteral("ui"));
-}
-
-QString Menu::enemyKind(int column)
-{
-    static const std::array<QString, 4> kinds = {
-        QStringLiteral("drone"), QStringLiteral("spitter"),
-        QStringLiteral("tank"), QStringLiteral("splitter")};
-    if (column < 0 || column >= int(kinds.size())) {
-        return QString();
-    }
-    return kinds[size_t(column)];
-}
-
-int Menu::enemyCount(int row, int column) const
-{
-    if (row < 0 || row >= customWaveCount() || column < 0 || column >= 4) {
-        return 0;
-    }
-    const QString kind = enemyKind(column);
-    for (const games::EnemySpawn &spawn : customScript_[size_t(row)].enemies) {
-        if (spawn.kind == kind) {
-            return spawn.count;
-        }
-    }
-    return 0;
-}
-
-void Menu::setEnemyCount(int row, int column, int count)
-{
-    if (row < 0 || row >= customWaveCount() || column < 0 || column >= 4) {
-        return;
-    }
-    std::vector<games::EnemySpawn> &enemies = customScript_[size_t(row)].enemies;
-    const QString kind = enemyKind(column);
-    for (auto it = enemies.begin(); it != enemies.end(); ++it) {
-        if (it->kind == kind) {
-            if (count <= 0) {
-                enemies.erase(it);
-            } else {
-                it->count = count;
-            }
-            return;
-        }
-    }
-    if (count > 0) {
-        enemies.push_back({kind, count});
-    }
-}
-
-bool Menu::waveHasBoss(int row) const
-{
-    if (row < 0 || row >= customWaveCount()) {
-        return false;
-    }
-    for (const games::EnemySpawn &spawn : customScript_[size_t(row)].enemies) {
-        if (spawn.kind == QStringLiteral("boss")) {
-            return true;
-        }
-    }
-    return false;
-}
-
-void Menu::setWaveBoss(int row, bool on)
-{
-    // 一份台本只允许一个 Boss：先清掉所有波里的 Boss，再按需要在目标波放一个。
-    for (games::Wave &wave : customScript_) {
-        wave.enemies.erase(std::remove_if(wave.enemies.begin(), wave.enemies.end(),
-                                          [](const games::EnemySpawn &spawn) {
-                                              return spawn.kind == QStringLiteral("boss");
-                                          }),
-                           wave.enemies.end());
-    }
-    if (on && row >= 0 && row < customWaveCount()) {
-        customScript_[size_t(row)].enemies.push_back({QStringLiteral("boss"), 1});
-    }
-}
-
-void Menu::adjustEditorCell(int delta)
-{
-    if (delta == 0) {
-        return;
-    }
-    if (editorColumn_ == 4) {
-        setWaveBoss(editorRow_, !waveHasBoss(editorRow_));
-        base_.playSound(QStringLiteral("ui"));
-        return;
-    }
-    const int current = enemyCount(editorRow_, editorColumn_);
-    const int next = std::clamp(current + delta, 0, MaxEnemyCount);
-    if (next == current) {
-        return;
-    }
-    setEnemyCount(editorRow_, editorColumn_, next);
-    base_.playSound(QStringLiteral("ui"));
-}
-
-void Menu::addCustomWave()
-{
-    if (customWaveCount() >= MaxCustomWaves) {
-        return;
-    }
-    games::Wave wave;
-    if (!customScript_.empty()) {
-        // 复制最后一波的组成；Boss 不复制，全台本只留一个。
-        for (const games::EnemySpawn &spawn : customScript_.back().enemies) {
-            if (spawn.kind != QStringLiteral("boss")) {
-                wave.enemies.push_back(spawn);
-            }
-        }
-    }
-    customScript_.push_back(wave);
-    editorRow_ = customWaveCount() - 1;
-    base_.playSound(QStringLiteral("ui"));
-}
-
-void Menu::removeCustomWave()
-{
-    if (customWaveCount() <= 1) {
-        return;
-    }
-    customScript_.pop_back();
-    editorRow_ = std::min(editorRow_, customWaveCount() - 1);
-    base_.playSound(QStringLiteral("ui"));
-}
-
-int Menu::totalCustomEnemies() const
-{
-    int total = 0;
-    for (const games::Wave &wave : customScript_) {
-        for (const games::EnemySpawn &spawn : wave.enemies) {
-            total += spawn.count;
-        }
-    }
-    return total;
-}
-
-QRectF Menu::editorRowRect(int row) const
-{
-    return QRectF(EditorLeft, EditorRowsTop + float(row) * EditorRowHeight,
-                  EditorRight - EditorLeft, EditorRowHeight);
-}
-
-QRectF Menu::editorCellRect(int row, int column) const
-{
-    const float width = (EditorRight - EditorLeft - EditorWaveColumn)
-                        / float(EditorColumns);
-    return QRectF(EditorLeft + EditorWaveColumn + float(column) * width,
-                  EditorRowsTop + float(row) * EditorRowHeight, width, EditorRowHeight);
-}
-
-QRectF Menu::editorMinusRect() const
-{
-    const QRectF cell = editorCellRect(editorRow_, editorColumn_);
-    return QRectF(cell.left() + 6.0f, cell.top() + 5.0f, 26.0f, cell.height() - 10.0f);
-}
-
-QRectF Menu::editorPlusRect() const
-{
-    const QRectF cell = editorCellRect(editorRow_, editorColumn_);
-    return QRectF(cell.right() - 32.0f, cell.top() + 5.0f, 26.0f, cell.height() - 10.0f);
-}
-
-QRectF Menu::editorAddWaveRect() const
-{
-    return QRectF(EditorLeft, 648.0f, 150.0f, 32.0f);
-}
-
-QRectF Menu::editorRemoveWaveRect() const
-{
-    return QRectF(EditorLeft + 162.0f, 648.0f, 150.0f, 32.0f);
-}
-
-QRectF Menu::editorDeployRect() const
-{
-    return QRectF(EditorRight - 300.0f, 648.0f, 140.0f, 32.0f);
-}
-
-QRectF Menu::editorBackRect() const
-{
-    return QRectF(EditorRight - 148.0f, 648.0f, 148.0f, 32.0f);
-}
-
-void Menu::drawEditor()
-{
-    frame_.fill(QColor(2, 3, 9));
-    QPainter painter(&frame_);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-
-    QLinearGradient background(0, 0, 0, GameConfig::ScreenHeight);
-    background.setColorAt(0.0, QColor(5, 15, 28));
-    background.setColorAt(0.6, QColor(3, 8, 18));
-    background.setColorAt(1.0, QColor(1, 3, 8));
-    painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
-                     background);
-
-    painter.save();
-    painter.setPen(QPen(QColor(23, 50, 70), 1.0f));
-    for (int x = 0; x < GameConfig::ScreenWidth; x += 80) {
-        painter.drawLine(x, 0, x, GameConfig::ScreenHeight);
-    }
-    for (int y = 0; y < GameConfig::ScreenHeight; y += 80) {
-        painter.drawLine(0, y, GameConfig::ScreenWidth, y);
-    }
-    painter.restore();
-
-    Base::text(painter, Base::techTinyFont(),
-               QStringLiteral("SCRIPT EDITOR  //  CUSTOM PROTOCOL"),
-               QColor(121, 176, 194),
-               {GameConfig::ScreenWidth / 2.0f, 70}, QStringLiteral("center"), 190);
-    Base::glowText(painter, Base::bigFont(), QStringLiteral("自定义协议"),
-                   Base::White, {GameConfig::ScreenWidth / 2.0f, 118},
-                   QStringLiteral("center"));
-    Base::text(painter, Base::smallFont(),
-               QStringLiteral("逐波编排敌方信号，ENTER 部署"), Base::Text,
-               {GameConfig::ScreenWidth / 2.0f, 154}, QStringLiteral("center"), 215);
-
-    Base::text(painter, Base::techSmallFont(),
-               QStringLiteral("%1 波 · %2 个目标")
-                   .arg(customWaveCount(), 2, 10, QChar('0'))
-                   .arg(totalCustomEnemies()),
-               Base::Muted, {EditorLeft, 206}, QStringLiteral("midleft"), 210);
-
-    Base::text(painter, Base::techTinyFont(), QStringLiteral("WAVE"), Base::Muted,
-               {EditorLeft + 16.0f, EditorHeaderY}, QStringLiteral("midleft"), 200);
-    const std::array<QString, 5> labels = {
-        QStringLiteral("DRONE"), QStringLiteral("SPITTER"), QStringLiteral("TANK"),
-        QStringLiteral("SPLITTER"), QStringLiteral("BOSS")};
-    for (int column = 0; column < EditorColumns; ++column) {
-        const QRectF cell = editorCellRect(0, column);
-        Base::text(painter, Base::techTinyFont(), labels[size_t(column)], Base::Muted,
-                   {float(cell.center().x()), EditorHeaderY + 6.0f},
-                   QStringLiteral("center"), 200);
-    }
-    Base::strokeLine(painter, {EditorLeft, EditorHeaderY + 14.0f},
-                     {EditorRight, EditorHeaderY + 14.0f}, QColor(44, 78, 96), 1.0f);
-
-    for (int row = 0; row < customWaveCount(); ++row) {
-        const QRectF rowRect = editorRowRect(row);
-        const bool activeRow = row == editorRow_;
-        painter.fillRect(rowRect.adjusted(0.0f, 1.0f, 0.0f, -1.0f),
-                         activeRow ? QColor(8, 22, 36, 235) : QColor(6, 13, 24, 210));
-        Base::text(painter, Base::techSmallFont(),
-                   QStringLiteral("%1").arg(row + 1, 2, 10, QChar('0')),
-                   activeRow ? Base::Cyan : Base::Muted,
-                   {float(rowRect.left()) + 16.0f, float(rowRect.center().y())},
-                   QStringLiteral("midleft"), 220);
-
-        for (int column = 0; column < EditorColumns; ++column) {
-            const QRectF cell = editorCellRect(row, column);
-            const bool active = activeRow && column == editorColumn_;
-            if (active) {
-                Base::panel(painter, cell.adjusted(3.0f, 3.0f, -3.0f, -3.0f),
-                            Base::Cyan, 120, 6, QColor(9, 26, 40));
-            }
-            if (column == 4) {
-                const bool boss = waveHasBoss(row);
-                Base::text(painter, Base::techSmallFont(),
-                           boss ? QStringLiteral("BOSS") : QStringLiteral("—"),
-                           boss ? Base::Magenta : Base::Dim,
-                           {float(cell.center().x()), float(cell.center().y())},
-                           QStringLiteral("center"), boss ? 235 : 190);
-                continue;
-            }
-            const int count = enemyCount(row, column);
-            const QColor numberColor = count > 0 ? (active ? Base::White : Base::Text)
-                                                 : Base::Dim;
-            if (active) {
-                Base::text(painter, Base::techSmallFont(), QStringLiteral("-"),
-                           Base::Cyan,
-                           {float(editorMinusRect().center().x()),
-                            float(cell.center().y())},
-                           QStringLiteral("center"));
-                Base::text(painter, Base::techSmallFont(), QStringLiteral("+"),
-                           Base::Cyan,
-                           {float(editorPlusRect().center().x()),
-                            float(cell.center().y())},
-                           QStringLiteral("center"));
-            }
-            Base::text(painter, Base::techSmallFont(), QString::number(count),
-                       numberColor,
-                       {float(cell.center().x()), float(cell.center().y())},
-                       QStringLiteral("center"), active ? 240 : 210);
-        }
-    }
-
-    Base::panel(painter, editorAddWaveRect(), QColor(65, 104, 124), 210, 8,
-                QColor(7, 14, 25));
-    Base::panel(painter, editorRemoveWaveRect(), QColor(65, 104, 124), 210, 8,
-                QColor(7, 14, 25));
-    Base::panel(painter, editorDeployRect(), Base::Cyan, 225, 8, QColor(7, 18, 31));
-    Base::panel(painter, editorBackRect(), QColor(65, 104, 124), 210, 8,
-                QColor(7, 14, 25));
-    Base::text(painter, Base::techSmallFont(), QStringLiteral("N  新增波次"), Base::Text,
-               {float(editorAddWaveRect().center().x()),
-                float(editorAddWaveRect().center().y())},
-               QStringLiteral("center"));
-    Base::text(painter, Base::techSmallFont(), QStringLiteral("X  删除末波"), Base::Text,
-               {float(editorRemoveWaveRect().center().x()),
-                float(editorRemoveWaveRect().center().y())},
-               QStringLiteral("center"));
-    Base::text(painter, Base::techSmallFont(), QStringLiteral("ENTER  部署"), Base::Cyan,
-               {float(editorDeployRect().center().x()),
-                float(editorDeployRect().center().y())},
-               QStringLiteral("center"));
-    Base::text(painter, Base::techSmallFont(), QStringLiteral("ESC  返回"),
-               QColor(190, 215, 228),
-               {float(editorBackRect().center().x()),
-                float(editorBackRect().center().y())},
-               QStringLiteral("center"));
-
-    Base::text(painter, Base::tinyFont(),
-               QStringLiteral("↑ ↓ 选择波次    ← → 选择列    + / - 调整数量    N 加波    X 删末波    ENTER 部署    ESC 返回"),
-               QColor(105, 138, 158),
-               {GameConfig::ScreenWidth / 2.0f, GameConfig::ScreenHeight - 22.0f},
-               QStringLiteral("center"), 150);
-}
-
-QRectF Menu::settingsButtonRect() const
-{
-    return QRectF(GameConfig::ScreenWidth - 152.0f, 26.0f, 122.0f, 38.0f);
-}
-
-QRectF Menu::settingsRowRect(int row) const
-{
-    return QRectF(300.0f, 286.0f + float(row) * 100.0f, 680.0f, 80.0f);
-}
-
-QRectF Menu::settingsTrackRect(int row) const
-{
-    const QRectF rowRect = settingsRowRect(row);
-    return QRectF(566.0f, float(rowRect.center().y()) - 8.0f, 356.0f, 16.0f);
-}
-
-QRectF Menu::settingsBackRect() const
-{
-    return QRectF(GameConfig::ScreenWidth / 2.0f - 90.0f, 600.0f, 180.0f, 42.0f);
-}
-
-void Menu::adjustSettingsVolume(int row, float delta)
-{
-    if (row == 0) {
-        base_.setSoundVolume(std::clamp(base_.soundVolume() + delta, 0.0f, 1.0f));
-        base_.playSound(QStringLiteral("ui"));
-    } else {
-        base_.setMusicVolume(std::clamp(base_.musicVolume() + delta, 0.0f, 1.0f));
-    }
-    saveSettings();
-}
-
-void Menu::setSettingsVolumeFromPointer(const Math::Vec2 &position)
-{
-    const QRectF track = settingsTrackRect(settingsRow_);
-    if (track.width() <= 0.0f) {
-        return;
-    }
-    const float ratio = std::clamp(
-        (position.x - float(track.left())) / float(track.width()), 0.0f, 1.0f);
-    if (settingsRow_ == 0) {
-        base_.setSoundVolume(ratio);
-    } else {
-        base_.setMusicVolume(ratio);
-    }
-    saveSettings();
-}
-
-void Menu::loadSettings()
-{
-    if (!audioRequested_) {
-        return;
-    }
-    QSettings settings(settingsPath(), QSettings::IniFormat);
-    const int sound = settings.value(QStringLiteral("audio/sound"), 68).toInt();
-    const int music = settings.value(QStringLiteral("audio/music"), 45).toInt();
-    base_.setSoundVolume(float(std::clamp(sound, 0, 100)) / 100.0f);
-    base_.setMusicVolume(float(std::clamp(music, 0, 100)) / 100.0f);
-}
-
-QString Menu::settingsPath()
-{
-    return QCoreApplication::applicationDirPath() + QStringLiteral("/settings.ini");
-}
-
-void Menu::saveSettings()
-{
-    if (!audioRequested_) {
-        return;
-    }
-    QSettings settings(settingsPath(), QSettings::IniFormat);
-    settings.setValue(QStringLiteral("audio/sound"),
-                      int(std::lround(base_.soundVolume() * 100.0f)));
-    settings.setValue(QStringLiteral("audio/music"),
-                      int(std::lround(base_.musicVolume() * 100.0f)));
-}
-
-void Menu::drawSettings()
-{
-    frame_.fill(QColor(2, 3, 9));
-    QPainter painter(&frame_);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-
-    QLinearGradient background(0, 0, 0, GameConfig::ScreenHeight);
-    background.setColorAt(0.0, QColor(5, 15, 28));
-    background.setColorAt(0.6, QColor(3, 8, 18));
-    background.setColorAt(1.0, QColor(1, 3, 8));
-    painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
-                     background);
-
-    painter.save();
-    painter.setPen(QPen(QColor(23, 50, 70), 1.0f));
-    for (int x = 0; x < GameConfig::ScreenWidth; x += 80) {
-        painter.drawLine(x, 0, x, GameConfig::ScreenHeight);
-    }
-    for (int y = 0; y < GameConfig::ScreenHeight; y += 80) {
-        painter.drawLine(0, y, GameConfig::ScreenWidth, y);
-    }
-    painter.restore();
-
-    Base::text(painter, Base::techTinyFont(),
-               QStringLiteral("AUDIO CONFIGURATION  //  SETTINGS"),
-               QColor(121, 176, 194),
-               {GameConfig::ScreenWidth / 2.0f, 132}, QStringLiteral("center"), 190);
-    Base::glowText(painter, Base::bigFont(), QStringLiteral("设置"),
-                   Base::White, {GameConfig::ScreenWidth / 2.0f, 186},
-                   QStringLiteral("center"));
-    Base::gear(painter, {GameConfig::ScreenWidth / 2.0f - 96.0f, 186.0f}, 17.0f,
-               Base::Cyan);
-    Base::text(painter, Base::smallFont(),
-               QStringLiteral("音量调整会立即生效并保存"), Base::Muted,
-               {GameConfig::ScreenWidth / 2.0f, 226}, QStringLiteral("center"), 210);
-
-    const std::array<QString, 2> titles = {
-        QStringLiteral("音效音量  //  SFX"),
-        QStringLiteral("背景音乐  //  BGM")};
-    const std::array<QString, 2> notes = {
-        QStringLiteral("射击、命中、界面提示"),
-        QStringLiteral("music 目录轮转播放")};
-    for (int row = 0; row < 2; ++row) {
-        const QRectF rowRect = settingsRowRect(row);
-        const bool active = row == settingsRow_;
-        Base::panel(painter, rowRect, active ? Base::Cyan : QColor(48, 91, 112),
-                    active ? 235 : 190, 12,
-                    active ? QColor(8, 22, 36) : QColor(6, 13, 24));
-        Base::text(painter, Base::techSmallFont(), titles[size_t(row)],
-                   active ? Base::White : QColor(191, 216, 230),
-                   {float(rowRect.left()) + 28.0f, float(rowRect.center().y()) - 10.0f},
-                   QStringLiteral("midleft"), 225);
-        Base::text(painter, Base::tinyFont(), notes[size_t(row)], Base::Muted,
-                   {float(rowRect.left()) + 28.0f, float(rowRect.center().y()) + 16.0f},
-                   QStringLiteral("midleft"), 190);
-
-        const float value = row == 0 ? base_.soundVolume() : base_.musicVolume();
-        const QRectF track = settingsTrackRect(row);
-        Base::bar(painter, track, value, active ? Base::Cyan : Base::CyanSoft,
-                  -1.0f, QColor(16, 30, 44));
-        Base::fillCircle(painter,
-                         {float(track.left()) + float(track.width()) * value,
-                          float(track.center().y())},
-                         7.0f, active ? Base::White : Base::CyanSoft);
-        Base::text(painter, Base::techFont(),
-                   QStringLiteral("%1%").arg(int(std::lround(value * 100.0f))),
-                   active ? Base::Cyan : Base::Text,
-                   {float(track.right()) + 28.0f, float(rowRect.center().y())},
-                   QStringLiteral("midleft"));
-    }
-
-    Base::panel(painter, settingsBackRect(), Base::Cyan, 225, 9, QColor(7, 18, 31));
-    Base::text(painter, Base::techSmallFont(), QStringLiteral("ESC  返回"), Base::Cyan,
-               {float(settingsBackRect().center().x()),
-                float(settingsBackRect().center().y())},
-               QStringLiteral("center"));
-
-    Base::text(painter, Base::tinyFont(),
-               QStringLiteral("↑ ↓ 选择    ← → 调整    ESC 返回    M 静音"),
-               QColor(105, 138, 158),
-               {GameConfig::ScreenWidth / 2.0f, GameConfig::ScreenHeight - 34.0f},
-               QStringLiteral("center"), 160);
 }
