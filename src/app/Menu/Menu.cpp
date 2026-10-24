@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <initializer_list>
 #include <utility>
 
 Menu::Menu(bool enableAudio)
@@ -21,14 +22,50 @@ Menu::Menu(bool enableAudio)
     }
     frame_ = QImage(GameConfig::ScreenWidth, GameConfig::ScreenHeight,
                     QImage::Format_ARGB32_Premultiplied);
+    const games::Script campaign = standardScript();
     levels_ = {
         {QStringLiteral("standard"), QStringLiteral("标准协议"),
-         QStringLiteral("八波战役 · 守住星核"), 1},
+         QStringLiteral("八波战役 · 守住星核"), 1, campaign},
         {QStringLiteral("boss"), QStringLiteral("核心突袭"),
-         QStringLiteral("直接进入最终波次"), 8},
+         QStringLiteral("直接进入最终波次"), int(campaign.size()), campaign},
         {QStringLiteral("custom"), QStringLiteral("自定义协议"),
-         QStringLiteral("自选起始波次"), 1},
+         QStringLiteral("自选起始波次"), 1, campaign},
     };
+}
+
+// 台本是数据：每波列出敌人种类和数量，最后一波带 Boss。
+// 想改战役节奏只改这里，Waves / Games 不需要动。
+games::Script Menu::standardScript()
+{
+    const auto wave = [](std::initializer_list<games::EnemySpawn> enemies) {
+        games::Wave value;
+        value.enemies.assign(enemies.begin(), enemies.end());
+        return value;
+    };
+    return {
+        wave({{QStringLiteral("drone"), 6}}),
+        wave({{QStringLiteral("drone"), 6}, {QStringLiteral("spitter"), 3}}),
+        wave({{QStringLiteral("drone"), 7}, {QStringLiteral("spitter"), 3},
+              {QStringLiteral("tank"), 2}}),
+        wave({{QStringLiteral("drone"), 7}, {QStringLiteral("spitter"), 4},
+              {QStringLiteral("tank"), 2}, {QStringLiteral("splitter"), 2}}),
+        wave({{QStringLiteral("drone"), 8}, {QStringLiteral("spitter"), 4},
+              {QStringLiteral("tank"), 3}, {QStringLiteral("splitter"), 3}}),
+        wave({{QStringLiteral("drone"), 9}, {QStringLiteral("spitter"), 5},
+              {QStringLiteral("tank"), 3}, {QStringLiteral("splitter"), 4}}),
+        wave({{QStringLiteral("drone"), 10}, {QStringLiteral("spitter"), 5},
+              {QStringLiteral("tank"), 4}, {QStringLiteral("splitter"), 4}}),
+        wave({{QStringLiteral("drone"), 6}, {QStringLiteral("spitter"), 4},
+              {QStringLiteral("tank"), 2}, {QStringLiteral("splitter"), 3},
+              {QStringLiteral("boss"), 1}}),
+    };
+}
+
+int Menu::maxCustomWave() const
+{
+    const size_t index = size_t(CustomLevelIndex);
+    const int count = index < levels_.size() ? int(levels_[index].script.size()) : 0;
+    return std::max(1, count);
 }
 
 Menu::~Menu() = default;
@@ -242,7 +279,7 @@ void Menu::drawCustomPicker(QPainter &painter, const QRectF &rect, bool active)
 
     const QString value = QStringLiteral("起始波次  %1 / %2")
                               .arg(customWave_, 2, 10, QChar('0'))
-                              .arg(Games::waveCount(), 2, 10, QChar('0'));
+                              .arg(maxCustomWave(), 2, 10, QChar('0'));
     Base::text(painter, Base::smallFont(), value,
                active ? Base::Cyan : QColor(191, 216, 230),
                {float(rect.center().x()), float(minus.center().y())},
@@ -251,7 +288,7 @@ void Menu::drawCustomPicker(QPainter &painter, const QRectF &rect, bool active)
 
 void Menu::adjustCustomWave(int delta)
 {
-    const int next = std::clamp(customWave_ + delta, 1, Games::waveCount());
+    const int next = std::clamp(customWave_ + delta, 1, maxCustomWave());
     if (next == customWave_) {
         return;
     }

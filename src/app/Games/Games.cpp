@@ -4,17 +4,18 @@
 
 #include <algorithm>
 
-// 构造即开局：一局的安排在这里被接收，之后只对内使用。
+// 构造即开局：一局的安排（含台本）在这里被接收，之后只对内使用。
 // 新的一局就是一个新对象，因此不存在需要手工清空的跨局状态。
 Games::Games(const Level &level, Base &base)
-    : level_(level), base_(base), arena_(random_, base_), waves_(random_, arena_),
-      upgrades_(random_, arena_, base_), renderer_(random_, base_)
+    : level_(level), base_(base), arena_(random_, base_),
+      waves_(random_, arena_, level_.script), upgrades_(random_, arena_, base_),
+      renderer_(random_, base_)
 {
     renderer_.initialize();
     base_.setMouseActive(true);
     base_.playSound(QStringLiteral("ui"));
     renderer_.flash(Base::Cyan, 35);
-    startWave(level_.startWave);
+    startWave(std::clamp(level_.startWave, 1, std::max(1, waves_.totalWaves())));
 }
 
 Games::~Games() = default;

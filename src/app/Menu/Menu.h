@@ -52,6 +52,9 @@ private:
     void returnToMenu();
     void drawMain();
     void drawResult();
+    // 默认战役台本：运行时提交给 Games，Menu 只负责写数据和选起点。
+    static games::Script standardScript();
+    int maxCustomWave() const;
     void drawCustomPicker(QPainter &painter, const QRectF &rect, bool active);
     void adjustCustomWave(int delta);
     bool isCustomLevel(int index) const { return index == CustomLevelIndex; }

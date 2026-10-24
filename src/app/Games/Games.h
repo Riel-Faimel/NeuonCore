@@ -17,11 +17,13 @@ class SelfTest;
 // Games 持有安排但不再对外暴露，局外只能读到这一局的结果（分数/波次/时间）。
 class Games {
 public:
+    // 一局的安排：展示信息 + 起始波次 + 运行时提交的台本。
     struct Level {
         QString id;
         QString name;
         QString subtitle;
         int startWave = 1;
+        games::Script script;
     };
 
     enum class State {
@@ -47,8 +49,6 @@ public:
     int kills() const { return arena_.kills(); }
     int currentWave() const { return waves_.currentWave(); }
     int totalWaves() const { return waves_.totalWaves(); }
-    // 一局的波次上限；Menu 组自定义关卡时需要知道合法的起始波次范围。
-    static int waveCount() { return games::Waves::waveCount(); }
     const QImage &frame() const { return renderer_.frame(); }
 
     void keyPress(int key, bool autoRepeat = false);

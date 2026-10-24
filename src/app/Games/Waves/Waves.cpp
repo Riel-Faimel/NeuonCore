@@ -7,20 +7,15 @@
 
 namespace games {
 
-Waves::Waves(Random &random, Arena &arena) : random_(random), arena_(arena) {}
-
-void Waves::reset()
+Waves::Waves(Random &random, Arena &arena, const Script &script)
+    : random_(random), arena_(arena), script_(script)
 {
-    queue_.clear();
-    currentWave_ = 0;
-    waveTotal_ = 0;
-    spawnTimer_ = 0.0f;
 }
 
 void Waves::start(int wave)
 {
     currentWave_ = wave;
-    queue_ = buildPlan(wave);
+    queue_ = buildQueue(wave);
     waveTotal_ = int(queue_.size());
     spawnTimer_ = wave > 1 ? 1.15f : 0.95f;
 }
@@ -54,63 +49,41 @@ bool Waves::isCleared() const
 
 bool Waves::isFinalWave() const
 {
-    return currentWave_ >= TotalWaves;
+    return currentWave_ >= totalWaves();
 }
 
 bool Waves::isBossWave() const
 {
-    return currentWave_ == TotalWaves;
+    return waveHasBoss(currentWave_);
 }
 
-std::vector<QString> Waves::buildPlan(int wave) const
+bool Waves::waveHasBoss(int wave) const
 {
-    std::vector<Composition> composition;
-    switch (wave) {
-    case 1:
-        composition = {{QStringLiteral("drone"), 6}};
-        break;
-    case 2:
-        composition = {{QStringLiteral("drone"), 6}, {QStringLiteral("spitter"), 3}};
-        break;
-    case 3:
-        composition = {{QStringLiteral("drone"), 7}, {QStringLiteral("spitter"), 3},
-                       {QStringLiteral("tank"), 2}};
-        break;
-    case 4:
-        composition = {{QStringLiteral("drone"), 7}, {QStringLiteral("spitter"), 4},
-                       {QStringLiteral("tank"), 2}, {QStringLiteral("splitter"), 2}};
-        break;
-    case 5:
-        composition = {{QStringLiteral("drone"), 8}, {QStringLiteral("spitter"), 4},
-                       {QStringLiteral("tank"), 3}, {QStringLiteral("splitter"), 3}};
-        break;
-    case 6:
-        composition = {{QStringLiteral("drone"), 9}, {QStringLiteral("spitter"), 5},
-                       {QStringLiteral("tank"), 3}, {QStringLiteral("splitter"), 4}};
-        break;
-    case 7:
-        composition = {{QStringLiteral("drone"), 10}, {QStringLiteral("spitter"), 5},
-                       {QStringLiteral("tank"), 4}, {QStringLiteral("splitter"), 4}};
-        break;
-    case 8:
-        composition = {{QStringLiteral("boss"), 1}, {QStringLiteral("drone"), 6},
-                       {QStringLiteral("spitter"), 4}, {QStringLiteral("tank"), 2},
-                       {QStringLiteral("splitter"), 3}};
-        break;
-    default:
-        composition = {{QStringLiteral("drone"), 10}, {QStringLiteral("spitter"), 5},
-                       {QStringLiteral("tank"), 4}, {QStringLiteral("splitter"), 4}};
-        break;
+    if (wave < 1 || wave > totalWaves()) {
+        return false;
     }
+    for (const EnemySpawn &spawn : script_[size_t(wave - 1)].enemies) {
+        if (spawn.kind == QStringLiteral("boss")) {
+            return true;
+        }
+    }
+    return false;
+}
 
+std::vector<QString> Waves::buildQueue(int wave) const
+{
     std::vector<QString> plan;
-    for (const Composition &entry : composition) {
-        for (int i = 0; i < entry.count; ++i) {
-            plan.push_back(entry.kind);
+    if (wave < 1 || wave > totalWaves()) {
+        return plan;
+    }
+    for (const EnemySpawn &spawn : script_[size_t(wave - 1)].enemies) {
+        for (int i = 0; i < spawn.count; ++i) {
+            plan.push_back(spawn.kind);
         }
     }
     random_.shuffle(plan);
-    if (wave == TotalWaves) {
+    // Boss 台本里如果有 Boss，永远让它第一个出场。
+    if (waveHasBoss(wave)) {
         const auto it = std::find(plan.begin(), plan.end(), QStringLiteral("boss"));
         if (it != plan.end()) {
             plan.erase(it);

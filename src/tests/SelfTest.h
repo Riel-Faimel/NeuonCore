@@ -280,22 +280,23 @@ public:
 
         menu.keyPress(Qt::Key_2);
         game = menu.games_.get();
+        const int campaignWaves = int(menu.levels_[0].script.size());
         success &= require(menu.screen() == Menu::Screen::Match
-                               && game->currentWave() == 8,
-                           QStringLiteral("boss-rush level starts at wave 8"));
+                               && game->currentWave() == campaignWaves,
+                           QStringLiteral("boss-rush level starts at the last wave"));
         menu.returnToMenu();
         success &= require(menu.screen() == Menu::Screen::Main,
                            QStringLiteral("level 2 returns to menu"));
 
         log(QStringLiteral("Custom level"));
         menu.keyPress(Qt::Key_Down);
-        for (int i = 0; i < Games::waveCount() + 4; ++i) {
+        for (int i = 0; i < campaignWaves + 4; ++i) {
             menu.keyPress(Qt::Key_Right);
         }
         menu.keyPress(Qt::Key_Return);
         game = menu.games_.get();
         success &= require(game->state() == Games::State::Playing
-                               && game->currentWave() == Games::waveCount(),
+                               && game->currentWave() == campaignWaves,
                            QStringLiteral("custom level clamps to the last wave"));
         menu.returnToMenu();
 
@@ -303,8 +304,22 @@ public:
         menu.keyPress(Qt::Key_Left);
         menu.keyPress(Qt::Key_Return);
         game = menu.games_.get();
-        success &= require(game->currentWave() == Games::waveCount() - 2,
+        success &= require(game->currentWave() == campaignWaves - 2,
                            QStringLiteral("custom level starts at the chosen wave"));
+        menu.returnToMenu();
+
+        log(QStringLiteral("Submitted script"));
+        games::Script shortScript;
+        shortScript.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("drone"), 2},
+                                           games::EnemySpawn{QStringLiteral("tank"), 1}}});
+        shortScript.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("spitter"), 3}}});
+        menu.levels_.push_back({QStringLiteral("script-test"), QStringLiteral("测试台本"),
+                                QStringLiteral("运行时提交"), 1, shortScript});
+        menu.startLevel(int(menu.levels_.size()) - 1);
+        game = menu.games_.get();
+        success &= require(game->totalWaves() == 2 && game->currentWave() == 1
+                               && game->waves_.queue_.size() == 3,
+                           QStringLiteral("submitted script drives the run"));
         menu.returnToMenu();
 
         log(success ? QStringLiteral("ALL C++ SMOKE TESTS PASSED")

@@ -5,7 +5,7 @@
 ## 设计原则
 
 1. **一个工作只做一次**
-   - 波次组成由 `games::Waves` 决定。
+   - 波次台本由 `Menu` 定义成数据（`games::Script`），开局时提交给 `Games`；`games::Waves` 只按台本生成出生队列。
    - 强化池、可选性和强化效果由 `games::Upgrades` 决定。
    - 敌人 AI、碰撞、Boss 阶段、分数由 `Arena` 及其组件决定。
    - 画面布局和局内表现反馈由 `Renderer` 决定。
@@ -92,7 +92,7 @@ cpp/src/
 
 | 组件 | 职责 |
 | --- | --- |
-| `Waves` | 波次表、Boss 波、出生队列、出生间隔 |
+| `Waves` | 按运行时提交的台本生成出生队列、Boss 波判定、出生间隔 |
 | `Upgrades` | 强化定义、可选性、三选一、叠加、效果应用 |
 
 `Games` 还拥有 `Random`、`Arena`、`Renderer`（`Base` 由 `Menu` 持有，以引用传入），负责：
@@ -109,7 +109,7 @@ cpp/src/
 `Menu` 是顶层界面模块，持有进程级的 `Base`、关卡表，以及当前这一局的 `Games`，负责：
 
 - 主菜单和关卡选择；
-- 定义每个关卡的安排（标准协议从第 1 波开始，核心突袭从第 8 波开始，自定义协议由菜单上的 `-` / `+` 或 `←` / `→` 选 1–8 波），开局时把 `Games::Level` 传给 `Games` 构造；
+- 定义每个关卡的安排：展示信息、起始波次，以及这一局的台本（`games::Script`，标准协议从第 1 波开始，核心突袭从最后一波开始，自定义协议由菜单上的 `-` / `+` 或 `←` / `→` 选 1–8 波），开局时把 `Games::Level` 传给 `Games` 构造；
 - 回到主菜单或重新部署时销毁旧的 `Games`，下一局重新构造；
 - 把主菜单/局内/结算输入路由给 `Games`；
 - 在对局结束后读取 `Games` 的得分、击杀、波次、时间；
@@ -250,13 +250,13 @@ GameWindow::paintEvent()
 
 `Renderer` 自动画卡片，`Games` 不用改。
 
-### 加波次
+### 加 / 改波次
 
-只改 `src/app/Games/Waves/`：
+只改 `src/app/Menu/Menu.cpp` 的 `Menu::standardScript()`：每一波列出 `{敌人种类, 数量}`，最后一波带 `boss` 即为 Boss 波。
 
-- `buildPlan()` 加组合；
-- `TotalWaves` 是唯一的波数来源；
-- HUD 通过 `Waves::totalWaves()` 读取，结算通过 `Games` 的快照读取。
+- 台本是数据，开局时作为 `Games::Level.script` 提交，`Waves` 只负责按它排队出生，不再有内置台本；
+- 总波数 = 台本长度，HUD 通过 `Waves::totalWaves()` 读取，结算通过 `Games` 的快照读取；
+- `boss` 出现在某一波里，那一波就是 Boss 波（`Waves::isBossWave()`），并且 Boss 永远第一个出场。
 
 ### 加关卡
 
@@ -306,7 +306,7 @@ GameWindow::paintEvent()
 
 ## 已知边界
 
-- 数值表仍是 C++ 静态表，不是 JSON。
+- 台本是运行时提交的 `games::Script` 数据，但默认战役仍在 `Menu` 里用 C++ 写（还没有外部 JSON/文件格式）。
 - 敌人/强化/音效仍用字符串 ID。
 - 一局一个 `Games`：`Base`（输入/音频/字体）是进程级服务，由 `Menu` 持有，否则切局会重复初始化音频。
 - 一局的安排只经构造参数进入 `Games`；`Games` 不提供任何读回安排的接口，`Menu` 只保留展示用的关卡表。

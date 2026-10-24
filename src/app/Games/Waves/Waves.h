@@ -10,22 +10,32 @@ class SelfTest;
 
 namespace games {
 
-// Waves 组件：封装波次表、出生队列和推进节奏。
+// 台本：一局里每一波的敌人组成。
+// 它是运行时提交的数据，Waves 只负责按它生成出生队列，不再内置任何固定波次表。
+struct EnemySpawn {
+    QString kind;
+    int count = 1;
+};
+
+struct Wave {
+    std::vector<EnemySpawn> enemies;
+};
+
+using Script = std::vector<Wave>;
+
+// Waves 组件：按提交的台本生成出生队列、推进出生节奏。
 // 工具：Random（洗牌）、Arena（生成传送门/统计剩余敌人）。
-// 封装：敌人组合、Boss 波判定、出生间隔。
+// 封装：出生队列、Boss 波判定、出生间隔。
 // 暴露：开始/推进波次、当前波、总波数、剩余威胁、是否清空。
 class Waves {
 public:
-    Waves(Random &random, Arena &arena);
+    Waves(Random &random, Arena &arena, const Script &script);
 
-    void reset();
     void start(int wave);
     void update(float dt);
 
     int currentWave() const { return currentWave_; }
-    int totalWaves() const { return TotalWaves; }
-    // 波次总数是波次表的属性，局外需要合法范围时从这里取。
-    static int waveCount() { return TotalWaves; }
+    int totalWaves() const { return int(script_.size()); }
     int totalEnemies() const { return waveTotal_; }
     int remainingThreats() const;
     bool isCleared() const;
@@ -35,17 +45,12 @@ public:
 private:
     friend class ::SelfTest;
 
-    struct Composition {
-        QString kind;
-        int count = 0;
-    };
-
-    std::vector<QString> buildPlan(int wave) const;
-
-    static constexpr int TotalWaves = 8;
+    std::vector<QString> buildQueue(int wave) const;
+    bool waveHasBoss(int wave) const;
 
     Random &random_;
     Arena &arena_;
+    const Script &script_;
     std::vector<QString> queue_;
     int currentWave_ = 0;
     int waveTotal_ = 0;
