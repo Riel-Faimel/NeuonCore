@@ -47,7 +47,7 @@ public:
         setFocusPolicy(Qt::StrongFocus);
         setMouseTracking(true);
         setAttribute(Qt::WA_OpaquePaintEvent);
-        setCursor(Qt::ArrowCursor);
+        setCursor(Base::cursor());
 
         QPixmap icon(32, 32);
         icon.fill(Qt::transparent);
@@ -167,10 +167,15 @@ private:
 
     void updateCursorShape()
     {
-        const bool needBlank = menu_.inMatch();
-        if (needBlank != cursorHidden_) {
-            cursorHidden_ = needBlank;
-            setCursor(needBlank ? Qt::BlankCursor : Qt::ArrowCursor);
+        const bool needBlank = menu_.hidesCursor();
+        if (needBlank == cursorHidden_) {
+            return;
+        }
+        cursorHidden_ = needBlank;
+        if (needBlank) {
+            setCursor(Qt::BlankCursor);
+        } else {
+            setCursor(Base::cursor());
         }
     }
 

@@ -79,9 +79,11 @@ cpp/src/
 | --- | --- |
 | `Input` | 键鼠状态、移动轴、射击状态 |
 | `Audio` | 程序化 WAV、QSoundEffect 池、静音 |
-| `Paint` | 颜色、字体、文字排版、发光、条形/面板等绘制原语 |
+| `Paint` | 颜色、字体、文字排版、发光、条形/面板等绘制原语，以及全局鼠标光标 |
 
-`Base::Impl` 持有 `base::Input` 和 `base::Audio`；静态绘制/颜色/字体接口转发给 `base::Paint`。`Base.h` 不暴露组件头。
+`Base::Impl` 持有 `base::Input` 和 `base::Audio`；静态绘制/颜色/字体/光标接口转发给 `base::Paint`。`Base.h` 不暴露组件头。
+
+光标是全局表现，不属于某个业务模块：`GameWindow` 把 `Base::cursor()` 设为窗口光标，只在局内射击画面（`Menu::hidesCursor()`）切成 `Qt::BlankCursor`，由 `Renderer` 画准星；强化、暂停、结算和主菜单都保留游戏风格光标。
 
 ### Games
 

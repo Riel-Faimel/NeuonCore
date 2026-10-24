@@ -38,6 +38,12 @@ const QImage &Menu::frame() const
     return screen_ == Screen::Match && games_ ? games_->frame() : frame_;
 }
 
+bool Menu::hidesCursor() const
+{
+    return screen_ == Screen::Match && games_
+           && games_->state() == Games::State::Playing;
+}
+
 void Menu::update(float dt)
 {
     menuTime_ += dt;

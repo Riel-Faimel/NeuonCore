@@ -134,6 +134,8 @@ const QFont &Base::techSmallFont() { return base::Paint::techSmallFont(); }
 const QFont &Base::techFont() { return base::Paint::techFont(); }
 const QFont &Base::techLargeFont() { return base::Paint::techLargeFont(); }
 
+const QCursor &Base::cursor() { return base::Paint::cursor(); }
+
 QColor Base::shade(const QColor &color, float factor)
 {
     return base::Paint::shade(color, factor);

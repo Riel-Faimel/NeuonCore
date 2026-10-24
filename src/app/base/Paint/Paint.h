@@ -3,6 +3,7 @@
 #include "Math.h"
 
 #include <QColor>
+#include <QCursor>
 #include <QFont>
 #include <QPainter>
 #include <QPolygonF>
@@ -16,6 +17,9 @@ namespace base {
 class Paint {
 public:
     static void initialize();
+
+    // 全局鼠标光标：与局内准星同一套语言，系统默认箭头不再出现。
+    static const QCursor &cursor();
 
     static const QColor Ink;
     static const QColor Text;

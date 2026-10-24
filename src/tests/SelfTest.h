@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QFile>
 #include <QTextStream>
+#include <QPixmap>
 
 #include <algorithm>
 #include <cmath>
@@ -335,6 +336,14 @@ public:
         }
         menu.mouseMove({GameConfig::ScreenWidth / 2.0f, 454.0f});
         save(QStringLiteral("title.png"));
+
+        const QPixmap cursorPixmap = Base::cursor().pixmap();
+        if (!cursorPixmap.isNull()) {
+            cursorPixmap.save(dir.filePath(QStringLiteral("cursor.png")));
+            cursorPixmap.scaled(cursorPixmap.size() * 8, Qt::KeepAspectRatio,
+                                Qt::SmoothTransformation)
+                .save(dir.filePath(QStringLiteral("cursor_zoom.png")));
+        }
 
         menu.mouseMove({1020.0f, 454.0f});
         menu.update(1.0f / 60.0f);

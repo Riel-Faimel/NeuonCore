@@ -41,7 +41,9 @@ public:
     void toggleMute();
     bool muted() const { return base_.muted(); }
     bool audioEnabled() const { return base_.audioEnabled(); }
-    bool inMatch() const { return screen_ == Screen::Match; }
+    // 只有真正在射击的局内画面才隐藏系统光标（由 Renderer 画准星）；
+    // 强化、暂停、结算和主菜单都显示游戏风格光标。
+    bool hidesCursor() const;
     Screen screen() const { return screen_; }
 
 private:
