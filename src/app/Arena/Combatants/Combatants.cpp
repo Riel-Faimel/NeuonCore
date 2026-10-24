@@ -132,9 +132,6 @@ void Combatants::damageEnemiesInRadius(Arena &arena, const Math::Vec2 &center,
                 enemy->pos += direction.normalized() * 32.0f;
             }
             enemy->takeDamage(arena, Damage{damage, false, source});
-            if (arena.state_.bossDefeated()) {
-                break;
-            }
         }
     }
 }

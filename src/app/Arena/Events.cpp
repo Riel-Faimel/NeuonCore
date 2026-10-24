@@ -44,17 +44,13 @@ void Events::resolvePlayerBullets(Arena &arena, float dt)
             const int enemyId = fighter.id();
             fighter.takeDamage(arena, Damage{damage, critical, DamageSource::Bullet});
             bullet.hits.insert(enemyId);
-            if (arena.state_.bossDefeated()) {
-                bullet.alive = false;
-                break;
-            }
             if (bullet.pierce <= 0) {
                 bullet.alive = false;
                 break;
             }
             --bullet.pierce;
         }
-        if (arena.state_.bossDefeated() || arena.state_.playerDefeated()) {
+        if (arena.state_.playerDefeated()) {
             break;
         }
     }

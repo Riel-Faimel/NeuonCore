@@ -84,4 +84,5 @@ private:
     float victoryTimer_ = 0.0f;
     float waveClearTimer_ = 0.0f;
     bool waveClearAnnounced_ = false;
+    bool bossDownAnnounced_ = false;
 };

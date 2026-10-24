@@ -237,14 +237,43 @@ public:
         game->arena_.combatants_.boss()->takeDamage(
             game->arena_, arena::Damage{99999.0f, false, arena::DamageSource::Bullet});
         success &= require(game->arena_.bossDefeated(),
-                           QStringLiteral("boss death starts victory sequence"));
-        simulate(*game, 2.0f, false);
+                           QStringLiteral("boss death is recorded"));
+        simulate(*game, 3.0f, false);
         success &= require(game->state() == Games::State::Victory,
                            QStringLiteral("victory screen reached"));
         menu.update(0.0f);
         success &= require(menu.screen() == Menu::Screen::Result,
                            QStringLiteral("menu enters victory result"));
         menu.render();
+
+        log(QStringLiteral("Mid-script boss"));
+        games::Script bossMid;
+        bossMid.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("drone"), 1}}});
+        bossMid.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("boss"), 1}}});
+        bossMid.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("drone"), 1}}});
+        menu.levels_.push_back({QStringLiteral("boss-mid"), QStringLiteral("中局 Boss"),
+                                QStringLiteral("测试台本"), 2, bossMid});
+        menu.startLevel(int(menu.levels_.size()) - 1);
+        game = menu.games_.get();
+        success &= require(game->currentWave() == 2 && game->waves_.isBossWave(),
+                           QStringLiteral("boss can sit in a middle wave"));
+        success &= require(game->renderer_.bannerTitle_ == QStringLiteral("第 2 波")
+                               && game->renderer_.bannerKicker_
+                                      == QStringLiteral("BOSS SIGNAL"),
+                           QStringLiteral("middle boss banner is not the final wave"));
+        game->waves_.queue_.clear();
+        game->arena_.combatants_.enemies().clear();
+        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("boss"),
+                               Math::Vec2(GameConfig::ScreenWidth / 2.0f, 220.0f), 2);
+        game->arena_.combatants_.boss()->takeDamage(
+            game->arena_, arena::Damage{99999.0f, false, arena::DamageSource::Bullet});
+        game->update(1.0f / 60.0f);
+        success &= require(game->state() == Games::State::Playing,
+                           QStringLiteral("a boss in a middle wave does not end the run"));
+        simulate(*game, 1.2f, false);
+        success &= require(game->state() == Games::State::Upgrade,
+                           QStringLiteral("cleared boss wave opens the upgrade screen"));
+        menu.returnToMenu();
 
         log(QStringLiteral("Game over"));
         menu.startLevel(0);
@@ -553,9 +582,9 @@ public:
         if (game->arena_.combatants_.boss() != nullptr) {
             game->arena_.combatants_.boss()->takeDamage(
                 game->arena_, arena::Damage{999999.0f, false, arena::DamageSource::Bullet});
-        } else {
-            game->triggerVictory();
         }
+        // 胜负由台本决定：Boss 被毁只是战果，最后一波清空才进入结算。
+        game->triggerVictory();
         for (int i = 0; i < 120; ++i) {
             game->update(1.0f / 60.0f);
         }

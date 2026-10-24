@@ -26,14 +26,21 @@ void Games::startWave(int wave)
     arena_.beginWave();
     waveClearTimer_ = 0.0f;
     waveClearAnnounced_ = false;
-    if (waves_.isBossWave()) {
-        renderer_.showBanner(QStringLiteral("最终波次"),
-                             QStringLiteral("警告：检测到「虚空吞噬者」"),
-                             2.8f, Base::Magenta, QStringLiteral("FINAL WAVE"));
+    bossDownAnnounced_ = false;
+    // 横幅按“是不是最后一波”和“这一波有没有 Boss”两件事分别决定，互不绑定。
+    const bool boss = waves_.isBossWave();
+    const bool finalWave = waves_.isFinalWave();
+    const QString title = finalWave ? QStringLiteral("最终波次")
+                                    : QStringLiteral("第 %1 波").arg(wave);
+    if (boss) {
+        renderer_.showBanner(title, QStringLiteral("警告：检测到「虚空吞噬者」"),
+                             2.8f, Base::Magenta,
+                             finalWave ? QStringLiteral("FINAL WAVE")
+                                       : QStringLiteral("BOSS SIGNAL"));
         base_.playSound(QStringLiteral("boss"));
     } else {
-        renderer_.showBanner(QStringLiteral("第 %1 波").arg(wave),
-                             QStringLiteral("敌方信号正在接近"), 2.15f, Base::Cyan);
+        renderer_.showBanner(title, QStringLiteral("敌方信号正在接近"),
+                             2.15f, Base::Cyan);
     }
 }
 
@@ -92,9 +99,14 @@ void Games::update(float dt)
             triggerDefeat();
             break;
         }
-        if (arena_.bossDefeated()) {
-            triggerVictory();
-            break;
+        // Boss 只是一个强敌：击杀它不代表这一局结束，胜负只由台本是否打完决定。
+        if (arena_.bossDefeated() && !bossDownAnnounced_) {
+            bossDownAnnounced_ = true;
+            renderer_.shake(12.0f);
+            renderer_.flash(Base::White, 90);
+            renderer_.showBanner(QStringLiteral("目标已摧毁"),
+                                 QStringLiteral("虚空吞噬者停止响应"), 1.8f,
+                                 Base::Cyan, QStringLiteral("BOSS DOWN"));
         }
         checkWaveClear(dt);
         break;
@@ -163,9 +175,9 @@ void Games::triggerVictory()
     arena_.celebrateVictory();
     renderer_.shake(18.0f);
     renderer_.flash(Base::White, 130);
-    renderer_.showBanner(QStringLiteral("核心威胁已清除"),
-                         QStringLiteral("虚空吞噬者正在崩解"),
-                         1.6f, Base::Cyan, QStringLiteral("TARGET DESTROYED"));
+    renderer_.showBanner(QStringLiteral("区域已肃清"),
+                         QStringLiteral("台本中的敌方信号全部消失"),
+                         1.6f, Base::Cyan, QStringLiteral("SECTOR CLEAR"));
     base_.playSound(QStringLiteral("victory"));
 }
 

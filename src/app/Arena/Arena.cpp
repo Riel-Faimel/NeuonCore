@@ -39,14 +39,14 @@ void Arena::update(float dt)
     }
 
     combatants_.updatePlayer(*this, dt);
-    if (state_.playerDefeated() || state_.bossDefeated()) {
+    if (state_.playerDefeated()) {
         entities_.updateEffects(*this, dt);
         return;
     }
 
     entities_.updatePortals(*this, dt);
     events_.resolvePlayerBullets(*this, dt);
-    if (state_.playerDefeated() || state_.bossDefeated()) {
+    if (state_.playerDefeated()) {
         entities_.updateEffects(*this, dt);
         return;
     }

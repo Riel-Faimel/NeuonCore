@@ -59,12 +59,12 @@ cpp/src/
 │  ├─ Menu/Menu.h / Menu.cpp
 │  ├─ Renderer.h / Renderer.cpp
 │  ├─ Pointer.h / Pointer.cpp
-│  ├─ GameConfig.h
 │  └─ main.cpp
 ├─ lib/
 │  ├─ Math.h / Math.cpp
 │  └─ Random.h / Random.cpp
 ├─ include/
+│  ├─ GameConfig.h
 │  └─ Fighter.h
 └─ tests/
    └─ SelfTest.h
@@ -103,6 +103,8 @@ cpp/src/
 - 波次清空后打开 `games::Upgrades`；
 - 把 `Arena::Feedback` 转发给 `Renderer`；
 - 把胜负结果交给 `Menu`，自己不再画标题或结算。
+
+一局的结束条件只由台本决定：清空最后一波即胜利。`Boss` 只是一个带阶段的强敌，击杀它不会结束对局，只触发表现反馈（目标摧毁横幅、震屏、音效），所以它可以被放在任意一波。
 
 ### Menu
 
@@ -259,7 +261,7 @@ GameWindow::paintEvent()
 
 - 台本是数据，开局时作为 `Games::Level.script` 提交，`Waves` 只负责按它排队出生，不再有内置台本；
 - 总波数 = 台本长度，HUD 通过 `Waves::totalWaves()` 读取，结算通过 `Games` 的快照读取；
-- `boss` 出现在某一波里，那一波就是 Boss 波（`Waves::isBossWave()`），并且 Boss 永远第一个出场。
+- `boss` 出现在某一波里，那一波就是 Boss 波（`Waves::isBossWave()`），并且 Boss 永远第一个出场；击杀 Boss 不会结束对局，只有最后一波清空才胜利。
 
 ### 加关卡
 

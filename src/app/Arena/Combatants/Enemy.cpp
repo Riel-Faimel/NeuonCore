@@ -188,7 +188,8 @@ void Enemy::takeDamage(Arena &arena, const Damage &damage)
         arena.base_.playSound(QStringLiteral("hit"));
     }
 
-    if (boss) {
+    // 致死伤害不再触发 Boss 的阶段召唤：垂死的 Boss 不该再拉一波小怪。
+    if (boss && hp > 0.0f) {
         arena.state_.onBossDamage(arena, *this);
     }
 
