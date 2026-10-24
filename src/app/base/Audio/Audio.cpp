@@ -1,6 +1,7 @@
 #include "Audio.h"
 
 #include <QAudioDevice>
+#include <QAudioOutput>
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QDataStream>
@@ -11,6 +12,7 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QMediaDevices>
+#include <QMediaPlayer>
 #include <QSoundEffect>
 #include <QStandardPaths>
 #include <QUrl>
@@ -36,6 +38,14 @@ struct Audio::Impl {
     QHash<QString, int> next;
     QElapsedTimer retry;   // 设备后到时的初始化重试节流
 
+    // 背景音乐：固定目录下的 MP4 轮转播放。
+    QAudioDevice outputDevice;
+    QMediaPlayer *musicPlayer = nullptr;
+    QAudioOutput *musicOutput = nullptr;
+    QStringList musicFiles;
+    int musicIndex = -1;
+    int musicFailures = 0;
+
     ~Impl()
     {
         clear();
@@ -43,12 +53,88 @@ struct Audio::Impl {
 
     void clear()
     {
+        stopMusic();
         for (const auto &pool : pools) {
             qDeleteAll(pool);
         }
         pools.clear();
         next.clear();
         audioEnabled = false;
+    }
+
+    static QString musicDirectory()
+    {
+        const QString override = qEnvironmentVariable("NEON_MUSIC_DIR");
+        if (!override.isEmpty()) {
+            return override;
+        }
+        return QCoreApplication::applicationDirPath() + QStringLiteral("/music");
+    }
+
+    void stopMusic()
+    {
+        if (musicPlayer != nullptr) {
+            musicPlayer->stop();
+            delete musicPlayer;
+            musicPlayer = nullptr;
+        }
+        delete musicOutput;
+        musicOutput = nullptr;
+        musicFiles.clear();
+        musicIndex = -1;
+        musicFailures = 0;
+    }
+
+    void playNextMusic()
+    {
+        if (musicPlayer == nullptr || musicFiles.isEmpty()) {
+            return;
+        }
+        musicIndex = (musicIndex + 1) % musicFiles.size();
+        musicPlayer->setSource(QUrl::fromLocalFile(musicFiles.at(musicIndex)));
+        musicPlayer->play();
+    }
+
+    void initMusic()
+    {
+        stopMusic();
+        const QDir directory(musicDirectory());
+        for (const QFileInfo &entry :
+             directory.entryInfoList({QStringLiteral("*.mp4")}, QDir::Files, QDir::Name)) {
+            musicFiles.append(entry.absoluteFilePath());
+        }
+        if (musicFiles.isEmpty()) {
+            return;
+        }
+        musicOutput = new QAudioOutput();
+        musicOutput->setVolume(0.45f);
+        musicOutput->setMuted(muted);
+        if (!outputDevice.isNull()) {
+            musicOutput->setDevice(outputDevice);
+        }
+        musicPlayer = new QMediaPlayer();
+        musicPlayer->setAudioOutput(musicOutput);
+        QObject::connect(musicPlayer, &QMediaPlayer::mediaStatusChanged, musicPlayer,
+                         [this](QMediaPlayer::MediaStatus status) {
+                             if (status == QMediaPlayer::EndOfMedia) {
+                                 musicFailures = 0;
+                                 playNextMusic();
+                             } else if (status == QMediaPlayer::LoadedMedia) {
+                                 // 没有音轨的 MP4（纯视频）直接跳过，别让它静音占位卡住轮转。
+                                 if (musicPlayer != nullptr && !musicPlayer->hasAudio()) {
+                                     ++musicFailures;
+                                     if (musicFailures < musicFiles.size()) {
+                                         playNextMusic();
+                                     }
+                                 }
+                             } else if (status == QMediaPlayer::InvalidMedia) {
+                                 ++musicFailures;
+                                 if (musicFailures < musicFiles.size()) {
+                                     playNextMusic();
+                                 }
+                             }
+                         });
+        playNextMusic();
     }
 
     QByteArray makeWav(float duration, float freqStart, float freqEnd,
@@ -122,10 +208,17 @@ void Audio::init()
     io.audioInitialized = true;
     io.clear();
 
-    if (QMediaDevices::defaultAudioOutput().isNull()) {
-        // 设备可能在启动之后才就绪（插耳机 / 蓝牙重连），play() 会节流重试。
-        return;
+    // 受限环境下可能拿不到“默认输出设备”，但设备列表里仍然有可用端点，退而取第一个。
+    QAudioDevice output = QMediaDevices::defaultAudioOutput();
+    if (output.isNull()) {
+        const QList<QAudioDevice> outputs = QMediaDevices::audioOutputs();
+        if (outputs.isEmpty()) {
+            // 设备可能在启动之后才就绪（插耳机 / 蓝牙重连），play() 会节流重试。
+            return;
+        }
+        output = outputs.first();
     }
+    io.outputDevice = output;
 
     // 每个进程写自己的子目录：同时开两个实例也不会覆盖对方正在加载的 WAV。
     const QString rootPath =
@@ -191,12 +284,16 @@ void Audio::init()
             effect->setSource(url);
             effect->setLoopCount(1);
             effect->setVolume(0.68);
+            if (!io.outputDevice.isNull()) {
+                effect->setAudioDevice(io.outputDevice);
+            }
             pool.append(effect);
         }
         io.pools.insert(def.name, pool);
         io.next.insert(def.name, 0);
     }
     io.audioEnabled = !io.pools.isEmpty();
+    io.initMusic();
 }
 
 void Audio::play(const QString &name)
@@ -249,6 +346,9 @@ bool Audio::toggleMute()
 {
     Impl &io = *impl_;
     io.muted = !io.muted;
+    if (io.musicOutput != nullptr) {
+        io.musicOutput->setMuted(io.muted);
+    }
     if (io.muted) {
         for (const auto &pool : io.pools) {
             for (QSoundEffect *effect : pool) {

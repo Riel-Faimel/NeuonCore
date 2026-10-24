@@ -79,12 +79,12 @@ cpp/src/
 | 组件 | 职责 |
 | --- | --- |
 | `Input` | 键鼠状态、移动轴、射击状态 |
-| `Audio` | 程序化 WAV、QSoundEffect 池、静音 |
+| `Audio` | 程序化 WAV 音效、QSoundEffect 池、MP4 背景音乐轮转、静音 |
 | `Paint` | 颜色、字体、文字排版、发光、条形/面板等绘制原语，以及鼠标准星 |
 
 `Base::Impl` 持有 `base::Input` 和 `base::Audio`；静态绘制/颜色/字体/准星接口转发给 `base::Paint`。`Base.h` 不暴露组件头。
 
-音频是进程级服务：`Audio` 在 `%TEMP%\neon_core_cpp_audio\<pid>` 下生成自己的 WAV（同时开两个实例不会互相覆盖），启动时设备还没就绪的话会在 `play()` 里节流重试初始化。
+音频是进程级服务：`Audio` 在 `%TEMP%\neon_core_cpp_audio\<pid>` 下生成自己的 WAV（同时开两个实例不会互相覆盖），启动时设备还没就绪的话会在 `play()` 里节流重试初始化。背景音乐交给 `QMediaPlayer`：扫描 exe 同级的 `music\` 目录（可用 `NEON_MUSIC_DIR` 覆盖），按文件名轮转播放，`M` 静音同时作用于音乐和音效。
 
 指针是全局元素，不属于任何一局、也不属于任何画面：`Pointer` 持有指针位置和独立时钟，`GameWindow` 每帧在 `paintEvent` 里把它叠在 `Menu::frame()` 之上。所以主菜单、局内、强化、暂停、结算共用同一个指针，暂停时外弧也照常旋转。准星的画法只有一份，在 `base::Paint::reticle()`；窗口内隐藏系统光标，指针离开窗口时恢复系统箭头。
 

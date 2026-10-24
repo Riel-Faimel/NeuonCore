@@ -122,6 +122,7 @@ $(BUILD)/NeonCore.exe: $(RELEASE_OBJS)
 
 deploy: release
 	@if not exist "$(DIST_WIN)" mkdir "$(DIST_WIN)"
+	@if not exist "$(DIST_WIN)\music" mkdir "$(DIST_WIN)\music"
 	@if not exist "$(DIST_WIN)\platforms" mkdir "$(DIST_WIN)\platforms"
 	@if not exist "$(DIST_WIN)\multimedia" mkdir "$(DIST_WIN)\multimedia"
 	@if not exist "$(DIST_WIN)\styles" mkdir "$(DIST_WIN)\styles"
