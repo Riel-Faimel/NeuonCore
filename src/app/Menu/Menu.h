@@ -39,8 +39,6 @@ public:
     void mouseReleaseLeft();
     void clearInput();
     void toggleMute();
-    // 指针离开窗口时调用：窗口内不再画准星，同时放开系统光标。
-    void pointerLeft();
     bool muted() const { return base_.muted(); }
     bool audioEnabled() const { return base_.audioEnabled(); }
     Screen screen() const { return screen_; }
@@ -54,7 +52,6 @@ private:
     void returnToMenu();
     void drawMain();
     void drawResult();
-    void drawPointer(QPainter &painter) const;
     void drawCustomPicker(QPainter &painter, const QRectF &rect, bool active);
     void adjustCustomWave(int delta);
     bool isCustomLevel(int index) const { return index == CustomLevelIndex; }

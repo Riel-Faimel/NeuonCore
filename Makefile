@@ -35,7 +35,7 @@ LIBS := -L$(QTDIR)/lib \
         -luser32 -lkernel32 -lgdi32 -lwinmm -limm32 -lversion \
         -ldwmapi -luxtheme -lmsimg32 -static-libgcc -static-libstdc++
 
-APP_SRC := Renderer
+APP_SRC := Renderer Pointer
 APP_OBJS := $(addprefix $(BUILD)/app/,$(addsuffix .o,$(APP_SRC)))
 GAMES_COMPONENTS := Games Waves/Waves Upgrades/Upgrades
 GAMES_OBJS := $(addprefix $(BUILD)/app/Games/,$(addsuffix .o,$(GAMES_COMPONENTS)))

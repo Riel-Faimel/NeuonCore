@@ -114,6 +114,7 @@ cpp/
 │  │  │  └─ Upgrades/Upgrades.h/.cpp 组件：强化池、抽取与应用
 │  │  ├─ Menu/Menu.h/.cpp          主菜单、关卡选择、对局信息、结算
 │  │  ├─ Renderer.h / Renderer.cpp 局内背景、发光、HUD、卡片、暂停
+│  │  ├─ Pointer.h / Pointer.cpp  全局鼠标指针（窗口每帧叠加）
 │  │  ├─ GameConfig.h             全局尺寸常量
 │  │  └─ main.cpp                 QWidget 窗口、输入桥接、release 入口
 │  ├─ lib/
@@ -184,7 +185,7 @@ mingw32-make -j12 test
 
 - C++ 版使用 Qt 6 的字体渲染，字形和抗锯齿效果与 pygame 版略有差异；布局、配色和逻辑保持一致。
 - 中文使用系统微软雅黑/黑体。若字体缺失，可在 `src/app/Base/Paint/Paint.cpp` 的 `Paint::initialize()` 中更换字体路径。
-- 鼠标指针就是画面里的准星：`Base::reticle()` 是唯一的画法，局内、主菜单、强化、暂停、结算全部复用它（外弧随时间旋转）；窗口内隐藏系统光标，指针移出窗口时恢复系统箭头、画面里也不再画准星。
+- 鼠标指针是全局元素（`src/app/Pointer.*`）：窗口每帧把它叠在画面最上层，`Base::reticle()` 是唯一画法，所有界面共用同一个指针和同一个时钟（局内暂停时外弧也照常旋转）；窗口内隐藏系统光标，指针移出窗口时恢复系统箭头。
 - 第三方运行库：Qt 6（LGPLv3）与 FFmpeg（LGPLv2.1+）。分发时请保留相应的许可证信息，见 [`THIRD_PARTY.txt`](THIRD_PARTY.txt)。
 
 更多画面：[标题](screenshots/title.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)

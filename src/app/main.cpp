@@ -1,5 +1,6 @@
 #include "Menu/Menu.h"
 #include "Base/Base.h"
+#include "Pointer.h"
 
 #include <QApplication>
 #include <QDir>
@@ -82,6 +83,15 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
         painter.drawImage(rect(), menu_.frame());
+
+        // 指针是全局元素：每一帧都叠在画面最上层，不参与任何画面自己的绘制。
+        if (width() > 0 && height() > 0) {
+            painter.save();
+            painter.scale(float(width()) / float(GameConfig::ScreenWidth),
+                          float(height()) / float(GameConfig::ScreenHeight));
+            pointer_.draw(painter);
+            painter.restore();
+        }
     }
 
     void keyPressEvent(QKeyEvent *event) override
@@ -100,14 +110,18 @@ protected:
 
     void mouseMoveEvent(QMouseEvent *event) override
     {
-        menu_.mouseMove(toGamePos(event->position()));
+        const Math::Vec2 position = toGamePos(event->position());
+        menu_.mouseMove(position);
+        pointer_.moveTo(position);
         event->accept();
     }
 
     void mousePressEvent(QMouseEvent *event) override
     {
         if (event->button() == Qt::LeftButton) {
-            menu_.mousePressLeft(toGamePos(event->position()));
+            const Math::Vec2 position = toGamePos(event->position());
+            menu_.mousePressLeft(position);
+            pointer_.moveTo(position);
             event->accept();
         }
     }
@@ -120,19 +134,21 @@ protected:
         }
     }
 
-    // 指针在窗口内：隐藏系统光标，由画面里的准星代替。
+    // 指针在窗口内：隐藏系统光标，由全局准星代替。
     void enterEvent(QEnterEvent *event) override
     {
         setCursor(Qt::BlankCursor);
-        menu_.mouseMove(toGamePos(event->position()));
+        const Math::Vec2 position = toGamePos(event->position());
+        menu_.mouseMove(position);
+        pointer_.moveTo(position);
         QWidget::enterEvent(event);
     }
 
-    // 指针离开窗口：恢复系统箭头，画面里也不再画准星。
+    // 指针离开窗口：恢复系统箭头，窗口里也不再画准星。
     void leaveEvent(QEvent *event) override
     {
         setCursor(Qt::ArrowCursor);
-        menu_.pointerLeft();
+        pointer_.setVisible(false);
         QWidget::leaveEvent(event);
     }
 
@@ -156,7 +172,9 @@ protected:
 
         const QPoint local = mapFromGlobal(QCursor::pos());
         if (rect().contains(local)) {
-            menu_.mouseMove(toGamePos(QPointF(local)));
+            const Math::Vec2 position = toGamePos(QPointF(local));
+            menu_.mouseMove(position);
+            pointer_.moveTo(position);
         }
     }
 
@@ -183,11 +201,13 @@ private:
         dt = Math::clamp(dt, 0.0f, 1.0f / 30.0f);
 
         menu_.update(dt);
+        pointer_.update(dt);
         menu_.render();
         update();
     }
 
     Menu menu_;
+    Pointer pointer_;
     QTimer timer_;
     QElapsedTimer clock_;
     bool centered_ = false;

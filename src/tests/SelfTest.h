@@ -5,6 +5,7 @@
 
 #include "Menu/Menu.h"
 #include "Base/Base.h"
+#include "Pointer.h"
 
 #include <QDir>
 #include <QFile>
@@ -320,10 +321,21 @@ public:
         }
         Menu menu(false);
         Games *game = nullptr;
+        // 截图模拟窗口的合成顺序：画面 + 全局指针。
+        Pointer pointer;
+        auto movePointer = [&](const Math::Vec2 &position) {
+            menu.mouseMove(position);
+            pointer.moveTo(position);
+        };
         auto save = [&](const QString &name) {
             menu.render();
             const QString path = dir.filePath(name);
-            if (!menu.frame().save(path)) {
+            QImage frame = menu.frame().copy();
+            {
+                QPainter overlay(&frame);
+                pointer.draw(overlay);
+            }
+            if (!frame.save(path)) {
                 std::fprintf(stderr, "Failed to save %s\n", path.toUtf8().constData());
             } else {
                 std::printf("%s\n", path.toUtf8().constData());
@@ -333,10 +345,10 @@ public:
         for (int i = 0; i < 120; ++i) {
             menu.update(1.0f / 60.0f);
         }
-        menu.mouseMove({GameConfig::ScreenWidth / 2.0f, 454.0f});
+        movePointer({GameConfig::ScreenWidth / 2.0f, 454.0f});
         save(QStringLiteral("title.png"));
 
-        menu.mouseMove({1020.0f, 454.0f});
+        movePointer({1020.0f, 454.0f});
         menu.update(1.0f / 60.0f);
         for (int i = 0; i < 3; ++i) {
             menu.keyPress(Qt::Key_Right);
@@ -366,7 +378,7 @@ public:
         player.hpDisplay = 84;
         player.aim = -0.55f;
         player.invuln = 99.0f;
-        menu.mouseMove({1010, 265});
+        movePointer({1010, 265});
 
         game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("drone"), {820, 285}, 4);
         game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("drone"), {960, 520}, 4);
@@ -422,7 +434,7 @@ public:
         game->waves_.queue_.clear();
         game->waves_.waveTotal_ = 15;
         game->enterUpgrade();
-        menu.mouseMove({640, 390});
+        movePointer({640, 390});
         save(QStringLiteral("upgrade.png"));
 
         menu.startLevel(0);
@@ -446,7 +458,7 @@ public:
         bossPlayer.hpDisplay = 71;
         bossPlayer.aim = -0.25f;
         bossPlayer.invuln = 99.0f;
-        menu.mouseMove({850, 380});
+        movePointer({850, 380});
         game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("boss"), {870, 365}, 8);
         game->arena_.combatants_.boss()->hp =
             game->arena_.combatants_.boss()->maxHp * 0.63f;

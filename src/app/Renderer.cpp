@@ -294,11 +294,6 @@ void Renderer::render(const Games &game, const Arena &arena, const games::Waves 
     case Games::State::Defeat:
         break;
     }
-
-    // 指针永远画在最上层：播放、强化、暂停、胜负表现都使用同一套准星。
-    if (base_.mouseActive()) {
-        Base::reticle(painter, base_.mousePosition(), uiTime_);
-    }
 }
 
 void Renderer::drawHUD(QPainter &painter, const Arena &arena, const games::Waves &waves)

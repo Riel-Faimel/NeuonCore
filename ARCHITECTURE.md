@@ -15,7 +15,7 @@
 
 2. **模块是全局类，组件是 namespace 中的类**
    - 除 `main` / `WinMain` 外，没有自由函数。
-   - 全局模块类：`GameConfig / Math / Random / Base / Arena / Games / Menu / Renderer / GameWindow / SelfTest`。
+   - 全局模块类：`GameConfig / Math / Random / Base / Arena / Games / Menu / Renderer / Pointer / GameWindow / SelfTest`。
    - `Base` 的组件在 `namespace base`：`Input / Audio / Paint`。
    - `Games` 的组件在 `namespace games`：`Waves / Upgrades`。
    - `Arena` 的组件在 `namespace arena`：`Combatants / Entities / Events / State`。
@@ -58,6 +58,7 @@ cpp/src/
 │  │  └─ Upgrades/Upgrades.h/.cpp
 │  ├─ Menu/Menu.h / Menu.cpp
 │  ├─ Renderer.h / Renderer.cpp
+│  ├─ Pointer.h / Pointer.cpp
 │  ├─ GameConfig.h
 │  └─ main.cpp
 ├─ lib/
@@ -83,7 +84,7 @@ cpp/src/
 
 `Base::Impl` 持有 `base::Input` 和 `base::Audio`；静态绘制/颜色/字体/准星接口转发给 `base::Paint`。`Base.h` 不暴露组件头。
 
-指针是画面的一部分，不是系统光标：`Base::reticle()` 是唯一的准星画法，`Renderer` 在局内所有状态把它画在帧的最上层，`Menu` 在主菜单和结算界面调用同一个函数。`GameWindow` 全程隐藏系统光标，指针离开窗口时恢复系统箭头并调用 `Menu::pointerLeft()`，画面里也不再画准星。
+指针是全局元素，不属于任何一局、也不属于任何画面：`Pointer` 持有指针位置和独立时钟，`GameWindow` 每帧在 `paintEvent` 里把它叠在 `Menu::frame()` 之上。所以主菜单、局内、强化、暂停、结算共用同一个指针，暂停时外弧也照常旋转。准星的画法只有一份，在 `base::Paint::reticle()`；窗口内隐藏系统光标，指针离开窗口时恢复系统箭头。
 
 ### Games
 
@@ -188,6 +189,7 @@ public:
 
 ```text
 GameWindow
+├─ Pointer ────────────► Base（准星画法）
 └─ Menu（持有 Base、关卡表，按局构造 Games）
    └─ Games(Level, Base&)   ← 一局一个实例
       ├─ Base ─────► base::Input / Audio / Paint（引用，由 Menu 持有）
@@ -200,6 +202,8 @@ GameWindow
 
 依赖是单向的：
 
+- `GameWindow` 持有 `Menu` 和 `Pointer`，负责把两者的结果合成到窗口上。
+- `Pointer` 只依赖 `Base` 的准星画法，不知道游戏业务。
 - `Menu` 持有 `Base`、关卡表和一局的 `Games`，负责主菜单、关卡选择和结算。
 - `Games` 只负责一局内的逻辑，不知道 `Menu`；一局的安排由构造参数进入，之后不再外泄。
 - `Games` 只通过 `Arena` 公共接口访问战斗世界。
@@ -221,11 +225,16 @@ GameWindow::tick()
 │  │          ├─ Paused: 冻结
 │  │          └─ Victory/Defeat: 只推进视觉
 │  └─ Result: Games::update(dt) 继续退场表现
+├─ Pointer::update(dt)      ← 独立时钟，暂停时也推进
 ├─ Menu::render()
 │  ├─ Main:   绘制菜单
 │  ├─ Match:  Games::render() → Renderer
 │  └─ Result: Games::render() + Menu 结算覆盖层
 └─ QWidget::update()
+
+GameWindow::paintEvent()
+├─ drawImage(Menu::frame())    ← 当前画面
+└─ Pointer::draw()             ← 全局指针叠在最上层
 ```
 
 ## 加机制应该改哪里
@@ -277,6 +286,7 @@ GameWindow::tick()
 - 输入：`src/app/Base/Input/`。
 - 音频：`src/app/Base/Audio/`。
 - 字体/颜色/绘制：`src/app/Base/Paint/`。
+- 鼠标指针：`src/app/Pointer.*`（位置 + 时钟 + 叠加时机）；准星画法在 `base::Paint::reticle()`。
 - `Base` 只保留转发接口。
 
 ## 测试与交付
