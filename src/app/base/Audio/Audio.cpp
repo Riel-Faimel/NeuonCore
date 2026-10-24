@@ -1,7 +1,6 @@
 #include "Audio.h"
 
 #include <QAudioDevice>
-#include <QAudioOutput>
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QDataStream>
@@ -12,9 +11,9 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QMediaDevices>
-#include <QMediaPlayer>
 #include <QSoundEffect>
 #include <QStandardPaths>
+#include <QTime>
 #include <QUrl>
 #include <QVector>
 #include <QtAlgorithms>
@@ -37,100 +36,37 @@ struct Audio::Impl {
     QHash<QString, QVector<QSoundEffect *>> pools;
     QHash<QString, int> next;
     QElapsedTimer retry;   // 设备后到时的初始化重试节流
-
-    // 背景音乐：固定目录下的 MP4 轮转播放。
     QAudioDevice outputDevice;
-    QMediaPlayer *musicPlayer = nullptr;
-    QAudioOutput *musicOutput = nullptr;
-    QStringList musicFiles;
-    int musicIndex = -1;
-    int musicFailures = 0;
 
     ~Impl()
     {
         clear();
     }
 
+    // 排查用：设置 NEON_AUDIO_LOG=1 时把音频/音乐事件写到 %TEMP%\neon_core_audio.log。
+    static void logEvent(const QString &message)
+    {
+        if (!qEnvironmentVariableIsSet("NEON_AUDIO_LOG")) {
+            return;
+        }
+        QFile file(QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+                   + QStringLiteral("/neon_core_audio.log"));
+        if (file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+            file.write(QStringLiteral("[%1] %2\n")
+                           .arg(QTime::currentTime().toString(QStringLiteral("mm:ss.zzz")),
+                                message)
+                           .toUtf8());
+        }
+    }
+
     void clear()
     {
-        stopMusic();
         for (const auto &pool : pools) {
             qDeleteAll(pool);
         }
         pools.clear();
         next.clear();
         audioEnabled = false;
-    }
-
-    static QString musicDirectory()
-    {
-        const QString override = qEnvironmentVariable("NEON_MUSIC_DIR");
-        if (!override.isEmpty()) {
-            return override;
-        }
-        return QCoreApplication::applicationDirPath() + QStringLiteral("/music");
-    }
-
-    void stopMusic()
-    {
-        if (musicPlayer != nullptr) {
-            musicPlayer->stop();
-            delete musicPlayer;
-            musicPlayer = nullptr;
-        }
-        delete musicOutput;
-        musicOutput = nullptr;
-        musicFiles.clear();
-        musicIndex = -1;
-        musicFailures = 0;
-    }
-
-    void playNextMusic()
-    {
-        if (musicPlayer == nullptr || musicFiles.isEmpty()) {
-            return;
-        }
-        musicIndex = (musicIndex + 1) % musicFiles.size();
-        musicPlayer->setSource(QUrl::fromLocalFile(musicFiles.at(musicIndex)));
-        musicPlayer->play();
-    }
-
-    void initMusic()
-    {
-        stopMusic();
-        const QDir directory(musicDirectory());
-        const QStringList filters = {
-            QStringLiteral("*.mp4"), QStringLiteral("*.m4a"), QStringLiteral("*.mp3"),
-            QStringLiteral("*.flac"), QStringLiteral("*.ogg"), QStringLiteral("*.opus"),
-            QStringLiteral("*.wav"), QStringLiteral("*.aac")};
-        for (const QFileInfo &entry :
-             directory.entryInfoList(filters, QDir::Files, QDir::Name)) {
-            musicFiles.append(entry.absoluteFilePath());
-        }
-        if (musicFiles.isEmpty()) {
-            return;
-        }
-        musicOutput = new QAudioOutput();
-        musicOutput->setVolume(0.45f);
-        musicOutput->setMuted(muted);
-        if (!outputDevice.isNull()) {
-            musicOutput->setDevice(outputDevice);
-        }
-        musicPlayer = new QMediaPlayer();
-        musicPlayer->setAudioOutput(musicOutput);
-        QObject::connect(musicPlayer, &QMediaPlayer::mediaStatusChanged, musicPlayer,
-                         [this](QMediaPlayer::MediaStatus status) {
-                             if (status == QMediaPlayer::EndOfMedia) {
-                                 musicFailures = 0;
-                                 playNextMusic();
-                             } else if (status == QMediaPlayer::InvalidMedia) {
-                                 ++musicFailures;
-                                 if (musicFailures < musicFiles.size()) {
-                                     playNextMusic();
-                                 }
-                             }
-                         });
-        playNextMusic();
     }
 
     QByteArray makeWav(float duration, float freqStart, float freqEnd,
@@ -215,8 +151,7 @@ void Audio::init()
         output = outputs.first();
     }
     io.outputDevice = output;
-    // 先起背景音乐，再花时间生成音效 WAV：两者互不依赖，音乐可以早点响。
-    io.initMusic();
+    io.logEvent(QStringLiteral("audio init: device=%1").arg(output.description()));
 
     // 每个进程写自己的子目录：同时开两个实例也不会覆盖对方正在加载的 WAV。
     const QString rootPath =
@@ -313,6 +248,7 @@ void Audio::play(const QString &name)
             io.retry.start();
         }
         io.audioInitialized = false;
+        io.logEvent(QStringLiteral("audio retry: enabled=%1").arg(io.audioEnabled));
         init();
         if (!io.audioEnabled) {
             return;
@@ -343,9 +279,6 @@ bool Audio::toggleMute()
 {
     Impl &io = *impl_;
     io.muted = !io.muted;
-    if (io.musicOutput != nullptr) {
-        io.musicOutput->setMuted(io.muted);
-    }
     if (io.muted) {
         for (const auto &pool : io.pools) {
             for (QSoundEffect *effect : pool) {

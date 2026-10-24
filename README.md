@@ -109,7 +109,8 @@ cpp/
 │  │  ├─ Base/
 │  │  │  ├─ Base.h / Base.cpp     模块入口：组合 Input / Audio / Paint
 │  │  │  ├─ Input/Input.h/.cpp    组件：键鼠状态
-│  │  │  ├─ Audio/Audio.h/.cpp    组件：程序化 WAV 音效 + 背景音乐轮转
+│  │  │  ├─ Audio/Audio.h/.cpp    组件：程序化 WAV 音效
+│  │  │  ├─ Audio/Music.h/.cpp    组件：背景音乐管理器（常驻）
 │  │  │  └─ Paint/Paint.h/.cpp    组件：颜色/字体/绘制原语
 │  │  ├─ Games/
 │  │  │  ├─ Games.h / Games.cpp   模块入口：局内状态机与组件编排
@@ -135,7 +136,7 @@ cpp/
 └─ dist/NeonCore/                 交付用 release GUI + 运行库
 ```
 
-`src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Paint` 三个 `namespace base` 组件。`Base.h` 仍只暴露 Base 的输入/音频/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Paint` 的 QFontDatabase 细节都在各自组件内。
+`src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Music`、`Paint` 四个 `namespace base` 组件。`Base.h` 仍只暴露 Base 的输入/音频/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Music` 的 QMediaPlayer、`Paint` 的 QFontDatabase 细节都在各自组件内。
 
 `src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades` 两个 `namespace games` 组件，并拥有 `Random`、`Arena`、`Renderer`。一局游戏就是一个 `Games` 实例：`Menu` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Games` 负责局内状态机和调用顺序。
 
@@ -154,7 +155,9 @@ cpp/
 - 打包/交付版的目录是 `dist\NeonCore\music\`，直接把音乐文件丢进去即可；
 - 支持的扩展名：`.mp4` `.m4a` `.mp3` `.flac` `.ogg` `.opus` `.wav` `.aac`（MP4 只取音频轨）；
 - 想换目录可以设置环境变量 `NEON_MUSIC_DIR`（例如 `set NEON_MUSIC_DIR=D:\Music\NeonCore`）；
-- 音量固定为 45%，`M` 静音会同时静音背景音乐和音效。
+- 音量固定为 45%，`M` 静音会同时静音背景音乐和音效；
+- 播放器只创建一次并常驻：切换界面、开局/结算、音频重试都不会重新起播，只有一首放完才切下一首；
+- 排查音频问题可设置 `NEON_AUDIO_LOG=1`，事件会写到 `%TEMP%\neon_core_audio.log`。
 
 窗口内部固定以 **1280×720** 逻辑尺寸渲染，并按屏幕 DPI 调整窗口物理尺寸，保证在 125%/150%/200% 缩放下仍能完整看到 1280×720 的游戏画面。模块细节见 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
 

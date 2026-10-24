@@ -1,6 +1,7 @@
 #include "Base.h"
 
 #include "Base/Audio/Audio.h"
+#include "Base/Audio/Music.h"
 #include "Base/Input/Input.h"
 #include "Base/Paint/Paint.h"
 
@@ -9,6 +10,7 @@
 struct Base::Impl {
     base::Input input;
     base::Audio audio;
+    base::Music music;
 };
 
 Base::Base() : impl_(std::make_unique<Impl>()) {}
@@ -83,6 +85,7 @@ void Base::setMouseActive(bool active)
 void Base::initAudio()
 {
     impl_->audio.init();
+    impl_->music.initialize();
 }
 
 void Base::playSound(const QString &name)
@@ -92,7 +95,9 @@ void Base::playSound(const QString &name)
 
 bool Base::toggleMute()
 {
-    return impl_->audio.toggleMute();
+    const bool muted = impl_->audio.toggleMute();
+    impl_->music.setMuted(muted);
+    return muted;
 }
 
 bool Base::muted() const
