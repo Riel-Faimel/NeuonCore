@@ -11,7 +11,7 @@
 
 class SelfTest;
 
-// Menu 模块：主菜单、关卡选择、对局信息与结算界面。
+// Menu 模块：主菜单、关卡选择、台本编辑、对局信息与结算界面。
 // 它持有进程级的 Base 服务与关卡表，并在开局时构造一局 Games；
 // Games 只活一局，返回主菜单即销毁，下一局重新构造。
 class Menu {
@@ -20,6 +20,7 @@ public:
         Main,
         Match,
         Result,
+        Editor,
     };
 
     explicit Menu(bool enableAudio = true);
@@ -47,11 +48,23 @@ private:
     friend class SelfTest;
 
     static constexpr int CustomLevelIndex = 2;
+    static constexpr int MaxCustomWaves = 12;
+    static constexpr int MaxEnemyCount = 20;
+    static constexpr int EditorColumns = 5;   // 四种敌人 + BOSS
+
+    static constexpr float EditorLeft = 90.0f;
+    static constexpr float EditorRight = GameConfig::ScreenWidth - 90.0f;
+    static constexpr float EditorWaveColumn = 88.0f;
+    static constexpr float EditorHeaderY = 238.0f;
+    static constexpr float EditorRowsTop = 256.0f;
+    static constexpr float EditorRowHeight = 30.0f;
 
     void startLevel(int index);
     void returnToMenu();
     void drawMain();
     void drawResult();
+    void drawEditor();
+
     // 默认战役台本：运行时提交给 Games，Menu 只负责写数据和选起点。
     static games::Script standardScript();
     int maxCustomWave() const;
@@ -61,17 +74,42 @@ private:
     QRectF levelRect(int index) const;
     QRectF customMinusRect() const;
     QRectF customPlusRect() const;
+    QRectF customEditRect() const;
     QRectF retryRect() const;
     QRectF menuRect() const;
+
+    // 台本编辑
+    void openEditor();
+    static QString enemyKind(int column);
+    int customWaveCount() const { return int(customScript_.size()); }
+    int enemyCount(int row, int column) const;
+    void setEnemyCount(int row, int column, int count);
+    bool waveHasBoss(int row) const;
+    void setWaveBoss(int row, bool on);
+    void adjustEditorCell(int delta);
+    void addCustomWave();
+    void removeCustomWave();
+    int totalCustomEnemies() const;
+    QRectF editorRowRect(int row) const;
+    QRectF editorCellRect(int row, int column) const;
+    QRectF editorMinusRect() const;
+    QRectF editorPlusRect() const;
+    QRectF editorAddWaveRect() const;
+    QRectF editorRemoveWaveRect() const;
+    QRectF editorDeployRect() const;
+    QRectF editorBackRect() const;
 
     Base base_;
     std::unique_ptr<Games> games_;
     std::vector<Games::Level> levels_;
+    games::Script customScript_;
     Screen screen_ = Screen::Main;
     QImage frame_;
     Math::Vec2 mouse_;
     int selected_ = 0;
     int customWave_ = 1;
+    int editorRow_ = 0;
+    int editorColumn_ = 0;
     float menuTime_ = 0.0f;
     bool mouseActive_ = false;
 };

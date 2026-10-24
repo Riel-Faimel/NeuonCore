@@ -109,7 +109,8 @@ cpp/src/
 `Menu` 是顶层界面模块，持有进程级的 `Base`、关卡表，以及当前这一局的 `Games`，负责：
 
 - 主菜单和关卡选择；
-- 定义每个关卡的安排：展示信息、起始波次，以及这一局的台本（`games::Script`，标准协议从第 1 波开始，核心突袭从最后一波开始，自定义协议由菜单上的 `-` / `+` 或 `←` / `→` 选 1–8 波），开局时把 `Games::Level` 传给 `Games` 构造；
+- 台本编辑器（`Screen::Editor`）：逐波编辑波数与四种敌人数量、设置唯一 Boss；编辑结果只存在 `customScript_` 里，部署时作为 `Games::Level.script` 提交；
+- 定义每个关卡的安排：展示信息、起始波次，以及这一局的台本（`games::Script`，标准协议从第 1 波开始，核心突袭从最后一波开始，自定义协议由菜单上的 `-` / `+` 或 `←` / `→` 选 1–12 波），开局时把 `Games::Level` 传给 `Games` 构造；
 - 回到主菜单或重新部署时销毁旧的 `Games`，下一局重新构造；
 - 把主菜单/局内/结算输入路由给 `Games`；
 - 在对局结束后读取 `Games` 的得分、击杀、波次、时间；
@@ -218,6 +219,7 @@ GameWindow
 GameWindow::tick()
 ├─ Menu::update(dt)
 │  ├─ Main:   菜单动画
+│  ├─ Editor: 台本编辑（输入自处理，只推进菜单动画）
 │  ├─ Match:  Games::update(dt)
 │  │          ├─ Renderer::update(dt)
 │  │          ├─ Playing: Arena→Waves→Feedback→胜负/波次判断
@@ -228,6 +230,7 @@ GameWindow::tick()
 ├─ Pointer::update(dt)      ← 独立时钟，暂停时也推进
 ├─ Menu::render()
 │  ├─ Main:   绘制菜单
+│  ├─ Editor: 绘制台本表格
 │  ├─ Match:  Games::render() → Renderer
 │  └─ Result: Games::render() + Menu 结算覆盖层
 └─ QWidget::update()
@@ -307,6 +310,7 @@ GameWindow::paintEvent()
 ## 已知边界
 
 - 台本是运行时提交的 `games::Script` 数据，但默认战役仍在 `Menu` 里用 C++ 写（还没有外部 JSON/文件格式）。
+- 自定义台本编辑器只改内存里的 `customScript_`，没有存档；重启回到默认战役台本。
 - 敌人/强化/音效仍用字符串 ID。
 - 一局一个 `Games`：`Base`（输入/音频/字体）是进程级服务，由 `Menu` 持有，否则切局会重复初始化音频。
 - 一局的安排只经构造参数进入 `Games`；`Games` 不提供任何读回安排的接口，`Menu` 只保留展示用的关卡表。

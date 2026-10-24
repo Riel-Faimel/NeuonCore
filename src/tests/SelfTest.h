@@ -308,6 +308,44 @@ public:
                            QStringLiteral("custom level starts at the chosen wave"));
         menu.returnToMenu();
 
+        log(QStringLiteral("Script editor"));
+        menu.keyPress(Qt::Key_E);
+        success &= require(menu.screen() == Menu::Screen::Editor,
+                           QStringLiteral("E opens the script editor"));
+        const int editedWaves = int(menu.customScript_.size());
+        menu.keyPress(Qt::Key_N);
+        menu.keyPress(Qt::Key_N);
+        success &= require(int(menu.customScript_.size()) == editedWaves + 2,
+                           QStringLiteral("N appends waves"));
+        menu.keyPress(Qt::Key_Right);
+        const int beforeCount = menu.enemyCount(menu.editorRow_, menu.editorColumn_);
+        for (int i = 0; i < 3; ++i) {
+            menu.keyPress(Qt::Key_Plus);
+        }
+        success &= require(menu.enemyCount(menu.editorRow_, menu.editorColumn_)
+                               == beforeCount + 3,
+                           QStringLiteral("+ raises a cell count"));
+        menu.keyPress(Qt::Key_Return);
+        game = menu.games_.get();
+        success &= require(menu.screen() == Menu::Screen::Match
+                               && game->totalWaves() == editedWaves + 2,
+                           QStringLiteral("edited wave count reaches the run"));
+        menu.returnToMenu();
+
+        menu.keyPress(Qt::Key_E);
+        for (int i = 0; i < 6; ++i) {
+            menu.keyPress(Qt::Key_Right);
+        }
+        menu.keyPress(Qt::Key_Plus);
+        success &= require(menu.waveHasBoss(menu.editorRow_),
+                           QStringLiteral("editor toggles the boss wave"));
+        menu.keyPress(Qt::Key_Minus);
+        success &= require(!menu.waveHasBoss(menu.editorRow_),
+                           QStringLiteral("editor clears the boss wave"));
+        menu.keyPress(Qt::Key_Escape);
+        success &= require(menu.screen() == Menu::Screen::Main,
+                           QStringLiteral("escape leaves the editor"));
+
         log(QStringLiteral("Submitted script"));
         games::Script shortScript;
         shortScript.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("drone"), 2},
@@ -369,6 +407,17 @@ public:
             menu.keyPress(Qt::Key_Right);
         }
         save(QStringLiteral("custom_level.png"));
+
+        menu.keyPress(Qt::Key_E);
+        for (int i = 0; i < 2; ++i) {
+            menu.keyPress(Qt::Key_Down);
+        }
+        menu.keyPress(Qt::Key_Right);
+        for (int i = 0; i < 3; ++i) {
+            menu.keyPress(Qt::Key_Plus);
+        }
+        save(QStringLiteral("editor.png"));
+        menu.keyPress(Qt::Key_Escape);
 
         menu.startLevel(0);
         game = menu.games_.get();

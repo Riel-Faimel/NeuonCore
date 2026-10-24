@@ -31,6 +31,7 @@ Menu::Menu(bool enableAudio)
         {QStringLiteral("custom"), QStringLiteral("自定义协议"),
          QStringLiteral("自选起始波次"), 1, campaign},
     };
+    customScript_ = campaign;
 }
 
 // 台本是数据：每波列出敌人种类和数量，最后一波带 Boss。
@@ -63,9 +64,7 @@ games::Script Menu::standardScript()
 
 int Menu::maxCustomWave() const
 {
-    const size_t index = size_t(CustomLevelIndex);
-    const int count = index < levels_.size() ? int(levels_[index].script.size()) : 0;
-    return std::max(1, count);
+    return std::max(1, customWaveCount());
 }
 
 Menu::~Menu() = default;
@@ -91,7 +90,7 @@ void Menu::update(float dt)
         return;
     }
 
-    if (mouseActive_) {
+    if (screen_ == Screen::Main && mouseActive_) {
         for (int i = 0; i < int(levels_.size()); ++i) {
             if (levelRect(i).contains(QPointF(mouse_.x, mouse_.y))) {
                 selected_ = i;
@@ -110,6 +109,10 @@ void Menu::render()
         games_->render();
         frame_ = games_->frame().copy();
         drawResult();
+        return;
+    }
+    if (screen_ == Screen::Editor) {
+        drawEditor();
         return;
     }
     drawMain();
@@ -236,7 +239,7 @@ void Menu::drawMain()
         }
         const QString tag = i == 0 ? QStringLiteral("CAMPAIGN")
                             : i == 1 ? QStringLiteral("BOSS RUSH")
-                                     : QStringLiteral("CUSTOM");
+                                     : QStringLiteral("E  编辑台本");
         Base::text(painter, Base::techTinyFont(), tag,
                    Base::shade(border, 0.85f),
                    {float(rect.left()) + 24.0f, float(rect.bottom()) - 20.0f},
@@ -254,7 +257,7 @@ void Menu::drawMain()
                {34, GameConfig::ScreenHeight - 34.0f}, QStringLiteral("midleft"), 150);
     Base::text(painter, Base::tinyFont(),
                isCustomLevel(selected_)
-                   ? QStringLiteral("← / → 调整起始波次    ENTER 开始    M 静音")
+                   ? QStringLiteral("← / → 调整起始波次    E 编辑台本    ENTER 开始    M 静音")
                    : QStringLiteral("↑ / ↓ 选择    ENTER 开始    M 静音"),
                QColor(105, 138, 158),
                {GameConfig::ScreenWidth - 34.0f, GameConfig::ScreenHeight - 34.0f},
@@ -377,7 +380,8 @@ void Menu::startLevel(int index)
     selected_ = index;
     Games::Level level = levels_[size_t(index)];
     if (isCustomLevel(index)) {
-        level.startWave = customWave_;
+        level.script = customScript_;
+        level.startWave = std::clamp(customWave_, 1, maxCustomWave());
     }
     games_ = std::make_unique<Games>(level, base_);
     screen_ = Screen::Match;
@@ -423,12 +427,39 @@ void Menu::keyPress(int key, bool autoRepeat)
             startLevel(1);
         } else if (key == Qt::Key_3) {
             startLevel(2);
+        } else if (key == Qt::Key_E && isCustomLevel(selected_)) {
+            openEditor();
         }
         return;
     }
     if (screen_ == Screen::Result) {
         if (key == Qt::Key_R || key == Qt::Key_Return || key == Qt::Key_Enter) {
             startLevel(selected_);
+        } else if (key == Qt::Key_Escape || key == Qt::Key_Q) {
+            returnToMenu();
+        }
+        return;
+    }
+
+    if (screen_ == Screen::Editor) {
+        if (key == Qt::Key_Up || key == Qt::Key_W) {
+            editorRow_ = std::max(0, editorRow_ - 1);
+        } else if (key == Qt::Key_Down || key == Qt::Key_S) {
+            editorRow_ = std::min(customWaveCount() - 1, editorRow_ + 1);
+        } else if (key == Qt::Key_Left || key == Qt::Key_A) {
+            editorColumn_ = std::max(0, editorColumn_ - 1);
+        } else if (key == Qt::Key_Right || key == Qt::Key_D) {
+            editorColumn_ = std::min(EditorColumns - 1, editorColumn_ + 1);
+        } else if (key == Qt::Key_Plus || key == Qt::Key_Equal) {
+            adjustEditorCell(1);
+        } else if (key == Qt::Key_Minus) {
+            adjustEditorCell(-1);
+        } else if (key == Qt::Key_N) {
+            addCustomWave();
+        } else if (key == Qt::Key_X) {
+            removeCustomWave();
+        } else if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+            startLevel(CustomLevelIndex);
         } else if (key == Qt::Key_Escape || key == Qt::Key_Q) {
             returnToMenu();
         }
@@ -464,6 +495,48 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
 {
     mouse_ = position;
     mouseActive_ = true;
+    if (screen_ == Screen::Editor) {
+        const QPointF point(position.x, position.y);
+        if (editorBackRect().contains(point)) {
+            returnToMenu();
+            return;
+        }
+        if (editorDeployRect().contains(point)) {
+            startLevel(CustomLevelIndex);
+            return;
+        }
+        if (editorAddWaveRect().contains(point)) {
+            addCustomWave();
+            return;
+        }
+        if (editorRemoveWaveRect().contains(point)) {
+            removeCustomWave();
+            return;
+        }
+        if (editorColumn_ < 4 && editorMinusRect().contains(point)) {
+            adjustEditorCell(-1);
+            return;
+        }
+        if (editorColumn_ < 4 && editorPlusRect().contains(point)) {
+            adjustEditorCell(1);
+            return;
+        }
+        for (int row = 0; row < customWaveCount(); ++row) {
+            for (int column = 0; column < EditorColumns; ++column) {
+                if (!editorCellRect(row, column).contains(point)) {
+                    continue;
+                }
+                editorRow_ = row;
+                editorColumn_ = column;
+                if (column == 4) {
+                    // BOSS 列整格就是开关。
+                    adjustEditorCell(1);
+                }
+                return;
+            }
+        }
+        return;
+    }
     if (screen_ == Screen::Main) {
         for (int i = 0; i < int(levels_.size()); ++i) {
             if (isCustomLevel(i)) {
@@ -475,6 +548,12 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
                     adjustCustomWave(onMinus ? -1 : 1);
                     return;
                 }
+            }
+            if (isCustomLevel(i) && customEditRect().contains(
+                    QPointF(position.x, position.y))) {
+                selected_ = i;
+                openEditor();
+                return;
             }
             if (levelRect(i).contains(QPointF(position.x, position.y))) {
                 startLevel(i);
@@ -513,4 +592,337 @@ void Menu::toggleMute()
     if (!base_.toggleMute()) {
         base_.playSound(QStringLiteral("ui"));
     }
+}
+
+void Menu::openEditor()
+{
+    customWave_ = std::clamp(customWave_, 1, maxCustomWave());
+    editorRow_ = std::clamp(editorRow_, 0, customWaveCount() - 1);
+    editorColumn_ = std::clamp(editorColumn_, 0, EditorColumns - 1);
+    screen_ = Screen::Editor;
+    base_.playSound(QStringLiteral("ui"));
+}
+
+QString Menu::enemyKind(int column)
+{
+    static const std::array<QString, 4> kinds = {
+        QStringLiteral("drone"), QStringLiteral("spitter"),
+        QStringLiteral("tank"), QStringLiteral("splitter")};
+    if (column < 0 || column >= int(kinds.size())) {
+        return QString();
+    }
+    return kinds[size_t(column)];
+}
+
+int Menu::enemyCount(int row, int column) const
+{
+    if (row < 0 || row >= customWaveCount() || column < 0 || column >= 4) {
+        return 0;
+    }
+    const QString kind = enemyKind(column);
+    for (const games::EnemySpawn &spawn : customScript_[size_t(row)].enemies) {
+        if (spawn.kind == kind) {
+            return spawn.count;
+        }
+    }
+    return 0;
+}
+
+void Menu::setEnemyCount(int row, int column, int count)
+{
+    if (row < 0 || row >= customWaveCount() || column < 0 || column >= 4) {
+        return;
+    }
+    std::vector<games::EnemySpawn> &enemies = customScript_[size_t(row)].enemies;
+    const QString kind = enemyKind(column);
+    for (auto it = enemies.begin(); it != enemies.end(); ++it) {
+        if (it->kind == kind) {
+            if (count <= 0) {
+                enemies.erase(it);
+            } else {
+                it->count = count;
+            }
+            return;
+        }
+    }
+    if (count > 0) {
+        enemies.push_back({kind, count});
+    }
+}
+
+bool Menu::waveHasBoss(int row) const
+{
+    if (row < 0 || row >= customWaveCount()) {
+        return false;
+    }
+    for (const games::EnemySpawn &spawn : customScript_[size_t(row)].enemies) {
+        if (spawn.kind == QStringLiteral("boss")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Menu::setWaveBoss(int row, bool on)
+{
+    // 一份台本只允许一个 Boss：先清掉所有波里的 Boss，再按需要在目标波放一个。
+    for (games::Wave &wave : customScript_) {
+        wave.enemies.erase(std::remove_if(wave.enemies.begin(), wave.enemies.end(),
+                                          [](const games::EnemySpawn &spawn) {
+                                              return spawn.kind == QStringLiteral("boss");
+                                          }),
+                           wave.enemies.end());
+    }
+    if (on && row >= 0 && row < customWaveCount()) {
+        customScript_[size_t(row)].enemies.push_back({QStringLiteral("boss"), 1});
+    }
+}
+
+void Menu::adjustEditorCell(int delta)
+{
+    if (delta == 0) {
+        return;
+    }
+    if (editorColumn_ == 4) {
+        setWaveBoss(editorRow_, !waveHasBoss(editorRow_));
+        base_.playSound(QStringLiteral("ui"));
+        return;
+    }
+    const int current = enemyCount(editorRow_, editorColumn_);
+    const int next = std::clamp(current + delta, 0, MaxEnemyCount);
+    if (next == current) {
+        return;
+    }
+    setEnemyCount(editorRow_, editorColumn_, next);
+    base_.playSound(QStringLiteral("ui"));
+}
+
+void Menu::addCustomWave()
+{
+    if (customWaveCount() >= MaxCustomWaves) {
+        return;
+    }
+    games::Wave wave;
+    if (!customScript_.empty()) {
+        // 复制最后一波的组成；Boss 不复制，全台本只留一个。
+        for (const games::EnemySpawn &spawn : customScript_.back().enemies) {
+            if (spawn.kind != QStringLiteral("boss")) {
+                wave.enemies.push_back(spawn);
+            }
+        }
+    }
+    customScript_.push_back(wave);
+    editorRow_ = customWaveCount() - 1;
+    base_.playSound(QStringLiteral("ui"));
+}
+
+void Menu::removeCustomWave()
+{
+    if (customWaveCount() <= 1) {
+        return;
+    }
+    customScript_.pop_back();
+    editorRow_ = std::min(editorRow_, customWaveCount() - 1);
+    customWave_ = std::clamp(customWave_, 1, maxCustomWave());
+    base_.playSound(QStringLiteral("ui"));
+}
+
+int Menu::totalCustomEnemies() const
+{
+    int total = 0;
+    for (const games::Wave &wave : customScript_) {
+        for (const games::EnemySpawn &spawn : wave.enemies) {
+            total += spawn.count;
+        }
+    }
+    return total;
+}
+
+QRectF Menu::editorRowRect(int row) const
+{
+    return QRectF(EditorLeft, EditorRowsTop + float(row) * EditorRowHeight,
+                  EditorRight - EditorLeft, EditorRowHeight);
+}
+
+QRectF Menu::editorCellRect(int row, int column) const
+{
+    const float width = (EditorRight - EditorLeft - EditorWaveColumn)
+                        / float(EditorColumns);
+    return QRectF(EditorLeft + EditorWaveColumn + float(column) * width,
+                  EditorRowsTop + float(row) * EditorRowHeight, width, EditorRowHeight);
+}
+
+QRectF Menu::editorMinusRect() const
+{
+    const QRectF cell = editorCellRect(editorRow_, editorColumn_);
+    return QRectF(cell.left() + 6.0f, cell.top() + 5.0f, 26.0f, cell.height() - 10.0f);
+}
+
+QRectF Menu::editorPlusRect() const
+{
+    const QRectF cell = editorCellRect(editorRow_, editorColumn_);
+    return QRectF(cell.right() - 32.0f, cell.top() + 5.0f, 26.0f, cell.height() - 10.0f);
+}
+
+QRectF Menu::editorAddWaveRect() const
+{
+    return QRectF(EditorLeft, 648.0f, 150.0f, 32.0f);
+}
+
+QRectF Menu::editorRemoveWaveRect() const
+{
+    return QRectF(EditorLeft + 162.0f, 648.0f, 150.0f, 32.0f);
+}
+
+QRectF Menu::editorDeployRect() const
+{
+    return QRectF(EditorRight - 300.0f, 648.0f, 140.0f, 32.0f);
+}
+
+QRectF Menu::editorBackRect() const
+{
+    return QRectF(EditorRight - 148.0f, 648.0f, 148.0f, 32.0f);
+}
+
+QRectF Menu::customEditRect() const
+{
+    const QRectF rect = levelRect(CustomLevelIndex);
+    return QRectF(float(rect.left()) + 16.0f, float(rect.bottom()) - 36.0f,
+                  132.0f, 26.0f);
+}
+
+void Menu::drawEditor()
+{
+    frame_.fill(QColor(2, 3, 9));
+    QPainter painter(&frame_);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    QLinearGradient background(0, 0, 0, GameConfig::ScreenHeight);
+    background.setColorAt(0.0, QColor(5, 15, 28));
+    background.setColorAt(0.6, QColor(3, 8, 18));
+    background.setColorAt(1.0, QColor(1, 3, 8));
+    painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
+                     background);
+
+    painter.save();
+    painter.setPen(QPen(QColor(23, 50, 70), 1.0f));
+    for (int x = 0; x < GameConfig::ScreenWidth; x += 80) {
+        painter.drawLine(x, 0, x, GameConfig::ScreenHeight);
+    }
+    for (int y = 0; y < GameConfig::ScreenHeight; y += 80) {
+        painter.drawLine(0, y, GameConfig::ScreenWidth, y);
+    }
+    painter.restore();
+
+    Base::text(painter, Base::techTinyFont(),
+               QStringLiteral("SCRIPT EDITOR  //  CUSTOM PROTOCOL"),
+               QColor(121, 176, 194),
+               {GameConfig::ScreenWidth / 2.0f, 70}, QStringLiteral("center"), 190);
+    Base::glowText(painter, Base::bigFont(), QStringLiteral("自定义协议"),
+                   Base::White, {GameConfig::ScreenWidth / 2.0f, 118},
+                   QStringLiteral("center"));
+    Base::text(painter, Base::smallFont(),
+               QStringLiteral("逐波编排敌方信号，ENTER 部署"), Base::Text,
+               {GameConfig::ScreenWidth / 2.0f, 154}, QStringLiteral("center"), 215);
+
+    Base::text(painter, Base::techSmallFont(),
+               QStringLiteral("%1 波 · %2 个目标 · 起始波次 %3")
+                   .arg(customWaveCount(), 2, 10, QChar('0'))
+                   .arg(totalCustomEnemies())
+                   .arg(customWave_, 2, 10, QChar('0')),
+               Base::Muted, {EditorLeft, 206}, QStringLiteral("midleft"), 210);
+
+    Base::text(painter, Base::techTinyFont(), QStringLiteral("WAVE"), Base::Muted,
+               {EditorLeft + 16.0f, EditorHeaderY}, QStringLiteral("midleft"), 200);
+    const std::array<QString, 5> labels = {
+        QStringLiteral("DRONE"), QStringLiteral("SPITTER"), QStringLiteral("TANK"),
+        QStringLiteral("SPLITTER"), QStringLiteral("BOSS")};
+    for (int column = 0; column < EditorColumns; ++column) {
+        const QRectF cell = editorCellRect(0, column);
+        Base::text(painter, Base::techTinyFont(), labels[size_t(column)], Base::Muted,
+                   {float(cell.center().x()), EditorHeaderY + 6.0f},
+                   QStringLiteral("center"), 200);
+    }
+    Base::strokeLine(painter, {EditorLeft, EditorHeaderY + 14.0f},
+                     {EditorRight, EditorHeaderY + 14.0f}, QColor(44, 78, 96), 1.0f);
+
+    for (int row = 0; row < customWaveCount(); ++row) {
+        const QRectF rowRect = editorRowRect(row);
+        const bool activeRow = row == editorRow_;
+        painter.fillRect(rowRect.adjusted(0.0f, 1.0f, 0.0f, -1.0f),
+                         activeRow ? QColor(8, 22, 36, 235) : QColor(6, 13, 24, 210));
+        Base::text(painter, Base::techSmallFont(),
+                   QStringLiteral("%1").arg(row + 1, 2, 10, QChar('0')),
+                   activeRow ? Base::Cyan : Base::Muted,
+                   {float(rowRect.left()) + 16.0f, float(rowRect.center().y())},
+                   QStringLiteral("midleft"), 220);
+
+        for (int column = 0; column < EditorColumns; ++column) {
+            const QRectF cell = editorCellRect(row, column);
+            const bool active = activeRow && column == editorColumn_;
+            if (active) {
+                Base::panel(painter, cell.adjusted(3.0f, 3.0f, -3.0f, -3.0f),
+                            Base::Cyan, 120, 6, QColor(9, 26, 40));
+            }
+            if (column == 4) {
+                const bool boss = waveHasBoss(row);
+                Base::text(painter, Base::techSmallFont(),
+                           boss ? QStringLiteral("BOSS") : QStringLiteral("—"),
+                           boss ? Base::Magenta : Base::Dim,
+                           {float(cell.center().x()), float(cell.center().y())},
+                           QStringLiteral("center"), boss ? 235 : 190);
+                continue;
+            }
+            const int count = enemyCount(row, column);
+            const QColor numberColor = count > 0 ? (active ? Base::White : Base::Text)
+                                                 : Base::Dim;
+            if (active) {
+                Base::text(painter, Base::techSmallFont(), QStringLiteral("-"),
+                           Base::Cyan,
+                           {float(editorMinusRect().center().x()),
+                            float(cell.center().y())},
+                           QStringLiteral("center"));
+                Base::text(painter, Base::techSmallFont(), QStringLiteral("+"),
+                           Base::Cyan,
+                           {float(editorPlusRect().center().x()),
+                            float(cell.center().y())},
+                           QStringLiteral("center"));
+            }
+            Base::text(painter, Base::techSmallFont(), QString::number(count),
+                       numberColor,
+                       {float(cell.center().x()), float(cell.center().y())},
+                       QStringLiteral("center"), active ? 240 : 210);
+        }
+    }
+
+    Base::panel(painter, editorAddWaveRect(), QColor(65, 104, 124), 210, 8,
+                QColor(7, 14, 25));
+    Base::panel(painter, editorRemoveWaveRect(), QColor(65, 104, 124), 210, 8,
+                QColor(7, 14, 25));
+    Base::panel(painter, editorDeployRect(), Base::Cyan, 225, 8, QColor(7, 18, 31));
+    Base::panel(painter, editorBackRect(), QColor(65, 104, 124), 210, 8,
+                QColor(7, 14, 25));
+    Base::text(painter, Base::techSmallFont(), QStringLiteral("N  新增波次"), Base::Text,
+               {float(editorAddWaveRect().center().x()),
+                float(editorAddWaveRect().center().y())},
+               QStringLiteral("center"));
+    Base::text(painter, Base::techSmallFont(), QStringLiteral("X  删除末波"), Base::Text,
+               {float(editorRemoveWaveRect().center().x()),
+                float(editorRemoveWaveRect().center().y())},
+               QStringLiteral("center"));
+    Base::text(painter, Base::techSmallFont(), QStringLiteral("ENTER  部署"), Base::Cyan,
+               {float(editorDeployRect().center().x()),
+                float(editorDeployRect().center().y())},
+               QStringLiteral("center"));
+    Base::text(painter, Base::techSmallFont(), QStringLiteral("ESC  返回"),
+               QColor(190, 215, 228),
+               {float(editorBackRect().center().x()),
+                float(editorBackRect().center().y())},
+               QStringLiteral("center"));
+
+    Base::text(painter, Base::tinyFont(),
+               QStringLiteral("↑ ↓ 选择波次    ← → 选择列    + / - 调整数量    N 加波    X 删末波    ENTER 部署    ESC 返回"),
+               QColor(105, 138, 158),
+               {GameConfig::ScreenWidth / 2.0f, GameConfig::ScreenHeight - 22.0f},
+               QStringLiteral("center"), 150);
 }

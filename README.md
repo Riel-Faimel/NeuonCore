@@ -36,7 +36,9 @@ cpp\dist\NeonCore\NeonCore.exe
 | `R` | 胜利 / 失败后重开 |
 | `Q` | 暂停界面返回标题 |
 
-标题页另有：`↑` `↓` / `W` `S` 切换关卡，`←` `→` / `A` `D` 调整“自定义协议”的起始波次（也可点卡片上的 `-` / `+`），`ENTER` 部署；`1` `2` `3` 直接开始对应关卡。
+标题页另有：`↑` `↓` / `W` `S` 切换关卡，`←` `→` / `A` `D` 调整“自定义协议”的起始波次（也可点卡片上的 `-` / `+`），`E` 或点卡片上的“编辑台本”进入台本编辑器，`ENTER` 部署；`1` `2` `3` 直接开始对应关卡。
+
+台本编辑器：`↑` `↓` / `W` `S` 选波次，`←` `→` / `A` `D` 选列（DRONE / SPITTER / TANK / SPLITTER / BOSS），`+` / `-` 调数量或开关 Boss，`N` 新增波次、`X` 删除末波（1–12 波，单格 0–20），`ENTER` 部署，`ESC` 返回。编辑结果只存在内存里，重启回到默认台本。
 
 ## 构建
 
@@ -136,7 +138,7 @@ cpp/
 
 `src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades` 两个 `namespace games` 组件，并拥有 `Random`、`Arena`、`Renderer`。一局游戏就是一个 `Games` 实例：`Menu` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Games` 负责局内状态机和调用顺序。
 
-`src/app/Menu/` 是顶层入口模块：负责主菜单、关卡选择（标准协议 / 核心突袭 / 自定义协议）、对局结果和结算界面。它持有进程级的 `Base` 服务和关卡表，按局构造 `Games` 并把 `Level` 传进去；“自定义协议”在菜单里调整起始波次（1–8），部署时写成 `Level.startWave`；`Games` 不再负责标题、失败/胜利画面，`Renderer` 不再负责标题和结算。
+`src/app/Menu/` 是顶层入口模块：负责主菜单、关卡选择（标准协议 / 核心突袭 / 自定义协议）、台本编辑、对局结果和结算界面。它持有进程级的 `Base` 服务和关卡表，按局构造 `Games` 并把 `Level` 传进去；“自定义协议”支持逐波编辑台本（1–12 波、四种敌人数量、单 Boss），部署时作为 `Level.script` 提交；`Games` 不再负责标题、失败/胜利画面，`Renderer` 不再负责标题和结算。
 
 `src/app/Arena/` 是模块目录：`Arena` 是全局模块类，只组合 `Combatants`、`Entities`、`Events`、`State` 四个 `namespace arena` 组件。`Fighter` 放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段、分数和玩家失败。
 
@@ -164,6 +166,7 @@ mingw32-make -j12 test
 - 死亡、失败、重新开始
 - 自定义关卡：起始波次上下界钳制，以及按所选波次开局
 - 运行时提交的台本：用一份临时两波台本开局，验证波数与出生队列都来自这份数据
+- 台本编辑器：增删波次、调格子数量、开关 Boss、部署后波数生效、Esc 返回
 - 完整 8 波自动游玩，直到击败 Boss
 - 音频初始化（可选：设置 `NEON_AUDIO_TEST=1`）
 - 输出到当前目录的 `smoke.log`
@@ -189,4 +192,4 @@ mingw32-make -j12 test
 - 鼠标指针是全局元素（`src/app/Pointer.*`）：窗口每帧把它叠在画面最上层，`Base::reticle()` 是唯一画法，所有界面共用同一个指针和同一个时钟（局内暂停时外弧也照常旋转）；窗口内隐藏系统光标，指针移出窗口时恢复系统箭头。
 - 第三方运行库：Qt 6（LGPLv3）与 FFmpeg（LGPLv2.1+）。分发时请保留相应的许可证信息，见 [`THIRD_PARTY.txt`](THIRD_PARTY.txt)。
 
-更多画面：[标题](screenshots/title.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)
+更多画面：[标题](screenshots/title.png) · [台本编辑器](screenshots/editor.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)
