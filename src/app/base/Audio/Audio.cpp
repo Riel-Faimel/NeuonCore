@@ -2,9 +2,13 @@
 
 #include <QAudioDevice>
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDataStream>
+#include <QDateTime>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QMediaDevices>
 #include <QSoundEffect>
@@ -30,12 +34,21 @@ struct Audio::Impl {
     bool audioInitialized = false;
     QHash<QString, QVector<QSoundEffect *>> pools;
     QHash<QString, int> next;
+    QElapsedTimer retry;   // 设备后到时的初始化重试节流
 
     ~Impl()
+    {
+        clear();
+    }
+
+    void clear()
     {
         for (const auto &pool : pools) {
             qDeleteAll(pool);
         }
+        pools.clear();
+        next.clear();
+        audioEnabled = false;
     }
 
     QByteArray makeWav(float duration, float freqStart, float freqEnd,
@@ -107,18 +120,32 @@ void Audio::init()
         return;
     }
     io.audioInitialized = true;
+    io.clear();
 
     if (QMediaDevices::defaultAudioOutput().isNull()) {
-        io.audioEnabled = false;
+        // 设备可能在启动之后才就绪（插耳机 / 蓝牙重连），play() 会节流重试。
         return;
     }
 
-    const QString dirPath =
+    // 每个进程写自己的子目录：同时开两个实例也不会覆盖对方正在加载的 WAV。
+    const QString rootPath =
         QStandardPaths::writableLocation(QStandardPaths::TempLocation)
         + QStringLiteral("/neon_core_cpp_audio");
+    QDir root;
+    if (!root.mkpath(rootPath)) {
+        return;
+    }
+    const QDateTime cutoff = QDateTime::currentDateTime().addDays(-1);
+    for (const QFileInfo &entry :
+         QDir(rootPath).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        if (entry.lastModified() < cutoff) {
+            QDir(entry.absoluteFilePath()).removeRecursively();
+        }
+    }
+    const QString dirPath = rootPath + QStringLiteral("/")
+                            + QString::number(QCoreApplication::applicationPid());
     QDir dir;
     if (!dir.mkpath(dirPath)) {
-        io.audioEnabled = false;
         return;
     }
 
@@ -175,8 +202,27 @@ void Audio::init()
 void Audio::play(const QString &name)
 {
     Impl &io = *impl_;
-    if (!io.audioEnabled || io.muted) {
+    if (io.muted) {
         return;
+    }
+    if (!io.audioEnabled) {
+        if (!io.audioInitialized) {
+            return;
+        }
+        // 启动时设备还没就绪：最多每 2 秒重试一次初始化，设备出现后声音自动恢复。
+        if (io.retry.isValid()) {
+            if (io.retry.elapsed() < 2000) {
+                return;
+            }
+            io.retry.restart();
+        } else {
+            io.retry.start();
+        }
+        io.audioInitialized = false;
+        init();
+        if (!io.audioEnabled) {
+            return;
+        }
     }
     const auto it = io.pools.find(name);
     if (it == io.pools.end() || it.value().isEmpty()) {

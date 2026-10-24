@@ -255,11 +255,19 @@ void Menu::drawMain()
                QStringLiteral("WASD 移动    LMB / J 射击    SPACE 冲刺"),
                QColor(105, 138, 158),
                {34, GameConfig::ScreenHeight - 34.0f}, QStringLiteral("midleft"), 150);
+    if (!base_.audioEnabled()) {
+        Base::text(painter, Base::tinyFont(), QStringLiteral("音频设备不可用"),
+                   Base::Amber,
+                   {34, GameConfig::ScreenHeight - 58.0f}, QStringLiteral("midleft"), 210);
+    }
+    const QString muteHint = base_.muted() ? QStringLiteral("M 已静音")
+                                           : QStringLiteral("M 静音");
     Base::text(painter, Base::tinyFont(),
                isCustomLevel(selected_)
-                   ? QStringLiteral("← / → 调整起始波次    E 编辑台本    ENTER 开始    M 静音")
-                   : QStringLiteral("↑ / ↓ 选择    ENTER 开始    M 静音"),
-               QColor(105, 138, 158),
+                   ? QStringLiteral("← / → 调整起始波次    E 编辑台本    ENTER 开始    ")
+                         + muteHint
+                   : QStringLiteral("↑ / ↓ 选择    ENTER 开始    ") + muteHint,
+               base_.muted() ? Base::Amber : QColor(105, 138, 158),
                {GameConfig::ScreenWidth - 34.0f, GameConfig::ScreenHeight - 34.0f},
                QStringLiteral("midright"), 150);
 }

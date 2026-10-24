@@ -84,6 +84,8 @@ cpp/src/
 
 `Base::Impl` 持有 `base::Input` 和 `base::Audio`；静态绘制/颜色/字体/准星接口转发给 `base::Paint`。`Base.h` 不暴露组件头。
 
+音频是进程级服务：`Audio` 在 `%TEMP%\neon_core_cpp_audio\<pid>` 下生成自己的 WAV（同时开两个实例不会互相覆盖），启动时设备还没就绪的话会在 `play()` 里节流重试初始化。
+
 指针是全局元素，不属于任何一局、也不属于任何画面：`Pointer` 持有指针位置和独立时钟，`GameWindow` 每帧在 `paintEvent` 里把它叠在 `Menu::frame()` 之上。所以主菜单、局内、强化、暂停、结算共用同一个指针，暂停时外弧也照常旋转。准星的画法只有一份，在 `base::Paint::reticle()`；窗口内隐藏系统光标，指针离开窗口时恢复系统箭头。
 
 ### Games
