@@ -33,6 +33,7 @@ struct Audio::Impl {
     bool audioEnabled = false;
     bool muted = false;
     bool audioInitialized = false;
+    float volume = 0.68f;
     QHash<QString, QVector<QSoundEffect *>> pools;
     QHash<QString, int> next;
     QElapsedTimer retry;   // 设备后到时的初始化重试节流
@@ -216,7 +217,7 @@ void Audio::init()
             auto *effect = new QSoundEffect();
             effect->setSource(url);
             effect->setLoopCount(1);
-            effect->setVolume(0.68);
+            effect->setVolume(io.volume);
             if (!io.outputDevice.isNull()) {
                 effect->setAudioDevice(io.outputDevice);
             }
@@ -273,6 +274,22 @@ void Audio::play(const QString &name)
         selected->stop();
     }
     selected->play();
+}
+
+void Audio::setVolume(float volume)
+{
+    Impl &io = *impl_;
+    io.volume = std::clamp(volume, 0.0f, 1.0f);
+    for (const auto &pool : io.pools) {
+        for (QSoundEffect *effect : pool) {
+            effect->setVolume(io.volume);
+        }
+    }
+}
+
+float Audio::volume() const
+{
+    return impl_->volume;
 }
 
 bool Audio::toggleMute()

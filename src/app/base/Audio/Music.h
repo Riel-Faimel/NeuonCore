@@ -20,6 +20,8 @@ public:
 
     void initialize();
     void setMuted(bool muted);
+    void setVolume(float volume);
+    float volume() const;
     bool playing() const;
     int trackCount() const;
     QString currentTrack() const;

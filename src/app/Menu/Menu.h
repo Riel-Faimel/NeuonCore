@@ -21,6 +21,7 @@ public:
         Match,
         Result,
         Editor,
+        Settings,
     };
 
     explicit Menu(bool enableAudio = true);
@@ -64,6 +65,7 @@ private:
     void drawMain();
     void drawResult();
     void drawEditor();
+    void drawSettings();
 
     // 默认战役台本：运行时提交给 Games，Menu 只负责写数据和选起点。
     static games::Script standardScript();
@@ -95,6 +97,17 @@ private:
     QRectF editorDeployRect() const;
     QRectF editorBackRect() const;
 
+    // 设置页：主菜单角落按钮 + 音效/背景音乐音量
+    QRectF settingsButtonRect() const;
+    QRectF settingsRowRect(int row) const;
+    QRectF settingsTrackRect(int row) const;
+    QRectF settingsBackRect() const;
+    void adjustSettingsVolume(int row, float delta);
+    void setSettingsVolumeFromPointer(const Math::Vec2 &position);
+    static QString settingsPath();
+    void loadSettings();
+    void saveSettings();
+
     Base base_;
     std::unique_ptr<Games> games_;
     std::vector<Games::Level> levels_;
@@ -105,6 +118,8 @@ private:
     int selected_ = 0;
     int editorRow_ = 0;
     int editorColumn_ = 0;
+    int settingsRow_ = 0;
+    bool draggingVolume_ = false;
     float menuTime_ = 0.0f;
     bool mouseActive_ = false;
     bool audioRequested_ = false;

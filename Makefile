@@ -46,6 +46,8 @@ BASE_COMPONENTS := Base Input/Input Audio/Audio Audio/Music Paint/Paint
 BASE_OBJS := $(addprefix $(BUILD)/app/Base/,$(addsuffix .o,$(BASE_COMPONENTS)))
 MAIN_RELEASE_OBJ := $(BUILD)/app/main_release.o
 MAIN_TEST_OBJ := $(BUILD)/app/main_test.o
+RC := $(MINGWDIR)/bin/windres.exe
+ICON_RES_OBJ := $(BUILD)/app/app_res.o
 
 ARENA_COMPONENTS := Arena Combatants/Combatants Entities/Entities Events State \
                     Combatants/Player Combatants/Enemy \
@@ -54,7 +56,7 @@ ARENA_COMPONENTS := Arena Combatants/Combatants Entities/Entities Events State \
 ARENA_OBJS := $(addprefix $(BUILD)/app/Arena/,$(addsuffix .o,$(ARENA_COMPONENTS)))
 
 SHARED_OBJS := $(BASE_OBJS) $(LIB_OBJS) $(APP_OBJS) $(GAMES_OBJS) $(MENU_OBJ) $(ARENA_OBJS)
-RELEASE_OBJS := $(SHARED_OBJS) $(MAIN_RELEASE_OBJ)
+RELEASE_OBJS := $(SHARED_OBJS) $(MAIN_RELEASE_OBJ) $(ICON_RES_OBJ)
 TEST_OBJS := $(SHARED_OBJS) $(MAIN_TEST_OBJ)
 DEPS := $(RELEASE_OBJS:.o=.d) $(TEST_OBJS:.o=.d)
 
@@ -111,6 +113,10 @@ $(MAIN_RELEASE_OBJ): src/app/main.cpp | $(BUILD)
 $(MAIN_TEST_OBJ): src/app/main.cpp | $(BUILD)
 	@echo [CXX] $< (debug/tests)
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -DDEBUG -c $< -o $@
+
+$(ICON_RES_OBJ): src/app/app.rc assets/icon.ico | $(BUILD)
+	@echo [RC] $<
+	@$(RC) -I assets -i $< -o $@
 
 $(BUILD)/NeonCoreConsole.exe: $(TEST_OBJS)
 	@echo [LD] $@ (debug/tests)

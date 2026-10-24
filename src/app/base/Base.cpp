@@ -93,6 +93,31 @@ void Base::playSound(const QString &name)
     impl_->audio.play(name);
 }
 
+void Base::setSoundVolume(float volume)
+{
+    impl_->audio.setVolume(volume);
+}
+
+float Base::soundVolume() const
+{
+    return impl_->audio.volume();
+}
+
+void Base::setMusicVolume(float volume)
+{
+    impl_->music.setVolume(volume);
+}
+
+float Base::musicVolume() const
+{
+    return impl_->music.volume();
+}
+
+QPixmap Base::appIcon(int size)
+{
+    return base::Paint::appIcon(size);
+}
+
 bool Base::toggleMute()
 {
     const bool muted = impl_->audio.toggleMute();
@@ -142,6 +167,12 @@ const QFont &Base::techLargeFont() { return base::Paint::techLargeFont(); }
 void Base::reticle(QPainter &painter, const Math::Vec2 &center, float time)
 {
     base::Paint::reticle(painter, center, time);
+}
+
+void Base::gear(QPainter &painter, const Math::Vec2 &center, float radius,
+                const QColor &color)
+{
+    base::Paint::gear(painter, center, radius, color);
 }
 
 QColor Base::shade(const QColor &color, float factor)

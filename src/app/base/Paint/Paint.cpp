@@ -2,8 +2,10 @@
 
 #include <QFontDatabase>
 #include <QFontMetricsF>
+#include <QLinearGradient>
 #include <QPainterPath>
 #include <QPen>
+#include <QPixmap>
 
 #include <algorithm>
 #include <array>
@@ -197,6 +199,95 @@ void Paint::reticle(QPainter &painter, const Math::Vec2 &center, float time)
     }
     arcRadians(painter, center, 22.0f, time * 0.8f, 1.2f,
                QColor(81, 169, 190), 1.0f);
+}
+
+void Paint::gear(QPainter &painter, const Math::Vec2 &center, float radius,
+                 const QColor &color)
+{
+    painter.save();
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    const float toothWidth = radius * 0.42f;
+    const float toothLength = radius * 0.36f;
+    for (int i = 0; i < 8; ++i) {
+        painter.save();
+        painter.translate(center.x, center.y);
+        painter.rotate(22.5f + float(i) * 45.0f);
+        painter.drawRoundedRect(
+            QRectF(-toothWidth * 0.5f, -radius - toothLength * 0.2f,
+                   toothWidth, toothLength),
+            toothWidth * 0.22f, toothWidth * 0.22f);
+        painter.restore();
+    }
+    QPainterPath ring;
+    ring.addEllipse(QPointF(center.x, center.y), radius * 0.78f, radius * 0.78f);
+    ring.addEllipse(QPointF(center.x, center.y), radius * 0.34f, radius * 0.34f);
+    ring.setFillRule(Qt::OddEvenFill);
+    painter.fillPath(ring, color);
+    painter.restore();
+}
+
+QPixmap Paint::appIcon(int size)
+{
+    constexpr int canvas = 256;
+    QPixmap pixmap(size, size);
+    pixmap.fill(Qt::transparent);
+    if (size <= 0) {
+        return pixmap;
+    }
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.scale(float(size) / float(canvas), float(size) / float(canvas));
+
+    QLinearGradient background(0, 0, 0, canvas);
+    background.setColorAt(0.0, QColor(10, 26, 48));
+    background.setColorAt(0.55, QColor(5, 12, 26));
+    background.setColorAt(1.0, QColor(1, 3, 8));
+    painter.setBrush(background);
+    painter.setPen(QPen(withAlpha(Cyan, 160), 6.0f));
+    painter.drawRoundedRect(QRectF(7, 7, canvas - 14, canvas - 14), 52, 52);
+
+    const Math::Vec2 center(canvas * 0.5f, canvas * 0.5f);
+
+    // 准星语言：左右两段外弧
+    arcRadians(painter, center, 96.0f, -0.72f, 1.22f, withAlpha(Cyan, 190), 4.0f);
+    arcRadians(painter, center, 96.0f, Math::Pi - 0.72f, 1.22f,
+               withAlpha(Magenta, 180), 4.0f);
+
+    // 六边形“星核”
+    const auto hexagon = [&](float radius, QPolygonF &points) {
+        points.clear();
+        for (int i = 0; i < 6; ++i) {
+            const float angle = -Math::Pi * 0.5f + Math::Pi / 3.0f * float(i);
+            points.append(QPointF(center.x + std::cos(angle) * radius,
+                                  center.y + std::sin(angle) * radius));
+        }
+    };
+    QPolygonF outer;
+    hexagon(78.0f, outer);
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(withAlpha(Cyan, 55), 14.0f));
+    painter.drawPolygon(outer);
+    painter.setPen(QPen(withAlpha(Cyan, 235), 5.0f));
+    painter.drawPolygon(outer);
+
+    QPolygonF inner;
+    hexagon(52.0f, inner);
+    painter.setBrush(withAlpha(Cyan, 36));
+    painter.setPen(QPen(withAlpha(Cyan, 120), 2.0f));
+    painter.drawPolygon(inner);
+
+    // 核心光点
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(withAlpha(Cyan, 45));
+    painter.drawEllipse(QPointF(center.x, center.y), 34.0, 34.0);
+    painter.setBrush(Cyan);
+    painter.drawEllipse(QPointF(center.x, center.y), 17.0, 17.0);
+    painter.setBrush(White);
+    painter.drawEllipse(QPointF(center.x, center.y), 8.0, 8.0);
+
+    painter.end();
+    return pixmap;
 }
 
 void Paint::polygon(QPainter &painter, const QPolygonF &points,

@@ -60,6 +60,7 @@ cpp/src/
 │  ├─ Menu/Menu.h / Menu.cpp
 │  ├─ Renderer.h / Renderer.cpp
 │  ├─ Pointer.h / Pointer.cpp
+│  ├─ app.rc
 │  └─ main.cpp
 ├─ lib/
 │  ├─ Math.h / Math.cpp
@@ -82,7 +83,7 @@ cpp/src/
 | `Input` | 键鼠状态、移动轴、射击状态 |
 | `Audio` | 程序化 WAV 音效、QSoundEffect 池、设备重试、静音 |
 | `Music` | 背景音乐管理：固定目录轮转、设备等待、静音；播放器常驻，不随界面重建 |
-| `Paint` | 颜色、字体、文字排版、发光、条形/面板等绘制原语，以及鼠标准星 |
+| `Paint` | 颜色、字体、文字排版、发光、条形/面板等绘制原语，鼠标准星、齿轮与应用图标 |
 
 `Base::Impl` 持有 `base::Input` 和 `base::Audio`；静态绘制/颜色/字体/准星接口转发给 `base::Paint`。`Base.h` 不暴露组件头。
 
@@ -116,6 +117,7 @@ cpp/src/
 
 - 主菜单和关卡选择；
 - 台本编辑器（`Screen::Editor`）：逐波编辑波数与四种敌人数量、设置唯一 Boss；选中“自定义协议”时点击卡片或 `ENTER` 即进入编辑器。编辑结果只存在 `customScript_` 里，部署时作为 `Games::Level.script` 提交，固定从第 1 波开始；
+- 设置页（`Screen::Settings`）：主菜单右上角齿轮进入，调整音效 / 背景音乐音量；改动立即应用到 `Audio` / `Music` 的 `setVolume()`，并通过 `QSettings` 写入 exe 同级的 `settings.ini`；
 - 定义每个关卡的安排：展示信息、起始波次，以及这一局的台本（`games::Script`，标准协议从第 1 波开始），开局时把 `Games::Level` 传给 `Games` 构造；
 - 回到主菜单或重新部署时销毁旧的 `Games`，下一局重新构造；
 - 把主菜单/局内/结算输入路由给 `Games`；
@@ -237,6 +239,7 @@ GameWindow::tick()
 ├─ Menu::render()
 │  ├─ Main:   绘制菜单
 │  ├─ Editor: 绘制台本表格
+│  ├─ Settings: 绘制设置页
 │  ├─ Match:  Games::render() → Renderer
 │  └─ Result: Games::render() + Menu 结算覆盖层
 └─ QWidget::update()

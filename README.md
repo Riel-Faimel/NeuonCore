@@ -41,6 +41,14 @@ cpp\dist\NeonCore\NeonCore.exe
 
 台本编辑器：`↑` `↓` / `W` `S` 选波次，`←` `→` / `A` `D` 选列（DRONE / SPITTER / TANK / SPLITTER / BOSS），`+` / `-` 调数量或开关 Boss，`N` 新增波次、`X` 删除末波（1–12 波，单格 0–20），`ENTER` 部署，`ESC` 返回。编辑结果只存在内存里，重启回到默认台本。
 
+## 设置
+
+主菜单右上角的齿轮按钮进入设置页，可以分别调整 **音效音量** 和 **背景音乐音量**（0–100%）：
+
+- `↑` `↓` 选择行，`←` `→` 调整（每次 5%），也可以直接点/拖进度条；
+- `ESC` 返回主菜单；调整立即生效；
+- 音量保存到 **exe 同级的 `settings.ini`**（`QSettings` 的 INI 格式），下次启动自动恢复。
+
 ## 构建
 
 需要：
@@ -116,9 +124,10 @@ cpp/
 │  │  │  ├─ Games.h / Games.cpp   模块入口：局内状态机与组件编排
 │  │  │  ├─ Waves/Waves.h/.cpp    组件：按提交的台本出生敌人
 │  │  │  └─ Upgrades/Upgrades.h/.cpp 组件：强化池、抽取与应用
-│  │  ├─ Menu/Menu.h/.cpp          主菜单、关卡选择、台本编辑、结算
+│  │  ├─ Menu/Menu.h/.cpp          主菜单、关卡选择、台本编辑、设置、结算
 │  │  ├─ Renderer.h / Renderer.cpp 局内背景、发光、HUD、卡片、暂停
 │  │  ├─ Pointer.h / Pointer.cpp  全局鼠标指针（窗口每帧叠加）
+│  │  ├─ app.rc                   Windows 资源：嵌入应用图标
 │  │  └─ main.cpp                 QWidget 窗口、输入桥接、release 入口
 │  ├─ lib/
 │  │  ├─ Math.h / Math.cpp        向量与几何
@@ -131,6 +140,9 @@ cpp/
 ├─ build.bat                      调用 mingw32-make -j12 deploy
 ├─ Makefile                       mingw32-make -j12 并行构建
 ├─ run.bat
+├─ assets/
+│  ├─ icon.png                    应用图标（--capture 输出的 256px 版本）
+│  └─ icon.ico                    多尺寸图标，由 app.rc 嵌入 exe
 ├─ ARCHITECTURE.md                模块边界、依赖和扩展指南
 ├─ screenshots/
 └─ dist/NeonCore/                 交付用 release GUI + 运行库
@@ -155,9 +167,17 @@ cpp/
 - 打包/交付版的目录是 `dist\NeonCore\music\`，直接把音乐文件丢进去即可；
 - 支持的扩展名：`.mp4` `.m4a` `.mp3` `.flac` `.ogg` `.opus` `.wav` `.aac`（MP4 只取音频轨）；
 - 想换目录可以设置环境变量 `NEON_MUSIC_DIR`（例如 `set NEON_MUSIC_DIR=D:\Music\NeonCore`）；
-- 音量固定为 45%，`M` 静音会同时静音背景音乐和音效；
+- 音量固定为 45%（可在设置页调整），`M` 静音会同时静音背景音乐和音效；
 - 播放器只创建一次并常驻：切换界面、开局/结算、音频重试都不会重新起播，只有一首放完才切下一首；
 - 排查音频问题可设置 `NEON_AUDIO_LOG=1`，事件会写到 `%TEMP%\neon_core_audio.log`。
+
+## 应用图标
+
+图标也是代码绘制的（`Base::appIcon()` → `Paint::appIcon()`），没有任何外部图片依赖：
+
+- 窗口/任务栏：构造窗口时按 16/24/32/48/64/128/256 多档渲染成 `QIcon`；
+- 资源管理器里的 exe 图标：`src/app/app.rc` 把 `assets/icon.ico`（多尺寸，由 `assets/icon.png` 转出）嵌入 release 可执行文件；
+- 修改图标后重新跑 `--capture` 会生成新的 `build/capture/icon.png`，转成多尺寸 `assets/icon.ico` 再 `make deploy` 即可。
 
 窗口内部固定以 **1280×720** 逻辑尺寸渲染，并按屏幕 DPI 调整窗口物理尺寸，保证在 125%/150%/200% 缩放下仍能完整看到 1280×720 的游戏画面。模块细节见 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
 
@@ -182,6 +202,7 @@ mingw32-make -j12 test
 - 运行时提交的台本：用一份临时两波台本开局，验证波数与出生队列都来自这份数据
 - 完整 8 波自动游玩，直到击败 Boss
 - 音频初始化（可选：设置 `NEON_AUDIO_TEST=1`）
+- 设置页：齿轮按钮进入、音效/背景音乐音量增减、点击进度条设值、Esc 返回
 - 输出到当前目录的 `smoke.log`
 
 重新生成离屏截图：
@@ -205,4 +226,4 @@ mingw32-make -j12 test
 - 鼠标指针是全局元素（`src/app/Pointer.*`）：窗口每帧把它叠在画面最上层，`Base::reticle()` 是唯一画法，所有界面共用同一个指针和同一个时钟（局内暂停时外弧也照常旋转）；窗口内隐藏系统光标，指针移出窗口时恢复系统箭头。
 - 第三方运行库：Qt 6（LGPLv3）与 FFmpeg（LGPLv2.1+）。分发时请保留相应的许可证信息，见 [`THIRD_PARTY.txt`](THIRD_PARTY.txt)。
 
-更多画面：[标题](screenshots/title.png) · [台本编辑器](screenshots/editor.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)
+更多画面：[标题](screenshots/title.png) · [设置](screenshots/settings.png) · [台本编辑器](screenshots/editor.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)

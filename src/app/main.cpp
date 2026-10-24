@@ -52,21 +52,12 @@ public:
         setAttribute(Qt::WA_OpaquePaintEvent);
         setCursor(Qt::BlankCursor);
 
-        QPixmap icon(32, 32);
-        icon.fill(Qt::transparent);
-        {
-            QPainter painter(&icon);
-            painter.setRenderHint(QPainter::Antialiasing, true);
-            painter.setPen(QPen(Base::Cyan, 2));
-            painter.setBrush(Qt::NoBrush);
-            const QPolygonF ship({QPointF(16, 3), QPointF(28, 27),
-                                  QPointF(16, 21), QPointF(4, 27)});
-            painter.drawPolygon(ship);
-            painter.setPen(Qt::NoPen);
-            painter.setBrush(QColor(220, 253, 255));
-            painter.drawEllipse(QPointF(16, 15), 3, 3);
+        // 应用图标由代码绘制：一次生成多档尺寸，窗口/任务栏都用它。
+        QIcon icon;
+        for (int size : {16, 24, 32, 48, 64, 128, 256}) {
+            icon.addPixmap(Base::appIcon(size));
         }
-        setWindowIcon(QIcon(icon));
+        setWindowIcon(icon);
 
         menu_.render();
         clock_.start();

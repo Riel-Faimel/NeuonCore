@@ -13,6 +13,8 @@
 #include <QTimer>
 #include <QUrl>
 
+#include <algorithm>
+
 namespace base {
 
 struct Music::Impl {
@@ -24,6 +26,7 @@ struct Music::Impl {
     int failures = 0;
     bool muted = false;
     bool scanned = false;
+    float volume = 0.45f;
 
     static void logEvent(const QString &message)
     {
@@ -97,7 +100,7 @@ struct Music::Impl {
                 device = outputs.first();
             }
             output = new QAudioOutput();
-            output->setVolume(0.45f);
+            output->setVolume(volume);
             output->setMuted(muted);
             output->setDevice(device);
             player = new QMediaPlayer();
@@ -147,6 +150,19 @@ void Music::setMuted(bool muted)
     if (impl_->output != nullptr) {
         impl_->output->setMuted(muted);
     }
+}
+
+void Music::setVolume(float volume)
+{
+    impl_->volume = std::clamp(volume, 0.0f, 1.0f);
+    if (impl_->output != nullptr) {
+        impl_->output->setVolume(impl_->volume);
+    }
+}
+
+float Music::volume() const
+{
+    return impl_->volume;
 }
 
 bool Music::playing() const

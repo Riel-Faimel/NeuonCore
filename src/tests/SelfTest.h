@@ -357,6 +357,36 @@ public:
                            QStringLiteral("clicking the custom card opens the editor"));
         menu.keyPress(Qt::Key_Escape);
 
+        log(QStringLiteral("Settings"));
+        const QRectF gear = menu.settingsButtonRect();
+        menu.mousePressLeft({float(gear.center().x()), float(gear.center().y())});
+        menu.mouseReleaseLeft();
+        success &= require(menu.screen() == Menu::Screen::Settings,
+                           QStringLiteral("settings button opens settings"));
+        menu.base_.setSoundVolume(0.5f);
+        menu.base_.setMusicVolume(0.5f);
+        menu.keyPress(Qt::Key_Down);
+        menu.keyPress(Qt::Key_Left);
+        success &= require(menu.base_.musicVolume() < 0.5f,
+                           QStringLiteral("left lowers the music volume"));
+        menu.keyPress(Qt::Key_Right);
+        success &= require(std::abs(menu.base_.musicVolume() - 0.5f) < 0.001f,
+                           QStringLiteral("right raises the music volume"));
+        menu.keyPress(Qt::Key_Up);
+        menu.keyPress(Qt::Key_Left);
+        success &= require(menu.base_.soundVolume() < 0.5f,
+                           QStringLiteral("left lowers the sound volume"));
+        const QRectF musicTrack = menu.settingsTrackRect(1);
+        menu.keyPress(Qt::Key_Down);
+        menu.mousePressLeft({float(musicTrack.left()) + float(musicTrack.width()) * 0.25f,
+                             float(musicTrack.center().y())});
+        menu.mouseReleaseLeft();
+        success &= require(std::abs(menu.base_.musicVolume() - 0.25f) < 0.02f,
+                           QStringLiteral("clicking the track sets the volume"));
+        menu.keyPress(Qt::Key_Escape);
+        success &= require(menu.screen() == Menu::Screen::Main,
+                           QStringLiteral("escape leaves settings"));
+
         log(QStringLiteral("Submitted script"));
         games::Script shortScript;
         shortScript.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("drone"), 2},
@@ -411,6 +441,15 @@ public:
         }
         movePointer({GameConfig::ScreenWidth / 2.0f, 454.0f});
         save(QStringLiteral("title.png"));
+
+        // 应用图标（程序化绘制）
+        Base::appIcon(256).save(dir.filePath(QStringLiteral("icon.png")));
+        const QRectF settingsEntry = menu.settingsButtonRect();
+        menu.mousePressLeft({float(settingsEntry.center().x()),
+                             float(settingsEntry.center().y())});
+        menu.mouseReleaseLeft();
+        save(QStringLiteral("settings.png"));
+        menu.keyPress(Qt::Key_Escape);
 
         const QRectF customCard = menu.levelRect(Menu::CustomLevelIndex);
         movePointer({float(customCard.center().x()), float(customCard.center().y())});

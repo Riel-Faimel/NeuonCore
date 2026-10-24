@@ -5,6 +5,7 @@
 #include <QColor>
 #include <QFont>
 #include <QPainter>
+#include <QPixmap>
 #include <QPolygonF>
 #include <QRectF>
 #include <QString>
@@ -60,6 +61,11 @@ public:
                            const QColor &color, float width = 1.0f);
     // 鼠标准星：局内、主菜单、结算共用这一套画法（外弧按 time 旋转）。
     static void reticle(QPainter &painter, const Math::Vec2 &center, float time);
+    // 齿轮图标（设置按钮用）：八个齿 + 中间的圆环。
+    static void gear(QPainter &painter, const Math::Vec2 &center, float radius,
+                     const QColor &color);
+    // 应用图标：程序化绘制的“星核”，按 size 直接渲染（不加载外部图片）。
+    static QPixmap appIcon(int size);
     static void polygon(QPainter &painter, const QPolygonF &points,
                         const QColor &fill, const QColor &outline, float width = 1.0f);
     static void glow(QPainter &glowPainter, const Math::Vec2 &pos, float radius,

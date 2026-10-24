@@ -5,6 +5,7 @@
 #include <QColor>
 #include <QFont>
 #include <QPainter>
+#include <QPixmap>
 #include <QPolygonF>
 #include <QRectF>
 #include <QString>
@@ -12,7 +13,7 @@
 
 #include <memory>
 
-// Base 是全局模块类，组合 namespace base 的 Input / Audio / Paint 组件。
+// Base 是全局模块类，组合 namespace base 的 Input / Audio / Music / Paint 组件。
 // 对外仍只暴露 Base 这一组接口，组件细节不泄露给业务模块。
 class Base {
 public:
@@ -37,12 +38,19 @@ public:
     Math::Vec2 mousePosition() const;
     void setMouseActive(bool active);
 
-    // ----- 音频（转发 base::Audio） -----
+    // ----- 音频（转发 base::Audio / base::Music） -----
     void initAudio();
     void playSound(const QString &name);
+    void setSoundVolume(float volume);
+    float soundVolume() const;
+    void setMusicVolume(float volume);
+    float musicVolume() const;
     bool toggleMute();
     bool muted() const;
     bool audioEnabled() const;
+
+    // 程序化绘制的应用图标（窗口/任务栏用），不读取外部图片。
+    static QPixmap appIcon(int size);
 
     // ----- 颜色（来自 base::Paint） -----
     static const QColor &Ink;
@@ -77,6 +85,9 @@ public:
 
     // 鼠标准星：全应用唯一的指针画法（局内、主菜单、结算都调用它）。
     static void reticle(QPainter &painter, const Math::Vec2 &center, float time);
+    // 齿轮图标（设置入口用）。
+    static void gear(QPainter &painter, const Math::Vec2 &center, float radius,
+                     const QColor &color);
 
     static QColor shade(const QColor &color, float factor);
     static QColor withAlpha(const QColor &color, int alpha);

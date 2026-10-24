@@ -6,8 +6,8 @@
 
 namespace base {
 
-// Audio 组件：程序化 WAV 音效池 + 固定目录里的 MP4 背景音乐轮转。
-// QSoundEffect / QMediaPlayer 的细节封装在 Impl。
+// Audio 组件：程序化 WAV 音效池（背景音乐见 Music 组件）。
+// QSoundEffect 的细节封装在 Impl。
 class Audio {
 public:
     Audio();
@@ -18,6 +18,8 @@ public:
 
     void init();
     void play(const QString &name);
+    void setVolume(float volume);
+    float volume() const;
     bool toggleMute();
     bool muted() const;
     bool enabled() const;
