@@ -24,6 +24,8 @@ public:
 
     int currentWave() const { return currentWave_; }
     int totalWaves() const { return TotalWaves; }
+    // 波次总数是波次表的属性，局外需要合法范围时从这里取。
+    static int waveCount() { return TotalWaves; }
     int totalEnemies() const { return waveTotal_; }
     int remainingThreats() const;
     bool isCleared() const;

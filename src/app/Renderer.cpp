@@ -74,14 +74,6 @@ void Renderer::showBanner(const QString &title, const QString &subtitle, float d
     bannerColor_ = color;
 }
 
-void Renderer::resetTransient()
-{
-    shake_ = 0.0f;
-    flashAlpha_ = 0.0f;
-    bannerTimer_ = 0.0f;
-    sparks_.clear();
-}
-
 void Renderer::burstConfetti()
 {
     const std::array<QColor, 4> colors = {
@@ -301,8 +293,6 @@ void Renderer::render(const Games &game, const Arena &arena, const games::Waves 
         break;
     case Games::State::Victory:
     case Games::State::Defeat:
-        break;
-    case Games::State::Idle:
         break;
     }
 }

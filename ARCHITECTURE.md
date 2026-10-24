@@ -92,9 +92,9 @@ cpp/src/
 | `Waves` | 波次表、Boss 波、出生队列、出生间隔 |
 | `Upgrades` | 强化定义、可选性、三选一、叠加、效果应用 |
 
-`Games` 还拥有 `Base`、`Arena`、`Renderer`、`Random`，负责：
+`Games` 还拥有 `Random`、`Arena`、`Renderer`（`Base` 由 `Menu` 持有，以引用传入），负责：
 
-- 一局内的 `Idle / Playing / Upgrade / Paused / Victory / Defeat` 状态；
+- 一局内的 `Playing / Upgrade / Paused / Victory / Defeat` 状态；
 - 将输入转发给 `Base` / `Arena`；
 - 推进 `Arena` 和 `games::Waves`；
 - 波次清空后打开 `games::Upgrades`；
@@ -103,14 +103,16 @@ cpp/src/
 
 ### Menu
 
-`Menu` 是顶层界面模块，持有 `Games`，负责：
+`Menu` 是顶层界面模块，持有进程级的 `Base`、关卡表，以及当前这一局的 `Games`，负责：
 
 - 主菜单和关卡选择；
-- 创建不同关卡配置（标准协议从第 1 波开始，核心突袭从第 8 波开始）；
+- 定义每个关卡的安排（标准协议从第 1 波开始，核心突袭从第 8 波开始，自定义协议由菜单上的 `-` / `+` 或 `←` / `→` 选 1–8 波），开局时把 `Games::Level` 传给 `Games` 构造；
+- 回到主菜单或重新部署时销毁旧的 `Games`，下一局重新构造；
 - 把主菜单/局内/结算输入路由给 `Games`；
 - 在对局结束后读取 `Games` 的得分、击杀、波次、时间；
 - 绘制失败/胜利结算界面和“重新部署/返回主菜单”操作。
 
+`Games` 一旦构造就接管这一局的安排，不再对外暴露；`Menu` 只保留展示用的关卡表。
 `Menu` 不参与战斗、波次或强化计算。
 
 ### Arena
@@ -184,9 +186,9 @@ public:
 
 ```text
 GameWindow
-└─ Menu
-   └─ Games
-      ├─ Base ─────► base::Input / Audio / Paint
+└─ Menu（持有 Base、关卡表，按局构造 Games）
+   └─ Games(Level, Base&)   ← 一局一个实例
+      ├─ Base ─────► base::Input / Audio / Paint（引用，由 Menu 持有）
       ├─ Arena ────► arena::Combatants / Entities / Events / State
       ├─ games::Waves ─────► Arena, Random
       ├─ games::Upgrades ──► Arena, Base, Random
@@ -196,8 +198,8 @@ GameWindow
 
 依赖是单向的：
 
-- `Menu` 持有 `Games`，负责主菜单、关卡选择和结算。
-- `Games` 只负责一局内的逻辑，不知道 `Menu`。
+- `Menu` 持有 `Base`、关卡表和一局的 `Games`，负责主菜单、关卡选择和结算。
+- `Games` 只负责一局内的逻辑，不知道 `Menu`；一局的安排由构造参数进入，之后不再外泄。
 - `Games` 只通过 `Arena` 公共接口访问战斗世界。
 - `Waves` / `Upgrades` 不知道 UI。
 - `Renderer` 只读局内业务状态，不再画标题和结算。
@@ -253,7 +255,9 @@ GameWindow::tick()
 {id, name, subtitle, startWave}
 ```
 
-`Menu` 负责创建 `Games`、选择起始波次；`Games` 只接收 `Level` 并开始一局。
+`Menu` 负责构造 `Games`，把这条 `Level` 作为构造参数传进去；`Games` 接收后即开局，并只在内部使用它。
+
+“自定义协议”是同一套机制的动态版本：`levels_` 里放固定条目，`customWave_` 保存玩家选的起始波次，`Menu::startLevel()` 在构造前把它写进 `Level.startWave`。可选范围来自 `Games::waveCount()`，不在 `Menu` 里重复写死波数。
 
 ### 加一个结算字段
 
@@ -292,6 +296,8 @@ GameWindow::tick()
 
 - 数值表仍是 C++ 静态表，不是 JSON。
 - 敌人/强化/音效仍用字符串 ID。
+- 一局一个 `Games`：`Base`（输入/音频/字体）是进程级服务，由 `Menu` 持有，否则切局会重复初始化音频。
+- 一局的安排只经构造参数进入 `Games`；`Games` 不提供任何读回安排的接口，`Menu` 只保留展示用的关卡表。
 - `Arena` 对 `games::Upgrades` 开放玩家状态编辑权限；这是必要的模块间 friend。
 - 组件之间的 private 访问通过 friend 完成；它们属于同一个模块。
 - 没有 ECS。当前 4 个 Arena 组件 + 2 个 Games 组件的粒度更适合这个规模。

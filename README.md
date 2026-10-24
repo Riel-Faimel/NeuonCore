@@ -36,6 +36,8 @@ cpp\dist\NeonCore\NeonCore.exe
 | `R` | 胜利 / 失败后重开 |
 | `Q` | 暂停界面返回标题 |
 
+标题页另有：`↑` `↓` / `W` `S` 切换关卡，`←` `→` / `A` `D` 调整“自定义协议”的起始波次（也可点卡片上的 `-` / `+`），`ENTER` 部署；`1` `2` `3` 直接开始对应关卡。
+
 ## 构建
 
 需要：
@@ -131,9 +133,9 @@ cpp/
 
 `src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Paint` 三个 `namespace base` 组件。`Base.h` 仍只暴露 Base 的输入/音频/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Paint` 的 QFontDatabase 细节都在各自组件内。
 
-`src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades` 两个 `namespace games` 组件，并拥有 `Base`、`Arena`、`Renderer`。`Waves` 只生成波次/传送门，`Upgrades` 只管理强化，`Games` 负责局内状态机和调用顺序。
+`src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades` 两个 `namespace games` 组件，并拥有 `Random`、`Arena`、`Renderer`。一局游戏就是一个 `Games` 实例：`Menu` 在开局时用这一局的安排（`Games::Level`）构造它，回到主菜单即销毁。`Waves` 只生成波次/传送门，`Upgrades` 只管理强化，`Games` 负责局内状态机和调用顺序。
 
-`src/app/Menu/` 是顶层入口模块：负责主菜单、关卡选择（标准协议/核心突袭）、对局结果和结算界面。`Games` 不再负责标题、失败/胜利画面；`Renderer` 不再负责标题和结算。
+`src/app/Menu/` 是顶层入口模块：负责主菜单、关卡选择（标准协议 / 核心突袭 / 自定义协议）、对局结果和结算界面。它持有进程级的 `Base` 服务和关卡表，按局构造 `Games` 并把 `Level` 传进去；“自定义协议”在菜单里调整起始波次（1–8），部署时写成 `Level.startWave`；`Games` 不再负责标题、失败/胜利画面，`Renderer` 不再负责标题和结算。
 
 `src/app/Arena/` 是模块目录：`Arena` 是全局模块类，只组合 `Combatants`、`Entities`、`Events`、`State` 四个 `namespace arena` 组件。`Fighter` 放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段、分数和玩家失败。
 
@@ -159,6 +161,7 @@ mingw32-make -j12 test
 - 清波、强化生效、下一波
 - Boss 生成、Boss 死亡、胜利
 - 死亡、失败、重新开始
+- 自定义关卡：起始波次上下界钳制，以及按所选波次开局
 - 完整 8 波自动游玩，直到击败 Boss
 - 音频初始化（可选：设置 `NEON_AUDIO_TEST=1`）
 - 输出到当前目录的 `smoke.log`

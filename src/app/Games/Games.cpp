@@ -4,37 +4,20 @@
 
 #include <algorithm>
 
-Games::Games(bool enableAudio)
-    : arena_(random_, base_), waves_(random_, arena_),
+// 构造即开局：一局的安排在这里被接收，之后只对内使用。
+// 新的一局就是一个新对象，因此不存在需要手工清空的跨局状态。
+Games::Games(const Level &level, Base &base)
+    : level_(level), base_(base), arena_(random_, base_), waves_(random_, arena_),
       upgrades_(random_, arena_, base_), renderer_(random_, base_)
 {
-    Base::initialize();
-    if (enableAudio) {
-        base_.initAudio();
-    }
     renderer_.initialize();
-}
-
-Games::~Games() = default;
-
-void Games::start(const Level &level)
-{
-    level_ = level;
-    runTime_ = 0.0f;
-    victoryPending_ = false;
-    victoryTimer_ = 0.0f;
-    waveClearTimer_ = 0.0f;
-    waveClearAnnounced_ = false;
-    arena_.reset();
-    waves_.reset();
-    upgrades_.reset();
-    renderer_.resetTransient();
-    state_ = State::Playing;
     base_.setMouseActive(true);
     base_.playSound(QStringLiteral("ui"));
     renderer_.flash(Base::Cyan, 35);
     startWave(level_.startWave);
 }
+
+Games::~Games() = default;
 
 void Games::startWave(int wave)
 {
@@ -84,16 +67,11 @@ void Games::selectUpgrade(int index)
 
 void Games::update(float dt)
 {
-    if (state_ == State::Idle) {
-        return;
-    }
     if (state_ != State::Paused) {
         renderer_.update(dt);
     }
 
     switch (state_) {
-    case State::Idle:
-        break;
     case State::Playing: {
         if (victoryPending_) {
             victoryTimer_ -= dt;
@@ -218,10 +196,6 @@ void Games::keyPress(int key, bool autoRepeat)
     if (autoRepeat) {
         return;
     }
-    if (key == Qt::Key_M) {
-        toggleMute();
-        return;
-    }
     handleKeydown(key);
 }
 
@@ -249,19 +223,6 @@ void Games::mousePressLeft(const Math::Vec2 &position)
 void Games::mouseReleaseLeft()
 {
     base_.mouseReleaseLeft();
-}
-
-void Games::clearInput()
-{
-    base_.clear();
-}
-
-void Games::toggleMute()
-{
-    const bool muted = base_.toggleMute();
-    if (!muted) {
-        base_.playSound(QStringLiteral("ui"));
-    }
 }
 
 void Games::handleKeydown(int key)

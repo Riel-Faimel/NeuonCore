@@ -13,8 +13,12 @@
 #include <cmath>
 #include <utility>
 
-Menu::Menu(bool enableAudio) : games_(enableAudio)
+Menu::Menu(bool enableAudio)
 {
+    Base::initialize();
+    if (enableAudio) {
+        base_.initAudio();
+    }
     frame_ = QImage(GameConfig::ScreenWidth, GameConfig::ScreenHeight,
                     QImage::Format_ARGB32_Premultiplied);
     levels_ = {
@@ -22,6 +26,8 @@ Menu::Menu(bool enableAudio) : games_(enableAudio)
          QStringLiteral("八波战役 · 守住星核"), 1},
         {QStringLiteral("boss"), QStringLiteral("核心突袭"),
          QStringLiteral("直接进入最终波次"), 8},
+        {QStringLiteral("custom"), QStringLiteral("自定义协议"),
+         QStringLiteral("自选起始波次"), 1},
     };
 }
 
@@ -29,22 +35,22 @@ Menu::~Menu() = default;
 
 const QImage &Menu::frame() const
 {
-    return screen_ == Screen::Match ? games_.frame() : frame_;
+    return screen_ == Screen::Match && games_ ? games_->frame() : frame_;
 }
 
 void Menu::update(float dt)
 {
     menuTime_ += dt;
-    if (screen_ == Screen::Match) {
-        games_.update(dt);
-        if (games_.state() == Games::State::Victory
-            || games_.state() == Games::State::Defeat) {
+    if (screen_ == Screen::Match && games_) {
+        games_->update(dt);
+        if (games_->state() == Games::State::Victory
+            || games_->state() == Games::State::Defeat) {
             screen_ = Screen::Result;
         }
         return;
     }
-    if (screen_ == Screen::Result) {
-        games_.update(dt);
+    if (screen_ == Screen::Result && games_) {
+        games_->update(dt);
         return;
     }
 
@@ -59,13 +65,13 @@ void Menu::update(float dt)
 
 void Menu::render()
 {
-    if (screen_ == Screen::Match) {
-        games_.render();
+    if (screen_ == Screen::Match && games_) {
+        games_->render();
         return;
     }
-    if (screen_ == Screen::Result) {
-        games_.render();
-        frame_ = games_.frame().copy();
+    if (screen_ == Screen::Result && games_) {
+        games_->render();
+        frame_ = games_->frame().copy();
         drawResult();
         return;
     }
@@ -74,13 +80,27 @@ void Menu::render()
 
 QRectF Menu::levelRect(int index) const
 {
-    constexpr float width = 400.0f;
+    constexpr float width = 360.0f;
     constexpr float height = 156.0f;
-    constexpr float gap = 28.0f;
+    constexpr float gap = 26.0f;
     const float total = width * float(levels_.size())
                         + gap * float(levels_.size() - 1);
     const float left = (GameConfig::ScreenWidth - total) / 2.0f;
     return QRectF(left + index * (width + gap), 402.0f, width, height);
+}
+
+QRectF Menu::customMinusRect() const
+{
+    const QRectF rect = levelRect(CustomLevelIndex);
+    return QRectF(float(rect.center().x()) - 126.0f, float(rect.top()) + 84.0f,
+                  30.0f, 28.0f);
+}
+
+QRectF Menu::customPlusRect() const
+{
+    const QRectF rect = levelRect(CustomLevelIndex);
+    return QRectF(float(rect.center().x()) + 96.0f, float(rect.top()) + 84.0f,
+                  30.0f, 28.0f);
 }
 
 QRectF Menu::retryRect() const
@@ -169,12 +189,18 @@ void Menu::drawMain()
                    active ? Base::White : QColor(191, 216, 230),
                    {float(rect.left()) + 24.0f, float(rect.top()) + 54.0f},
                    QStringLiteral("topleft"));
-        Base::text(painter, Base::smallFont(), levels_[size_t(i)].subtitle,
-                   Base::Muted,
-                   {float(rect.left()) + 24.0f, float(rect.top()) + 88.0f},
-                   QStringLiteral("topleft"), 215);
-        Base::text(painter, Base::techTinyFont(),
-                   i == 0 ? QStringLiteral("CAMPAIGN") : QStringLiteral("BOSS RUSH"),
+        if (isCustomLevel(i)) {
+            drawCustomPicker(painter, rect, active);
+        } else {
+            Base::text(painter, Base::smallFont(), levels_[size_t(i)].subtitle,
+                       Base::Muted,
+                       {float(rect.left()) + 24.0f, float(rect.top()) + 88.0f},
+                       QStringLiteral("topleft"), 215);
+        }
+        const QString tag = i == 0 ? QStringLiteral("CAMPAIGN")
+                            : i == 1 ? QStringLiteral("BOSS RUSH")
+                                     : QStringLiteral("CUSTOM");
+        Base::text(painter, Base::techTinyFont(), tag,
                    Base::shade(border, 0.85f),
                    {float(rect.left()) + 24.0f, float(rect.bottom()) - 20.0f},
                    QStringLiteral("midleft"), 190);
@@ -190,17 +216,57 @@ void Menu::drawMain()
                QColor(105, 138, 158),
                {34, GameConfig::ScreenHeight - 34.0f}, QStringLiteral("midleft"), 150);
     Base::text(painter, Base::tinyFont(),
-               QStringLiteral("↑ / ↓ 选择    ENTER 开始    M 静音"),
+               isCustomLevel(selected_)
+                   ? QStringLiteral("← / → 调整起始波次    ENTER 开始    M 静音")
+                   : QStringLiteral("↑ / ↓ 选择    ENTER 开始    M 静音"),
                QColor(105, 138, 158),
                {GameConfig::ScreenWidth - 34.0f, GameConfig::ScreenHeight - 34.0f},
                QStringLiteral("midright"), 150);
 }
 
+void Menu::drawCustomPicker(QPainter &painter, const QRectF &rect, bool active)
+{
+    const QRectF minus = customMinusRect();
+    const QRectF plus = customPlusRect();
+    const QColor border = active ? Base::Cyan : QColor(48, 91, 112);
+    const QColor glyph = active ? Base::White : QColor(191, 216, 230);
+
+    Base::panel(painter, minus, border, active ? 230 : 190, 7, QColor(8, 20, 34));
+    Base::panel(painter, plus, border, active ? 230 : 190, 7, QColor(8, 20, 34));
+    Base::text(painter, Base::techSmallFont(), QStringLiteral("-"), glyph,
+               {float(minus.center().x()), float(minus.center().y())},
+               QStringLiteral("center"));
+    Base::text(painter, Base::techSmallFont(), QStringLiteral("+"), glyph,
+               {float(plus.center().x()), float(plus.center().y())},
+               QStringLiteral("center"));
+
+    const QString value = QStringLiteral("起始波次  %1 / %2")
+                              .arg(customWave_, 2, 10, QChar('0'))
+                              .arg(Games::waveCount(), 2, 10, QChar('0'));
+    Base::text(painter, Base::smallFont(), value,
+               active ? Base::Cyan : QColor(191, 216, 230),
+               {float(rect.center().x()), float(minus.center().y())},
+               QStringLiteral("center"), 225);
+}
+
+void Menu::adjustCustomWave(int delta)
+{
+    const int next = std::clamp(customWave_ + delta, 1, Games::waveCount());
+    if (next == customWave_) {
+        return;
+    }
+    customWave_ = next;
+    base_.playSound(QStringLiteral("ui"));
+}
+
 void Menu::drawResult()
 {
+    if (!games_) {
+        return;
+    }
     QPainter painter(&frame_);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    const bool victory = games_.state() == Games::State::Victory;
+    const bool victory = games_->state() == Games::State::Victory;
     painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
                      QColor(2, 3, 9, 210));
     const QColor accent = victory ? Base::Cyan : Base::Red;
@@ -220,20 +286,23 @@ void Menu::drawResult()
                        : QStringLiteral("星核在黑暗中熄灭。"),
                QColor(194, 224, 232),
                {GameConfig::ScreenWidth / 2.0f, 278}, QStringLiteral("center"), 225);
-    Base::text(painter, Base::smallFont(), games_.level().name,
+    Base::text(painter, Base::smallFont(),
+               selected_ >= 0 && selected_ < int(levels_.size())
+                   ? levels_[size_t(selected_)].name
+                   : QString(),
                Base::Muted, {GameConfig::ScreenWidth / 2.0f, 310},
                QStringLiteral("center"), 200);
 
-    const int minutes = int(games_.runTime()) / 60;
-    const int seconds = int(games_.runTime()) % 60;
+    const int minutes = int(games_->runTime()) / 60;
+    const int seconds = int(games_->runTime()) % 60;
     const QString timeText = QStringLiteral("%1:%2")
                                  .arg(minutes, 2, 10, QChar('0'))
                                  .arg(seconds, 2, 10, QChar('0'));
     const std::array<std::pair<QString, QString>, 4> stats = {{
-        {QStringLiteral("最终得分"), QLocale(QLocale::English).toString(games_.score())},
+        {QStringLiteral("最终得分"), QLocale(QLocale::English).toString(games_->score())},
         {QStringLiteral("到达波次"),
-         QStringLiteral("%1 / %2").arg(games_.currentWave()).arg(games_.totalWaves())},
-        {QStringLiteral("击破目标"), QString::number(games_.kills())},
+         QStringLiteral("%1 / %2").arg(games_->currentWave()).arg(games_->totalWaves())},
+        {QStringLiteral("击破目标"), QString::number(games_->kills())},
         {QStringLiteral("存活时间"), timeText},
     }};
     constexpr float totalWidth = 760.0f;
@@ -269,15 +338,20 @@ void Menu::startLevel(int index)
         return;
     }
     selected_ = index;
+    Games::Level level = levels_[size_t(index)];
+    if (isCustomLevel(index)) {
+        level.startWave = customWave_;
+    }
+    games_ = std::make_unique<Games>(level, base_);
     screen_ = Screen::Match;
-    games_.start(levels_[size_t(index)]);
-    games_.keyRelease(Qt::Key_Escape);
+    base_.keyRelease(Qt::Key_Escape);
 }
 
 void Menu::returnToMenu()
 {
     screen_ = Screen::Main;
-    games_.clearInput();
+    games_.reset();
+    base_.clear();
 }
 
 void Menu::keyPress(int key, bool autoRepeat)
@@ -287,16 +361,31 @@ void Menu::keyPress(int key, bool autoRepeat)
         return;
     }
     if (screen_ == Screen::Main) {
-        if (key == Qt::Key_Up || key == Qt::Key_W || key == Qt::Key_Left) {
+        const bool custom = isCustomLevel(selected_);
+        if (key == Qt::Key_Up || key == Qt::Key_W) {
             selected_ = std::max(0, selected_ - 1);
-        } else if (key == Qt::Key_Down || key == Qt::Key_S || key == Qt::Key_Right) {
+        } else if (key == Qt::Key_Down || key == Qt::Key_S) {
             selected_ = std::min(int(levels_.size()) - 1, selected_ + 1);
+        } else if (key == Qt::Key_Left || key == Qt::Key_A) {
+            if (custom) {
+                adjustCustomWave(-1);
+            } else if (key == Qt::Key_Left) {
+                selected_ = std::max(0, selected_ - 1);
+            }
+        } else if (key == Qt::Key_Right || key == Qt::Key_D) {
+            if (custom) {
+                adjustCustomWave(1);
+            } else if (key == Qt::Key_Right) {
+                selected_ = std::min(int(levels_.size()) - 1, selected_ + 1);
+            }
         } else if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Space) {
             startLevel(selected_);
         } else if (key == Qt::Key_1) {
             startLevel(0);
         } else if (key == Qt::Key_2) {
             startLevel(1);
+        } else if (key == Qt::Key_3) {
+            startLevel(2);
         }
         return;
     }
@@ -309,16 +398,19 @@ void Menu::keyPress(int key, bool autoRepeat)
         return;
     }
 
-    games_.keyPress(key, autoRepeat);
-    if (key == Qt::Key_Q && games_.state() == Games::State::Paused) {
+    if (!games_) {
+        return;
+    }
+    games_->keyPress(key, autoRepeat);
+    if (key == Qt::Key_Q && games_->state() == Games::State::Paused) {
         returnToMenu();
     }
 }
 
 void Menu::keyRelease(int key)
 {
-    if (screen_ == Screen::Match) {
-        games_.keyRelease(key);
+    if (screen_ == Screen::Match && games_) {
+        games_->keyRelease(key);
     }
 }
 
@@ -326,8 +418,8 @@ void Menu::mouseMove(const Math::Vec2 &position)
 {
     mouse_ = position;
     mouseActive_ = true;
-    if (screen_ == Screen::Match) {
-        games_.mouseMove(position);
+    if (screen_ == Screen::Match && games_) {
+        games_->mouseMove(position);
     }
 }
 
@@ -337,6 +429,16 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
     mouseActive_ = true;
     if (screen_ == Screen::Main) {
         for (int i = 0; i < int(levels_.size()); ++i) {
+            if (isCustomLevel(i)) {
+                const QPointF point(position.x, position.y);
+                const bool onMinus = customMinusRect().contains(point);
+                const bool onPlus = customPlusRect().contains(point);
+                if (onMinus || onPlus) {
+                    selected_ = i;
+                    adjustCustomWave(onMinus ? -1 : 1);
+                    return;
+                }
+            }
             if (levelRect(i).contains(QPointF(position.x, position.y))) {
                 startLevel(i);
                 return;
@@ -352,22 +454,26 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
         }
         return;
     }
-    games_.mousePressLeft(position);
+    if (games_) {
+        games_->mousePressLeft(position);
+    }
 }
 
 void Menu::mouseReleaseLeft()
 {
-    if (screen_ == Screen::Match) {
-        games_.mouseReleaseLeft();
+    if (screen_ == Screen::Match && games_) {
+        games_->mouseReleaseLeft();
     }
 }
 
 void Menu::clearInput()
 {
-    games_.clearInput();
+    base_.clear();
 }
 
 void Menu::toggleMute()
 {
-    games_.toggleMute();
+    if (!base_.toggleMute()) {
+        base_.playSound(QStringLiteral("ui"));
+    }
 }

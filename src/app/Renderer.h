@@ -41,7 +41,6 @@ public:
     void flash(const QColor &color, int alpha);
     void showBanner(const QString &title, const QString &subtitle, float duration,
                     const QColor &color, const QString &kicker = QStringLiteral("INCOMING SIGNAL"));
-    void resetTransient();
     void burstConfetti();
 
     int upgradeIndexAt(const Math::Vec2 &pos) const;
