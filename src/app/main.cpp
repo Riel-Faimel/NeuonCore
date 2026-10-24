@@ -3,7 +3,9 @@
 
 #include <QApplication>
 #include <QDir>
+#include <QCursor>
 #include <QElapsedTimer>
+#include <QEnterEvent>
 #include <QFile>
 #include <QFileInfo>
 #include <QFocusEvent>
@@ -47,7 +49,7 @@ public:
         setFocusPolicy(Qt::StrongFocus);
         setMouseTracking(true);
         setAttribute(Qt::WA_OpaquePaintEvent);
-        setCursor(Base::cursor());
+        setCursor(Qt::BlankCursor);
 
         QPixmap icon(32, 32);
         icon.fill(Qt::transparent);
@@ -118,6 +120,22 @@ protected:
         }
     }
 
+    // 指针在窗口内：隐藏系统光标，由画面里的准星代替。
+    void enterEvent(QEnterEvent *event) override
+    {
+        setCursor(Qt::BlankCursor);
+        menu_.mouseMove(toGamePos(event->position()));
+        QWidget::enterEvent(event);
+    }
+
+    // 指针离开窗口：恢复系统箭头，画面里也不再画准星。
+    void leaveEvent(QEvent *event) override
+    {
+        setCursor(Qt::ArrowCursor);
+        menu_.pointerLeft();
+        QWidget::leaveEvent(event);
+    }
+
     void focusOutEvent(QFocusEvent *event) override
     {
         menu_.clearInput();
@@ -135,6 +153,11 @@ protected:
             }
         }
         setFocus(Qt::ActiveWindowFocusReason);
+
+        const QPoint local = mapFromGlobal(QCursor::pos());
+        if (rect().contains(local)) {
+            menu_.mouseMove(toGamePos(QPointF(local)));
+        }
     }
 
 private:
@@ -161,28 +184,12 @@ private:
 
         menu_.update(dt);
         menu_.render();
-        updateCursorShape();
         update();
-    }
-
-    void updateCursorShape()
-    {
-        const bool needBlank = menu_.hidesCursor();
-        if (needBlank == cursorHidden_) {
-            return;
-        }
-        cursorHidden_ = needBlank;
-        if (needBlank) {
-            setCursor(Qt::BlankCursor);
-        } else {
-            setCursor(Base::cursor());
-        }
     }
 
     Menu menu_;
     QTimer timer_;
     QElapsedTimer clock_;
-    bool cursorHidden_ = false;
     bool centered_ = false;
 };
 

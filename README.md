@@ -184,7 +184,7 @@ mingw32-make -j12 test
 
 - C++ 版使用 Qt 6 的字体渲染，字形和抗锯齿效果与 pygame 版略有差异；布局、配色和逻辑保持一致。
 - 中文使用系统微软雅黑/黑体。若字体缺失，可在 `src/app/Base/Paint/Paint.cpp` 的 `Paint::initialize()` 中更换字体路径。
-- 鼠标光标由代码绘制（`Paint::cursor()`），与局内准星同一套视觉；主菜单、强化、暂停、结算界面都使用它，只有局内射击时隐藏系统光标、由 `Renderer` 画准星。
+- 鼠标指针就是画面里的准星：`Base::reticle()` 是唯一的画法，局内、主菜单、强化、暂停、结算全部复用它（外弧随时间旋转）；窗口内隐藏系统光标，指针移出窗口时恢复系统箭头、画面里也不再画准星。
 - 第三方运行库：Qt 6（LGPLv3）与 FFmpeg（LGPLv2.1+）。分发时请保留相应的许可证信息，见 [`THIRD_PARTY.txt`](THIRD_PARTY.txt)。
 
 更多画面：[标题](screenshots/title.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)

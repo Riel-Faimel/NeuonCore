@@ -9,7 +9,6 @@
 #include <QDir>
 #include <QFile>
 #include <QTextStream>
-#include <QPixmap>
 
 #include <algorithm>
 #include <cmath>
@@ -337,14 +336,6 @@ public:
         menu.mouseMove({GameConfig::ScreenWidth / 2.0f, 454.0f});
         save(QStringLiteral("title.png"));
 
-        const QPixmap cursorPixmap = Base::cursor().pixmap();
-        if (!cursorPixmap.isNull()) {
-            cursorPixmap.save(dir.filePath(QStringLiteral("cursor.png")));
-            cursorPixmap.scaled(cursorPixmap.size() * 8, Qt::KeepAspectRatio,
-                                Qt::SmoothTransformation)
-                .save(dir.filePath(QStringLiteral("cursor_zoom.png")));
-        }
-
         menu.mouseMove({1020.0f, 454.0f});
         menu.update(1.0f / 60.0f);
         for (int i = 0; i < 3; ++i) {
@@ -375,7 +366,7 @@ public:
         player.hpDisplay = 84;
         player.aim = -0.55f;
         player.invuln = 99.0f;
-        game->base_.mouseMove({1010, 265});
+        menu.mouseMove({1010, 265});
 
         game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("drone"), {820, 285}, 4);
         game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("drone"), {960, 520}, 4);
@@ -431,7 +422,7 @@ public:
         game->waves_.queue_.clear();
         game->waves_.waveTotal_ = 15;
         game->enterUpgrade();
-        game->base_.mouseMove({640, 390});
+        menu.mouseMove({640, 390});
         save(QStringLiteral("upgrade.png"));
 
         menu.startLevel(0);
@@ -455,7 +446,7 @@ public:
         bossPlayer.hpDisplay = 71;
         bossPlayer.aim = -0.25f;
         bossPlayer.invuln = 99.0f;
-        game->base_.mouseMove({850, 380});
+        menu.mouseMove({850, 380});
         game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("boss"), {870, 365}, 8);
         game->arena_.combatants_.boss()->hp =
             game->arena_.combatants_.boss()->maxHp * 0.63f;

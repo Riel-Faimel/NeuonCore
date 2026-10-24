@@ -4,7 +4,6 @@
 #include <QFontMetricsF>
 #include <QPainterPath>
 #include <QPen>
-#include <QPixmap>
 
 #include <algorithm>
 #include <array>
@@ -97,50 +96,6 @@ void Paint::initialize()
     sTechLarge = make(28, true, true);
 }
 
-const QCursor &Paint::cursor()
-{
-    static const QCursor sCursor = [] {
-        constexpr int size = 40;
-        constexpr float center = size * 0.5f;
-        constexpr float inner = 7.0f;
-        constexpr float outer = 14.0f;
-        const QColor arcColor(81, 169, 190);
-
-        QPixmap pixmap(size, size);
-        pixmap.fill(Qt::transparent);
-        QPainter painter(&pixmap);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-
-        // 与局内准星同一套语言：中心点、四向刻度、一段弧线。
-        // 先铺一层低透明度辉光，再压上清晰线条，保证在深色背景上有层次。
-        for (int i = 0; i < 4; ++i) {
-            const float angle = Math::Pi * 0.5f * float(i);
-            const Math::Vec2 direction(std::cos(angle), std::sin(angle));
-            const Math::Vec2 from{center + direction.x * inner, center + direction.y * inner};
-            const Math::Vec2 to{center + direction.x * outer, center + direction.y * outer};
-            strokeLine(painter, from, to, withAlpha(Cyan, 48), 3.0f);
-        }
-        arcRadians(painter, {center, center}, 18.0f, -0.55f, 1.35f,
-                   withAlpha(arcColor, 60), 3.0f);
-        fillCircle(painter, {center, center}, 5.0f, withAlpha(Cyan, 40));
-
-        for (int i = 0; i < 4; ++i) {
-            const float angle = Math::Pi * 0.5f * float(i);
-            const Math::Vec2 direction(std::cos(angle), std::sin(angle));
-            const Math::Vec2 from{center + direction.x * inner, center + direction.y * inner};
-            const Math::Vec2 to{center + direction.x * outer, center + direction.y * outer};
-            strokeLine(painter, from, to, Cyan, 1.25f);
-        }
-        arcRadians(painter, {center, center}, 18.0f, -0.55f, 1.35f, arcColor, 1.0f);
-        fillCircle(painter, {center, center}, 2.0f, Cyan);
-        fillCircle(painter, {center, center}, 0.9f, White);
-        painter.end();
-
-        return QCursor(pixmap, size / 2, size / 2);
-    }();
-    return sCursor;
-}
-
 const QFont &Paint::tinyFont() { return sTiny; }
 const QFont &Paint::smallFont() { return sSmall; }
 const QFont &Paint::bodyFont() { return sBody; }
@@ -227,6 +182,21 @@ void Paint::arcRadians(QPainter &painter, const Math::Vec2 &center, float radius
     const int spanAngle = int(std::lround(-spanRadians * 180.0f / Math::Pi * 16.0f));
     painter.drawArc(rect, startAngle, spanAngle);
     painter.restore();
+}
+
+void Paint::reticle(QPainter &painter, const Math::Vec2 &center, float time)
+{
+    fillCircle(painter, center, 2.0f, Cyan);
+    for (int i = 0; i < 4; ++i) {
+        const float angle = Math::Pi * 0.5f * float(i);
+        const Math::Vec2 direction(std::cos(angle), std::sin(angle));
+        strokeLine(painter,
+                   {center.x + direction.x * 8.0f, center.y + direction.y * 8.0f},
+                   {center.x + direction.x * 15.0f, center.y + direction.y * 15.0f},
+                   Cyan, 1.0f);
+    }
+    arcRadians(painter, center, 22.0f, time * 0.8f, 1.2f,
+               QColor(81, 169, 190), 1.0f);
 }
 
 void Paint::polygon(QPainter &painter, const QPolygonF &points,

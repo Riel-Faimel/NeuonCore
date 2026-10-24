@@ -3,7 +3,6 @@
 #include "Math.h"
 
 #include <QColor>
-#include <QCursor>
 #include <QFont>
 #include <QPainter>
 #include <QPolygonF>
@@ -17,9 +16,6 @@ namespace base {
 class Paint {
 public:
     static void initialize();
-
-    // 全局鼠标光标：与局内准星同一套语言，系统默认箭头不再出现。
-    static const QCursor &cursor();
 
     static const QColor Ink;
     static const QColor Text;
@@ -62,6 +58,8 @@ public:
     static void arcRadians(QPainter &painter, const Math::Vec2 &center, float radius,
                            float startRadians, float spanRadians,
                            const QColor &color, float width = 1.0f);
+    // 鼠标准星：局内、主菜单、结算共用这一套画法（外弧按 time 旋转）。
+    static void reticle(QPainter &painter, const Math::Vec2 &center, float time);
     static void polygon(QPainter &painter, const QPolygonF &points,
                         const QColor &fill, const QColor &outline, float width = 1.0f);
     static void glow(QPainter &glowPainter, const Math::Vec2 &pos, float radius,

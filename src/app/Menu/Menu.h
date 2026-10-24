@@ -39,11 +39,10 @@ public:
     void mouseReleaseLeft();
     void clearInput();
     void toggleMute();
+    // 指针离开窗口时调用：窗口内不再画准星，同时放开系统光标。
+    void pointerLeft();
     bool muted() const { return base_.muted(); }
     bool audioEnabled() const { return base_.audioEnabled(); }
-    // 只有真正在射击的局内画面才隐藏系统光标（由 Renderer 画准星）；
-    // 强化、暂停、结算和主菜单都显示游戏风格光标。
-    bool hidesCursor() const;
     Screen screen() const { return screen_; }
 
 private:
@@ -55,6 +54,7 @@ private:
     void returnToMenu();
     void drawMain();
     void drawResult();
+    void drawPointer(QPainter &painter) const;
     void drawCustomPicker(QPainter &painter, const QRectF &rect, bool active);
     void adjustCustomWave(int delta);
     bool isCustomLevel(int index) const { return index == CustomLevelIndex; }

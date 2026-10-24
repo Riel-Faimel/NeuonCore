@@ -279,7 +279,6 @@ void Renderer::render(const Games &game, const Arena &arena, const games::Waves 
         drawHUD(painter, arena, waves);
         drawBossBar(painter, arena);
         drawWaveBanner(painter);
-        drawReticle(painter);
         drawPlayHints(painter);
         break;
     case Games::State::Paused:
@@ -294,6 +293,11 @@ void Renderer::render(const Games &game, const Arena &arena, const games::Waves 
     case Games::State::Victory:
     case Games::State::Defeat:
         break;
+    }
+
+    // 指针永远画在最上层：播放、强化、暂停、胜负表现都使用同一套准星。
+    if (base_.mouseActive()) {
+        Base::reticle(painter, base_.mousePosition(), uiTime_);
     }
 }
 
@@ -441,26 +445,6 @@ void Renderer::drawPlayHints(QPainter &painter)
     Base::text(painter, Base::tinyFont(), right, QColor(113, 146, 168),
                 {GameConfig::ScreenWidth - 32.0f, GameConfig::ScreenHeight - 26.0f},
                 QStringLiteral("midright"), alpha);
-}
-
-void Renderer::drawReticle(QPainter &painter) const
-{
-    if (!base_.mouseActive()) {
-        return;
-    }
-    const Math::Vec2 mouse = base_.mousePosition();
-    Base::fillCircle(painter, mouse, 2.0f, Base::Cyan);
-    for (int i = 0; i < 4; ++i) {
-        const float angle = Math::Pi * 0.5f * i;
-        const Math::Vec2 direction(std::cos(angle), std::sin(angle));
-        Base::strokeLine(painter, {mouse.x + direction.x * 8.0f,
-                                    mouse.y + direction.y * 8.0f},
-                          {mouse.x + direction.x * 15.0f,
-                           mouse.y + direction.y * 15.0f},
-                          Base::Cyan, 1.0f);
-    }
-    Base::arcRadians(painter, mouse, 22.0f, uiTime_ * 0.8f, 1.2f,
-                      QColor(81, 169, 190), 1.0f);
 }
 
 QRectF Renderer::cardRect(int index) const

@@ -79,11 +79,11 @@ cpp/src/
 | --- | --- |
 | `Input` | 键鼠状态、移动轴、射击状态 |
 | `Audio` | 程序化 WAV、QSoundEffect 池、静音 |
-| `Paint` | 颜色、字体、文字排版、发光、条形/面板等绘制原语，以及全局鼠标光标 |
+| `Paint` | 颜色、字体、文字排版、发光、条形/面板等绘制原语，以及鼠标准星 |
 
-`Base::Impl` 持有 `base::Input` 和 `base::Audio`；静态绘制/颜色/字体/光标接口转发给 `base::Paint`。`Base.h` 不暴露组件头。
+`Base::Impl` 持有 `base::Input` 和 `base::Audio`；静态绘制/颜色/字体/准星接口转发给 `base::Paint`。`Base.h` 不暴露组件头。
 
-光标是全局表现，不属于某个业务模块：`GameWindow` 把 `Base::cursor()` 设为窗口光标，只在局内射击画面（`Menu::hidesCursor()`）切成 `Qt::BlankCursor`，由 `Renderer` 画准星；强化、暂停、结算和主菜单都保留游戏风格光标。
+指针是画面的一部分，不是系统光标：`Base::reticle()` 是唯一的准星画法，`Renderer` 在局内所有状态把它画在帧的最上层，`Menu` 在主菜单和结算界面调用同一个函数。`GameWindow` 全程隐藏系统光标，指针离开窗口时恢复系统箭头并调用 `Menu::pointerLeft()`，画面里也不再画准星。
 
 ### Games
 

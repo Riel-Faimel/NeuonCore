@@ -3,7 +3,6 @@
 #include "Math.h"
 
 #include <QColor>
-#include <QCursor>
 #include <QFont>
 #include <QPainter>
 #include <QPolygonF>
@@ -76,8 +75,8 @@ public:
     static const QFont &techFont();
     static const QFont &techLargeFont();
 
-    // 全局鼠标光标（与局内准星同一套视觉），不在任何界面使用系统默认箭头。
-    static const QCursor &cursor();
+    // 鼠标准星：全应用唯一的指针画法（局内、主菜单、结算都调用它）。
+    static void reticle(QPainter &painter, const Math::Vec2 &center, float time);
 
     static QColor shade(const QColor &color, float factor);
     static QColor withAlpha(const QColor &color, int alpha);

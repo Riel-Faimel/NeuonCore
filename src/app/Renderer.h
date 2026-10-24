@@ -77,7 +77,6 @@ private:
     void drawBossBar(QPainter &painter, const Arena &arena);
     void drawWaveBanner(QPainter &painter);
     void drawPlayHints(QPainter &painter);
-    void drawReticle(QPainter &painter) const;
     void drawUpgradeOverlay(QPainter &painter, const games::Upgrades &upgrades,
                             const games::Waves &waves);
     void drawUpgradeCard(QPainter &painter, int index,

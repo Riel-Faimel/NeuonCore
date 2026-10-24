@@ -38,10 +38,17 @@ const QImage &Menu::frame() const
     return screen_ == Screen::Match && games_ ? games_->frame() : frame_;
 }
 
-bool Menu::hidesCursor() const
+void Menu::pointerLeft()
 {
-    return screen_ == Screen::Match && games_
-           && games_->state() == Games::State::Playing;
+    base_.setMouseActive(false);
+}
+
+void Menu::drawPointer(QPainter &painter) const
+{
+    if (!base_.mouseActive()) {
+        return;
+    }
+    Base::reticle(painter, mouse_, menuTime_);
 }
 
 void Menu::update(float dt)
@@ -228,6 +235,8 @@ void Menu::drawMain()
                QColor(105, 138, 158),
                {GameConfig::ScreenWidth - 34.0f, GameConfig::ScreenHeight - 34.0f},
                QStringLiteral("midright"), 150);
+
+    drawPointer(painter);
 }
 
 void Menu::drawCustomPicker(QPainter &painter, const QRectF &rect, bool active)
@@ -336,6 +345,8 @@ void Menu::drawResult()
                QColor(190, 215, 228),
                {float(menuRect().center().x()), float(menuRect().center().y())},
                QStringLiteral("center"));
+
+    drawPointer(painter);
 }
 
 void Menu::startLevel(int index)
@@ -426,6 +437,8 @@ void Menu::mouseMove(const Math::Vec2 &position)
     mouseActive_ = true;
     if (screen_ == Screen::Match && games_) {
         games_->mouseMove(position);
+    } else {
+        base_.mouseMove(position);
     }
 }
 

@@ -134,7 +134,10 @@ const QFont &Base::techSmallFont() { return base::Paint::techSmallFont(); }
 const QFont &Base::techFont() { return base::Paint::techFont(); }
 const QFont &Base::techLargeFont() { return base::Paint::techLargeFont(); }
 
-const QCursor &Base::cursor() { return base::Paint::cursor(); }
+void Base::reticle(QPainter &painter, const Math::Vec2 &center, float time)
+{
+    base::Paint::reticle(painter, center, time);
+}
 
 QColor Base::shade(const QColor &color, float factor)
 {
