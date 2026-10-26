@@ -49,9 +49,21 @@ struct EnemyBase {
     float radius = 0.0f;
     float damage = 0.0f;
     int score = 0;
+    // 支援型敌人的光环参数（普通敌人为 0）。
+    float auraRadius = 0.0f;     // amplifier：增伤半径
+    float auraValue = 0.0f;      // amplifier：增伤比例
+    float shareRadius = 0.0f;    // linker：分担半径
+    float shareRatio = 0.0f;     // linker：分担比例
+    float healRadius = 0.0f;     // mender：治疗半径
+    float healRate = 0.0f;       // mender：每秒治疗量
+    float reviveRadius = 0.0f;   // necromancer：复活半径
+    float reviveChance = 0.0f;   // necromancer：复活概率
+    float lungeInterval = 0.0f;  // rusher：突进间隔
+    int chargeRequired = 0;      // summoner：召唤所需击杀数
+    int summonCount = 0;         // summoner：一次召唤数量
 };
 
-inline constexpr int MaxEnemyKinds = 8;
+inline constexpr int MaxEnemyKinds = 16;
 
 struct EnemyTable {
     std::array<EnemyBase, MaxEnemyKinds> items{};
@@ -77,6 +89,17 @@ constexpr EnemyTable loadEnemies()
         base.radius = float(kEnemiesDoc.number(kEnemiesDoc.member(*entry, "radius"), base.radius));
         base.damage = float(kEnemiesDoc.number(kEnemiesDoc.member(*entry, "damage"), base.damage));
         base.score = kEnemiesDoc.integer(kEnemiesDoc.member(*entry, "score"), base.score);
+        base.auraRadius = float(kEnemiesDoc.number(kEnemiesDoc.member(*entry, "aura_radius"), base.auraRadius));
+        base.auraValue = float(kEnemiesDoc.number(kEnemiesDoc.member(*entry, "aura_damage"), base.auraValue));
+        base.shareRadius = float(kEnemiesDoc.number(kEnemiesDoc.member(*entry, "share_radius"), base.shareRadius));
+        base.shareRatio = float(kEnemiesDoc.number(kEnemiesDoc.member(*entry, "share_ratio"), base.shareRatio));
+        base.healRadius = float(kEnemiesDoc.number(kEnemiesDoc.member(*entry, "heal_radius"), base.healRadius));
+        base.healRate = float(kEnemiesDoc.number(kEnemiesDoc.member(*entry, "heal_rate"), base.healRate));
+        base.reviveRadius = float(kEnemiesDoc.number(kEnemiesDoc.member(*entry, "revive_radius"), base.reviveRadius));
+        base.reviveChance = float(kEnemiesDoc.number(kEnemiesDoc.member(*entry, "revive_chance"), base.reviveChance));
+        base.lungeInterval = float(kEnemiesDoc.number(kEnemiesDoc.member(*entry, "lunge_interval"), base.lungeInterval));
+        base.chargeRequired = kEnemiesDoc.integer(kEnemiesDoc.member(*entry, "charge_required"), base.chargeRequired);
+        base.summonCount = kEnemiesDoc.integer(kEnemiesDoc.member(*entry, "summon_count"), base.summonCount);
         table.items[table.count++] = base;
     }
     return table;
@@ -95,7 +118,7 @@ constexpr const EnemyBase *findEnemy(std::string_view kind)
     return nullptr;
 }
 
-// ----- 战役台本与出怪节奏（waves.json） -----
+// ----- 战役台本与出怪节奏（src/json/waves/level-01.json） -----
 struct WaveSpawn {
     std::string_view kind;
     int count = 0;
@@ -127,7 +150,7 @@ struct WaveScaling {
     float hp = 0.16f;
 };
 
-inline constexpr json::Document kWavesDoc = json::parse(game_data::waves_json);
+inline constexpr json::Document kWavesDoc = json::parse(game_data::waves_level_01);
 
 constexpr Campaign loadCampaign()
 {
@@ -298,5 +321,52 @@ constexpr MineSpec loadMine()
 
 inline constexpr MineSpec kMine = loadMine();
 static_assert(kMine.price > 0, "src/json/items.json 解析失败");
+
+// ----- 星区地图（levels.json） -----
+struct LevelNode {
+    std::string_view name;
+    std::string_view subtitle;
+    std::string_view waves;   // src/json/waves/<waves>.json
+    float x = 0.5f;
+    float y = 0.5f;
+    bool locked = true;
+};
+
+inline constexpr int MaxLevelNodes = 8;
+
+struct LevelMap {
+    std::array<LevelNode, MaxLevelNodes> items{};
+    int count = 0;
+};
+
+inline constexpr json::Document kLevelsDoc = json::parse(game_data::levels_json);
+
+constexpr LevelMap loadLevelMap()
+{
+    LevelMap map;
+    const json::Node *levels = kLevelsDoc.member(kLevelsDoc.root(), "levels");
+    if (levels == nullptr) {
+        return map;
+    }
+    const int total = kLevelsDoc.size(*levels);
+    for (int i = 0; i < total && map.count < MaxLevelNodes; ++i) {
+        const json::Node *entry = kLevelsDoc.at(*levels, i);
+        if (entry == nullptr) {
+            continue;
+        }
+        LevelNode node;
+        node.name = kLevelsDoc.text(kLevelsDoc.member(*entry, "name"));
+        node.subtitle = kLevelsDoc.text(kLevelsDoc.member(*entry, "subtitle"));
+        node.waves = kLevelsDoc.text(kLevelsDoc.member(*entry, "waves"));
+        node.x = float(kLevelsDoc.number(kLevelsDoc.member(*entry, "x"), node.x));
+        node.y = float(kLevelsDoc.number(kLevelsDoc.member(*entry, "y"), node.y));
+        node.locked = kLevelsDoc.boolean(kLevelsDoc.member(*entry, "locked"), node.locked);
+        map.items[map.count++] = node;
+    }
+    return map;
+}
+
+inline constexpr LevelMap kLevelNodes = loadLevelMap();
+static_assert(kLevelNodes.count > 0, "src/json/levels.json 解析失败");
 
 } // namespace data

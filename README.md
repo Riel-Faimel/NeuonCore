@@ -38,9 +38,9 @@ cpp\dist\NeonCore\NeonCore.exe
 | `R` | 胜利 / 失败后重开 |
 | `Q` | 暂停界面返回标题 |
 
-标题页另有：`↑` `↓` / `W` `S` 切换关卡，`ENTER` 开始“标准协议”；选中“自定义协议”时 `ENTER`（或直接点卡片）进入台本编辑器；`1` `2` 直接开始标准协议 / 进入编辑器。
+标题页另有：`↑` `↓` / `W` `S` 切换卡片；选中“标准协议”时 `ENTER`（或点卡片）进入 **星区地图**，地图上 `←` `→` 选择区域、`ENTER` 进入当前区域、`ESC` 返回；选中“自定义协议”时 `ENTER`（或点卡片）进入台本编辑器；`1` 进地图，`2` 进编辑器。
 
-台本编辑器：`↑` `↓` / `W` `S` 选波次，`←` `→` / `A` `D` 选列（DRONE / SPITTER / TANK / SPLITTER / BOSS），`+` / `-` 调数量或开关 Boss，`N` 新增波次、`X` 删除末波（1–12 波，单格 0–20），`ENTER` 部署，`ESC` 返回。编辑结果只存在内存里，重启回到默认台本。
+台本编辑器：表格只显示当前用到的敌人列；从底部“敌人库”把敌人**拖到某一波**（或按 `1`–`9`、`0`）才会加入该列。`↑` `↓` / `W` `S` 选波次，`←` `→` / `A` `D` 选列，`+` / `-` 调数量或开关 Boss（**按住不放会连续快速加减**），`N` 新增波次、`X` 删除末波（1–12 波，单格 0–20），`ENTER` 部署，`ESC` 返回。编辑结果只存在内存里，重启回到默认台本。
 
 ## 设置
 
@@ -48,14 +48,14 @@ cpp\dist\NeonCore\NeonCore.exe
 
 - `↑` `↓` 选择行，`←` `→` 调整（每次 5%），也可以直接点/拖进度条；
 - `ESC` 返回主菜单；调整立即生效；
-- 音量保存到 **exe 同级的 `settings.ini`**（`QSettings` 的 INI 格式），下次启动自动恢复；
-- 同一个 `settings.ini` 还保存 `[score] total`（全局积分钱包）和 `[inventory] mines`（地雷库存）。
+- 音量保存到配置存储，下次启动自动恢复：**Windows 写注册表**（`HKCU\Software\NeonCore\NeonCore`，MSIX/只读安装目录也不会写文件失败），其他平台写 exe 同级的 `settings.ini`（见 `Data/Settings.h` 的条件编译）；
+- 同一个配置存储还保存积分钱包和地雷库存（键 `score/total`、`inventory/mines`）。
 
 ## 商店
 
 主菜单右上角的补给箱按钮进入商店，目前售卖 **震荡地雷**（120 积分）：
 
-- 点击 / `ENTER` 购买，从全局积分扣款，库存 +1（写入 `settings.ini`）；
+- 点击 / `ENTER` 购买，从全局积分扣款，库存 +1（写入配置存储）；
 - 局内 **右键** 在光标处布置，敌人进入感应范围即引爆，对爆炸范围内敌人造成大量伤害；
 - 地雷是一次性消耗品：布置即扣库存，每局开始（新一波）会清掉场上未引爆的地雷；
 - 价格、伤害、感应/爆炸半径、引爆延迟都在 `src/json/items.json`。
@@ -123,7 +123,7 @@ src/json/*.json
 | --- | --- |
 | `player.json` | 玩家血量、移速、伤害、射速、弹速、弹体半径 |
 | `enemies.json` | 各敌人血量 / 速度 / 半径 / 接触伤害 / 分数 |
-| `waves.json` | 战役每波组成、出怪节奏、波次成长系数 |
+| `waves/level-01.json` | 第 1 关每波组成、出怪节奏、波次成长系数 |
 | `upgrades.json` | 强化每轮随机区间（`min` / `max`） |
 | `bullets.json` | 敌方子弹速度 / 伤害 / 半径 |
 | `items.json` | 商店道具（地雷）价格 / 伤害 / 范围 / 引爆延迟 |
@@ -171,6 +171,7 @@ cpp/
 │  │  │  └─ Renderer/Renderer.h/.cpp 组件：局内背景、发光、HUD、卡片、暂停
 │  │  ├─ Menu/Menu.h/.cpp          模块入口：屏幕状态机、输入路由、关卡表
 │  │  ├─ Menu/Main/Main.h/.cpp     组件：标题页与关卡卡
+│  │  ├─ Menu/Map/Map.h/.cpp       组件：标准协议星区地图
 │  │  ├─ Menu/Match/Match.h/.cpp   组件：当前对局（持有 Games）
 │  │  ├─ Menu/Result/Result.h/.cpp 组件：结算覆盖层
 │  │  ├─ Menu/Editor/Editor.h/.cpp 组件：自定义台本编辑器
@@ -182,6 +183,7 @@ cpp/
 │  │  ├─ app.rc                   Windows 资源：嵌入应用图标
 │  │  └─ main.cpp                 QWidget 窗口、输入桥接、全局服务初始化、release 入口
 │  ├─ Data/GameData.h             编译期数值表（展开自 src/json）
+│  ├─ Data/Settings.h             配置存储（Windows 注册表 / 其他平台 ini）
 │  ├─ lib/
 │  │  ├─ Math.h / Math.cpp        向量与几何
 │  │  ├─ Json.h                   constexpr JSON 解析器
@@ -193,7 +195,8 @@ cpp/
 │  ├─ json/
 │  │  ├─ player.json              玩家基础数值
 │  │  ├─ enemies.json             敌人基础数值
-│  │  ├─ waves.json               战役台本 + 出怪节奏
+│  │  ├─ waves/level-01.json      关卡 01 台本 + 出怪节奏
+│  │  ├─ levels.json              星区地图关卡节点
 │  │  ├─ items.json               商店道具数值
 │  │  ├─ upgrades.json            强化数值区间
 │  │  └─ bullets.json             敌方子弹数值
@@ -216,13 +219,32 @@ cpp/
 
 `src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades`、`Renderer` 三个 `namespace games` 组件，并拥有 `Arena`。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Renderer` 只负责这一局的画面与特效（标题/结算在 `menu::*`，鼠标指针在 `BaseService` 的 `base::Pointer`），`Games` 负责局内状态机和调用顺序。随机数走全局 `RandomService`，不再作为构造参数传入。
 
-积分和库存由进程级单例 `ShopService` 持有（`extern Shop ShopService;`）：`Shop` 组合 `shop::Score`（跨局钱包，写入 `settings.ini` 的 `[score] total`）和 `shop::Inventory`（地雷库存，写入 `[inventory] mines`）。`main()` 启动时调 `ShopService.load()`、退出前调 `ShopService.save()`；`arena::Events::handleKill()` 击杀上报积分；HUD 显示全局钱包，结算显示本局获得（`runScore()`）；`Shop::buyMine()` 负责扣款入库。
+积分和库存由进程级单例 `ShopService` 持有（`extern Shop ShopService;`）：`Shop` 组合 `shop::Score`（跨局钱包，键 `score/total`）和 `shop::Inventory`（地雷库存，键 `inventory/mines`），Windows 写注册表、其他平台写 `settings.ini`。`main()` 启动时调 `ShopService.load()`、退出前调 `ShopService.save()`；`arena::Events::handleKill()` 击杀上报积分；HUD 显示全局钱包，结算显示本局获得（`runScore()`）；`Shop::buyMine()` 负责扣款入库。
 
 `src/app/Shop/` 和 `Arena/` 同构：`Shop` 是全局模块类（进程级单例 `ShopService`），组合 `Score`（全局钱包/本局统计）和 `Inventory`（地雷库存）两个 `namespace shop` 组件，负责 `load()/save()` 与 `buyMine()`；补给站界面是 `menu::Depot`，只展示和调用接口，不直接改数据。
 
-`src/app/Menu/` 和 `Arena/` 同构：`Menu` 只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop` 都是全局单例，不在 `Menu` 里），六个界面是 `namespace menu` 组件——`Main`（标题/关卡卡/设置入口）、`Match`（持有这一局的 `Games`）、`Result`（只读 `Summary` 的结算层）、`Editor`（持有自定义台本）、`Depot`（补给站/商店）、`Settings`（音量 + `settings.ini`）。组件把玩家意图作为 `Action` 交回 `Menu`，`Menu` 负责开局、进编辑器和回主菜单；“自定义协议”点开即进编辑器，逐波编辑台本（1–12 波、四种敌人数量、单 Boss），部署时由 `Menu` 把 `Editor::script()` 写进 `Level.script` 交给 `Match`。
+`src/app/Menu/` 和 `Arena/` 同构：`Menu` 只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop` 都是全局单例，不在 `Menu` 里），七个界面是 `namespace menu` 组件——`Main`（标题/关卡卡/设置入口）、`Map`（星区地图）、`Match`（持有这一局的 `Games`）、`Result`（只读 `Summary` 的结算层）、`Editor`（持有自定义台本）、`Depot`（补给站/商店）、`Settings`（音量 + 配置存储）。组件把玩家意图作为 `Action` 交回 `Menu`，`Menu` 负责开局、进编辑器和回主菜单；“自定义协议”点开即进编辑器，逐波编辑台本（1–12 波、四种敌人数量、单 Boss），部署时由 `Menu` 把 `Editor::script()` 写进 `Level.script` 交给 `Match`。
 
 `src/app/Arena/` 是模块目录：`Arena` 是全局模块类，**私有继承** `Bullets`、`Combatants`、`Entities`、`Events`、`State` 五个 `namespace arena` 组件。私有继承意味着这些组件是 `Arena` 的实现细节：外部只能调用 `Arena` 自己声明的接口（`beginWave/update/draw/placeMine/playerState/bossInfo/clear*/celebrate*/takeFeedback` 等），看不到 `enemies()`、`submit()`、`player()` 这类组件方法。组件之间通过 `Arena/Context.h` 的 `arena::Context` 协作——`Arena` 调用组件时把 `Host&` 和 5 个兄弟组件引用显式注入，组件头文件因此不需要知道 `Arena`；组件 → 模块的反馈（闪屏/震屏）通过 `Arena/Host.h` 的 `arena::Host` 虚接口回调 `Arena::addFeedback()`。`Bullet` 是 `src/include/Bullet.h` 里的全局纯虚接口，具体弹种（目前是 `StandardBullet`）在 `Arena/Bullets/`；发射方只 `submit()` 对象，推进、回收和绘制都由池统一做。`Fighter` 也放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段和玩家失败（积分在 `ShopService` 的 `Score` 组件）。`SelfTest` 是 `Arena` 唯一保留的 friend（测试要直接摆局面）。
+
+每关的波次安排单独放在 `src/json/waves/level-0N.json`（当前第一关是 `level-01.json`），`levels.json` 的节点用 `waves` 字段登记。
+
+新增的 6 种敌人（数值与光环参数都在 `src/json/enemies.json`）：
+
+- `amplifier`：为范围内友军增伤（子弹与接触都吃加成）；
+- `linker`：为范围内友军分担一部分伤害；
+- `mender`：持续治疗范围内友军；
+- `rusher`：高速突进、攻击欲望高；
+- `necromancer`：概率复活范围内阵亡的友军；
+- `summoner`：按友军阵亡数积累进度，满进度召唤小怪。
+
+台本编辑器底部的敌人库也已包含这 6 种，拖拽或按 `1`–`9`、`0` 加入。
+
+敌人按寻路分成三类：
+
+- 近战（drone / tank / splitter / mini / rusher）：直冲玩家、以接触为目标；
+- 远程与召唤（spitter / boss / summoner）：保持中远距离，玩家弹幕逼近时短促侧闪（0.12s，冷却 1.6s）；
+- 增益（amplifier / linker / mender / necromancer）：朝“邻居最多”的友军位置靠拢，让光环覆盖更密集的队形。
 
 `src/lib/` 放不依赖应用层的通用模块：`Math`（向量/几何）和 `Random`（可注入随机数，并提供全局 `RandomService`）。
 
@@ -274,6 +296,9 @@ mingw32-make -j12 test
 - 积分：击杀累计到全局钱包、消费扣减、余额不足拒绝、开新局只重置本局统计
 - 商店：补给箱按钮进入、购买地雷扣积分并加库存、Esc 返回
 - 地雷：右键布置扣库存、敌人接触即引爆并造成击杀
+- 星区地图：ENTER 进地图、方向键选择、锁定区域不可进入、返回主菜单
+- 编辑器：底部敌人库拖拽新增列、按住 `+`/`-` 连续快速加减
+- 支援敌人：增伤光环、伤害分担、群体治疗、高速突进、概率复活、召唤进度
 - 输出到当前目录的 `smoke.log`
 
 重新生成离屏截图：
@@ -297,4 +322,4 @@ mingw32-make -j12 test
 - 鼠标指针是全局元素，属于 `Base` 的 `base::Pointer` 组件（`src/app/Base/Pointer/`）：窗口每帧通过 `BaseService.pointerDraw()` 把它叠在画面最上层，`base::Paint::reticle()` 是唯一画法，所有界面共用同一个指针和同一个时钟（局内暂停时外弧也照常旋转）；窗口内隐藏系统光标，指针移出窗口时恢复系统箭头。
 - 第三方运行库：Qt 6（LGPLv3）与 FFmpeg（LGPLv2.1+）。分发时请保留相应的许可证信息，见 [`THIRD_PARTY.txt`](THIRD_PARTY.txt)。
 
-更多画面：[标题](screenshots/title.png) · [商店](screenshots/shop.png) · [设置](screenshots/settings.png) · [台本编辑器](screenshots/editor.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)
+更多画面：[标题](screenshots/title.png) · [星区地图](screenshots/map.png) · [商店](screenshots/shop.png) · [设置](screenshots/settings.png) · [台本编辑器](screenshots/editor.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)

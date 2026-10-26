@@ -1,20 +1,14 @@
 #include "Shop/Score/Score.h"
 
-#include <QCoreApplication>
-#include <QSettings>
+#include "Data/Settings.h"
 
 #include <algorithm>
 
 namespace shop {
 
-QString Score::path()
-{
-    return QCoreApplication::applicationDirPath() + QStringLiteral("/settings.ini");
-}
-
 void Score::load()
 {
-    QSettings settings(path(), QSettings::IniFormat);
+    QSettings settings = app::openSettings();
     total_ = std::max(0, settings.value(QStringLiteral("score/total"), 0).toInt());
     runStart_ = total_;
     kills_ = 0;
@@ -22,7 +16,7 @@ void Score::load()
 
 void Score::save()
 {
-    QSettings settings(path(), QSettings::IniFormat);
+    QSettings settings = app::openSettings();
     settings.setValue(QStringLiteral("score/total"), total_);
 }
 

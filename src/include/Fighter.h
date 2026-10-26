@@ -19,6 +19,7 @@ struct Damage {
     float amount = 0.0f;
     bool critical = false;
     DamageSource source = DamageSource::Bullet;
+    bool shared = false;   // 由 linker 转移过来的伤害，不再二次分担
 };
 
 // Fighter 是 Player / Enemy 的共同战斗者接口。

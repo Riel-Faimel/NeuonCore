@@ -42,8 +42,9 @@ public:
                     }
                 }
                 if (target != nullptr) {
-                    BaseService.mouseMove(target->pos);
-                    BaseService.mousePressLeft(target->pos);
+                    const Math::Vec2 aim = target->pos + target->vel * 0.15f;
+                    BaseService.mouseMove(aim);
+                    BaseService.mousePressLeft(aim);
                 }
             }
             game.update(1.0f / 60.0f);
@@ -80,19 +81,20 @@ public:
                         target = enemy.get();
                     }
                     const float realDistance = std::sqrt(distance);
-                    if (realDistance > 1.0f && realDistance < 330.0f) {
+                    if (realDistance > 1.0f && realDistance < 250.0f) {
                         const Math::Vec2 away =
                             (game.arena_.playerState().pos - enemy->pos).normalized();
-                        dodge += away * ((330.0f - realDistance) / 330.0f);
+                        dodge += away * ((250.0f - realDistance) / 250.0f);
                     }
                 }
                 if (target != nullptr) {
-                    BaseService.mouseMove(target->pos);
-                    BaseService.mousePressLeft(target->pos);
+                    const Math::Vec2 aim = target->pos + target->vel * 0.15f;
+                    BaseService.mouseMove(aim);
+                    BaseService.mousePressLeft(aim);
                 }
                 const Math::Vec2 center(GameConfig::ScreenWidth / 2.0f,
                                         GameConfig::ScreenHeight / 2.0f);
-                dodge += (center - game.arena_.playerState().pos) * 0.0025f;
+                dodge += (center - game.arena_.playerState().pos) * 0.02f;
                 if (dodge.lengthSquared() < 0.01f) {
                     dodge = Math::Vec2(1.0f, 0.0f).rotated(game.runTime());
                 }
@@ -162,9 +164,24 @@ public:
         log(QStringLiteral("Input flow"));
         menu.keyPress(Qt::Key_Return);
         menu.keyRelease(Qt::Key_Return);
+        success &= require(menu.screen() == Menu::Screen::Map,
+                           QStringLiteral("enter opens the sector map"));
+        menu.keyPress(Qt::Key_Right);
+        menu.keyRelease(Qt::Key_Right);
+        success &= require(menu.map_.selected() == 1,
+                           QStringLiteral("map arrows move the selection"));
+        menu.keyPress(Qt::Key_Return);
+        menu.keyRelease(Qt::Key_Return);
+        success &= require(menu.screen() == Menu::Screen::Map
+                               && menu.match_.game() == nullptr,
+                           QStringLiteral("locked region cannot be entered"));
+        menu.keyPress(Qt::Key_Left);
+        menu.keyRelease(Qt::Key_Left);
+        menu.keyPress(Qt::Key_Return);
+        menu.keyRelease(Qt::Key_Return);
         game = menu.match_.game();
-        success &= require(game->state() == Games::State::Playing,
-                           QStringLiteral("enter starts the run"));
+        success &= require(game != nullptr && game->state() == Games::State::Playing,
+                           QStringLiteral("enter on the first node starts the run"));
         menu.keyPress(Qt::Key_Escape);
         menu.keyRelease(Qt::Key_Escape);
         success &= require(game->state() == Games::State::Paused,
@@ -239,6 +256,130 @@ public:
                                || before.critChance != game->arena_.playerState().critChance
                                || before.shockLevel != game->arena_.playerState().shockLevel,
                            QStringLiteral("upgrade changes a stat"));
+
+        log(QStringLiteral("Support enemies"));
+        menu.startLevel(0);
+        game = menu.match_.game();
+        game->state_ = Games::State::Playing;
+        game->waves_.queue_.clear();
+        game->waves_.waveTotal_ = 1;
+        game->arena_.enemies().clear();
+        game->arena_.portals().clear();
+        game->arena_.playerBullets().clear();
+        game->arena_.clearEnemy();
+        const arena::Context supportCtx = game->arena_.context();
+        supportCtx.combatants.player().state.pos = {640, 420};
+        supportCtx.combatants.player().state.invuln = 99.0f;
+        auto spawn = [&](const QString &kind, const Math::Vec2 &at) {
+            game->arena_.spawnEnemy(supportCtx, kind, at, 1);
+            return game->arena_.enemies().back().get();
+        };
+
+        arena::Enemy *amplifier = spawn(QStringLiteral("amplifier"), {500, 400});
+        arena::Enemy *drone = spawn(QStringLiteral("drone"), {545, 400});
+        for (int i = 0; i < 8; ++i) {
+            game->arena_.update(1.0f / 60.0f);
+        }
+        success &= require(drone->damageBuffTimer > 0.0f
+                               && drone->contactDamage()
+                                      > arena::Enemy::statsFor(QStringLiteral("drone")).damage,
+                           QStringLiteral("amplifier boosts nearby ally damage"));
+
+        arena::Enemy *linker = spawn(QStringLiteral("linker"), {600, 400});
+        drone->pos = linker->pos + Math::Vec2(40.0f, 0.0f);
+        const float linkerHp = linker->hp;
+        drone->takeDamage(supportCtx,
+                          arena::Damage{10.0f, false, arena::DamageSource::Bullet});
+        success &= require(linker->hp < linkerHp,
+                           QStringLiteral("linker shares damage for nearby allies"));
+
+        arena::Enemy *mender = spawn(QStringLiteral("mender"), {600, 470});
+        arena::Enemy *tank = spawn(QStringLiteral("tank"), {640, 470});
+        tank->hp = tank->maxHp * 0.3f;
+        for (int i = 0; i < 60; ++i) {
+            game->arena_.update(1.0f / 60.0f);
+        }
+        success &= require(tank->hp > tank->maxHp * 0.3f + 1.0f,
+                           QStringLiteral("mender heals nearby allies"));
+
+        arena::Enemy *rusher = spawn(QStringLiteral("rusher"), {800, 300});
+        success &= require(
+            rusher->speed > arena::Enemy::statsFor(QStringLiteral("drone")).speed * 1.8f
+                && rusher->lungeInterval > 0.0f
+                && rusher->contactDamage()
+                       > arena::Enemy::statsFor(QStringLiteral("drone")).damage,
+            QStringLiteral("rusher is fast and aggressive"));
+
+        arena::Enemy *necromancer = spawn(QStringLiteral("necromancer"), {900, 400});
+        necromancer->supportRadius = 400.0f;
+        necromancer->supportValue = 1.1f;
+        arena::Enemy *victim = spawn(QStringLiteral("drone"), {920, 400});
+        victim->hp = 1.0f;
+        victim->takeDamage(supportCtx,
+                           arena::Damage{10.0f, false, arena::DamageSource::Bullet});
+        bool revived = false;
+        for (const auto &other : game->arena_.enemies()) {
+            if (other->revived) {
+                revived = true;
+            }
+        }
+        success &= require(revived,
+                           QStringLiteral("necromancer revives a fallen ally"));
+
+        necromancer->supportRadius = 0.0f;   // 避免复活干扰召唤计数
+        arena::Enemy *summoner = spawn(QStringLiteral("summoner"), {1080, 560});
+        summoner->charge = 0;
+        summoner->chargeRequired = 3;
+        summoner->summonCount = 2;
+        int minisBefore = 0;
+        for (const auto &other : game->arena_.enemies()) {
+            if (other->kind == QStringLiteral("mini")) {
+                ++minisBefore;
+            }
+        }
+        for (int i = 0; i < 3; ++i) {
+            arena::Enemy chargedVictim(QStringLiteral("drone"), summoner->pos, 1);
+            supportCtx.events.handleKill(supportCtx, chargedVictim);
+        }
+        int minisAfter = 0;
+        for (const auto &other : game->arena_.enemies()) {
+            if (other->kind == QStringLiteral("mini")) {
+                ++minisAfter;
+            }
+        }
+        success &= require(minisAfter == minisBefore + 2 && summoner->charge == 0,
+                           QStringLiteral("summoner summons allies after enough deaths"));
+
+        success &= require(
+            arena::Enemy::roleOf(arena::Enemy::Kind::Drone) == arena::Enemy::Role::Melee
+                && arena::Enemy::roleOf(arena::Enemy::Kind::Tank) == arena::Enemy::Role::Melee
+                && arena::Enemy::roleOf(arena::Enemy::Kind::Rusher) == arena::Enemy::Role::Melee,
+            QStringLiteral("melee enemies seek contact"));
+        success &= require(
+            arena::Enemy::roleOf(arena::Enemy::Kind::Spitter) == arena::Enemy::Role::Ranged
+                && arena::Enemy::roleOf(arena::Enemy::Kind::Boss) == arena::Enemy::Role::Ranged
+                && arena::Enemy::roleOf(arena::Enemy::Kind::Summoner) == arena::Enemy::Role::Ranged,
+            QStringLiteral("ranged and summoner enemies keep range and dodge"));
+        success &= require(
+            arena::Enemy::roleOf(arena::Enemy::Kind::Amplifier) == arena::Enemy::Role::Support
+                && arena::Enemy::roleOf(arena::Enemy::Kind::Linker) == arena::Enemy::Role::Support
+                && arena::Enemy::roleOf(arena::Enemy::Kind::Mender) == arena::Enemy::Role::Support
+                && arena::Enemy::roleOf(arena::Enemy::Kind::Necromancer) == arena::Enemy::Role::Support,
+            QStringLiteral("support enemies seek ally clusters"));
+
+        game->arena_.enemies().clear();
+        game->arena_.portals().clear();
+        game->arena_.playerBullets().clear();
+        game->arena_.clearEnemy();
+        spawn(QStringLiteral("drone"), {480, 400});
+        spawn(QStringLiteral("drone"), {500, 420});
+        arena::Enemy *clusterSupport = spawn(QStringLiteral("amplifier"), {920, 400});
+        const float supportStartX = clusterSupport->pos.x;
+        for (int i = 0; i < 45; ++i) {
+            game->arena_.update(1.0f / 60.0f);
+        }
+        success &= require(clusterSupport->pos.x < supportStartX - 8.0f,
+                           QStringLiteral("support enemies drift toward the ally cluster"));
 
         log(QStringLiteral("Boss and victory"));
         menu.startLevel(0);
@@ -339,6 +480,33 @@ public:
         success &= require(menu.editor_.enemyCount(menu.editor_.row(), menu.editor_.column())
                                == beforeCount + 3,
                            QStringLiteral("+ raises a cell count"));
+        const int beforeHold = menu.editor_.enemyCount(menu.editor_.row(),
+                                                      menu.editor_.column());
+        menu.keyPress(Qt::Key_Plus);
+        for (int i = 0; i < 40; ++i) {
+            menu.update(1.0f / 60.0f);
+        }
+        menu.keyRelease(Qt::Key_Plus);
+        success &= require(menu.editor_.enemyCount(menu.editor_.row(), menu.editor_.column())
+                               > beforeHold + 2,
+                           QStringLiteral("holding + repeats the adjustment"));
+        menu.keyPress(Qt::Key_Minus);
+        for (int i = 0; i < 40; ++i) {
+            menu.update(1.0f / 60.0f);
+        }
+        menu.keyRelease(Qt::Key_Minus);
+
+        const QRectF spitterChip = menu.editor_.paletteChipRect(1);
+        const QRectF dropRow = menu.editor_.rowRect(1);
+        const int beforeDragTotal = menu.editor_.totalEnemies();
+        menu.mousePressLeft({float(spitterChip.center().x()),
+                             float(spitterChip.center().y())});
+        menu.mouseMove({float(dropRow.center().x()), float(dropRow.center().y())});
+        menu.mouseReleaseLeft();
+        success &= require(menu.editor_.columnCount() >= 2
+                               && menu.editor_.totalEnemies() == beforeDragTotal + 1,
+                           QStringLiteral("dragging from the palette adds an enemy column"));
+
         menu.keyPress(Qt::Key_Return);
         game = menu.match_.game();
         success &= require(menu.screen() == Menu::Screen::Match
@@ -349,12 +517,11 @@ public:
 
         log(QStringLiteral("Script editor"));
         menu.keyPress(Qt::Key_2);
-        for (int i = 0; i < 6; ++i) {
-            menu.keyPress(Qt::Key_Right);
-        }
-        menu.keyPress(Qt::Key_Plus);
+        success &= require(menu.editor_.columnCount() < 5,
+                           QStringLiteral("editor shows only used columns"));
+        menu.keyPress(Qt::Key_5);
         success &= require(menu.editor_.waveHasBoss(menu.editor_.row()),
-                           QStringLiteral("editor toggles the boss wave"));
+                           QStringLiteral("editor adds the boss column"));
         menu.keyPress(Qt::Key_Minus);
         success &= require(!menu.editor_.waveHasBoss(menu.editor_.row()),
                            QStringLiteral("editor clears the boss wave"));
@@ -521,6 +688,13 @@ public:
         movePointer({GameConfig::ScreenWidth / 2.0f, 454.0f});
         save(QStringLiteral("title.png"));
 
+        // 星区地图
+        menu.keyPress(Qt::Key_Return);
+        menu.keyRelease(Qt::Key_Return);
+        save(QStringLiteral("map.png"));
+        menu.keyPress(Qt::Key_Escape);
+        menu.keyRelease(Qt::Key_Escape);
+
         // 商店
         ShopService.score().total_ = 2400;
         ShopService.inventory().addMine(2);
@@ -554,6 +728,12 @@ public:
         for (int i = 0; i < 3; ++i) {
             menu.keyPress(Qt::Key_Plus);
         }
+        const QRectF spitterChip = menu.editor_.paletteChipRect(1);
+        const QRectF dropRow = menu.editor_.rowRect(1);
+        menu.mousePressLeft({float(spitterChip.center().x()),
+                             float(spitterChip.center().y())});
+        menu.mouseMove({float(dropRow.center().x()), float(dropRow.center().y())});
+        menu.mouseReleaseLeft();
         save(QStringLiteral("editor.png"));
         menu.keyPress(Qt::Key_Escape);
 
@@ -590,6 +770,12 @@ public:
         game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("spitter"), {1120, 470}, 4);
         game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("tank"), {760, 445}, 4);
         game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("splitter"), {600, 210}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("amplifier"), {860, 340}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("mender"), {930, 470}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("linker"), {790, 520}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("rusher"), {1050, 250}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("necromancer"), {1150, 560}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("summoner"), {690, 300}, 4);
         int enemyIndex = 0;
         for (const auto &enemy : game->arena_.enemies()) {
             enemy->age = 2.0f + float(enemyIndex) * 0.3f;

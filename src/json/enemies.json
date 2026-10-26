@@ -1,8 +1,44 @@
 {
-  "drone":    {"hp": 26,   "speed": 143, "radius": 13, "damage": 9,  "score": 10},
-  "spitter":  {"hp": 38,   "speed": 94,  "radius": 15, "damage": 10, "score": 18},
-  "tank":     {"hp": 122,  "speed": 60,  "radius": 24, "damage": 18, "score": 36},
-  "splitter": {"hp": 54,   "speed": 108, "radius": 18, "damage": 12, "score": 26},
-  "mini":     {"hp": 13,   "speed": 188, "radius": 8,  "damage": 6,  "score": 4},
-  "boss":     {"hp": 1750, "speed": 70,  "radius": 50, "damage": 28, "score": 600}
+  "drone" : {
+    "hp": 26, "speed": 143, "radius": 13, "damage": 9,  "score": 10
+  },
+  "spitter" : {
+    "hp": 38,   "speed": 94,  "radius": 15, "damage": 10, "score": 18
+  },
+  "tank" : {
+    "hp": 122,  "speed": 60,  "radius": 24, "damage": 18, "score": 36
+  },
+  "splitter" : {
+    "hp": 54,   "speed": 108, "radius": 18, "damage": 12, "score": 26
+  },
+  "mini" : {
+    "hp": 13,   "speed": 188, "radius": 8,  "damage": 6,  "score": 4
+  },
+  "boss" : {
+    "hp": 1750, "speed": 70,  "radius": 50, "damage": 28, "score": 600
+  },
+  "amplifier" : {
+    "hp": 64,   "speed": 82,  "radius": 16, "damage": 8,  "score": 30, 
+    "aura_radius": 150, "aura_damage": 0.30
+  },
+  "linker" : {
+    "hp": 96,   "speed": 76,  "radius": 18, "damage": 8,  "score": 34, 
+    "share_radius": 170, "share_ratio": 0.45
+  },
+  "mender" : {
+    "hp": 58,   "speed": 88,  "radius": 15, "damage": 7,  "score": 32,
+    "heal_radius": 150, "heal_rate": 7
+  },
+  "rusher" : {
+    "hp": 22,   "speed": 300, "radius": 11, "damage": 13, "score": 18,
+    "lunge_interval": 1.6
+  },
+  "necromancer" : {
+    "hp": 88,   "speed": 70,  "radius": 18, "damage": 8,  "score": 40,
+    "revive_radius": 220, "revive_chance": 0.30
+  },
+  "summoner" : {
+    "hp": 120,  "speed": 62,  "radius": 20, "damage": 9,  "score": 44,
+    "charge_required": 3, "summon_count": 3
+  }
 }

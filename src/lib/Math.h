@@ -27,6 +27,7 @@ public:
 
         float lengthSquared() const { return x * x + y * y; }
         float length() const { return std::sqrt(lengthSquared()); }
+        float dot(const Vec2 &other) const { return x * other.x + y * other.y; }
         float distanceSquaredTo(const Vec2 &other) const { return (*this - other).lengthSquared(); }
         float distanceTo(const Vec2 &other) const { return (*this - other).length(); }
 

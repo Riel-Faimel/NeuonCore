@@ -1,26 +1,20 @@
 #include "Shop/Inventory/Inventory.h"
 
-#include <QCoreApplication>
-#include <QSettings>
+#include "Data/Settings.h"
 
 #include <algorithm>
 
 namespace shop {
 
-QString Inventory::path()
-{
-    return QCoreApplication::applicationDirPath() + QStringLiteral("/settings.ini");
-}
-
 void Inventory::load()
 {
-    QSettings settings(path(), QSettings::IniFormat);
+    QSettings settings = app::openSettings();
     mines_ = std::max(0, settings.value(QStringLiteral("inventory/mines"), 0).toInt());
 }
 
 void Inventory::save()
 {
-    QSettings settings(path(), QSettings::IniFormat);
+    QSettings settings = app::openSettings();
     settings.setValue(QStringLiteral("inventory/mines"), mines_);
 }
 

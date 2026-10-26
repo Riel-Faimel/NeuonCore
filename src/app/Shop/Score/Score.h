@@ -25,7 +25,6 @@ public:
 private:
     friend class ::SelfTest;
 
-    static QString path();
 
     int total_ = 0;
     int runStart_ = 0;

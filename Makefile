@@ -37,7 +37,7 @@ LIBS := -L$(QTDIR)/lib \
 
 GAMES_COMPONENTS := Games Waves/Waves Upgrades/Upgrades Renderer/Renderer
 GAMES_OBJS := $(addprefix $(BUILD)/app/Games/,$(addsuffix .o,$(GAMES_COMPONENTS)))
-MENU_COMPONENTS := Menu Main/Main Match/Match Result/Result Editor/Editor Depot/Depot Settings/Settings
+MENU_COMPONENTS := Menu Main/Main Map/Map Match/Match Result/Result Editor/Editor Depot/Depot Settings/Settings
 MENU_OBJS := $(addprefix $(BUILD)/app/Menu/,$(addsuffix .o,$(MENU_COMPONENTS)))
 LIB_SRC := Math Random
 LIB_OBJS := $(addprefix $(BUILD)/lib/,$(addsuffix .o,$(LIB_SRC)))
@@ -51,7 +51,7 @@ RC := $(MINGWDIR)/bin/windres.exe
 ICON_RES_OBJ := $(BUILD)/app/app_res.o
 
 # 数值数据：src/json/*.json 在构建期被嵌成 raw string，编译期由 constexpr JSON 解析器读成常量。
-JSON_FILES := $(wildcard src/json/*.json)
+JSON_FILES := $(wildcard src/json/*.json) $(wildcard src/json/waves/*.json)
 EMBED_TOOL := $(BUILD)/embed_json.exe
 GENERATED_JSON := $(BUILD)/generated/GameDataJson.h
 
@@ -98,6 +98,7 @@ $(BUILD):
 	@if not exist "$(BUILD_WIN)\app\Shop\Score" mkdir "$(BUILD_WIN)\app\Shop\Score"
 	@if not exist "$(BUILD_WIN)\app\Shop\Inventory" mkdir "$(BUILD_WIN)\app\Shop\Inventory"
 	@if not exist "$(BUILD_WIN)\app\Menu\Main" mkdir "$(BUILD_WIN)\app\Menu\Main"
+	@if not exist "$(BUILD_WIN)\app\Menu\Map" mkdir "$(BUILD_WIN)\app\Menu\Map"
 	@if not exist "$(BUILD_WIN)\app\Menu\Match" mkdir "$(BUILD_WIN)\app\Menu\Match"
 	@if not exist "$(BUILD_WIN)\app\Menu\Result" mkdir "$(BUILD_WIN)\app\Menu\Result"
 	@if not exist "$(BUILD_WIN)\app\Menu\Editor" mkdir "$(BUILD_WIN)\app\Menu\Editor"
@@ -155,7 +156,7 @@ $(EMBED_TOOL): tools/embed_json.cpp | $(BUILD)
 $(GENERATED_JSON): $(EMBED_TOOL) $(JSON_FILES) | $(BUILD)
 	@if not exist "$(BUILD_WIN)\generated" mkdir "$(BUILD_WIN)\generated"
 	@echo [JSON] $@
-	@$(EMBED_TOOL) $@ player_json src/json/player.json enemies_json src/json/enemies.json waves_json src/json/waves.json upgrades_json src/json/upgrades.json bullets_json src/json/bullets.json items_json src/json/items.json
+	@$(EMBED_TOOL) $@ player_json src/json/player.json enemies_json src/json/enemies.json waves_level_01 src/json/waves/level-01.json upgrades_json src/json/upgrades.json bullets_json src/json/bullets.json items_json src/json/items.json levels_json src/json/levels.json
 
 $(BUILD)/NeonCoreConsole.exe: $(TEST_OBJS)
 	@echo [LD] $@ (debug/tests)

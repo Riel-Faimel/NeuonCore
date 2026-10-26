@@ -1,13 +1,12 @@
 #include "Menu/Settings/Settings.h"
 
 #include "Base/Base.h"
+#include "Data/Settings.h"
 #include "GameConfig.h"
 
-#include <QCoreApplication>
 #include <QLinearGradient>
 #include <QPainter>
 #include <QPen>
-#include <QSettings>
 #include <Qt>
 
 #include <algorithm>
@@ -40,17 +39,12 @@ QRectF Settings::backRect() const
     return QRectF(GameConfig::ScreenWidth / 2.0f - 90.0f, 600.0f, 180.0f, 42.0f);
 }
 
-QString Settings::path()
-{
-    return QCoreApplication::applicationDirPath() + QStringLiteral("/settings.ini");
-}
-
 void Settings::load()
 {
     if (!persistent_) {
         return;
     }
-    QSettings settings(path(), QSettings::IniFormat);
+    QSettings settings = app::openSettings();
     const int sound = settings.value(QStringLiteral("audio/sound"), 68).toInt();
     const int music = settings.value(QStringLiteral("audio/music"), 45).toInt();
     BaseService.setSoundVolume(float(std::clamp(sound, 0, 100)) / 100.0f);
@@ -62,7 +56,7 @@ void Settings::save() const
     if (!persistent_) {
         return;
     }
-    QSettings settings(path(), QSettings::IniFormat);
+    QSettings settings = app::openSettings();
     settings.setValue(QStringLiteral("audio/sound"),
                       int(std::lround(BaseService.soundVolume() * 100.0f)));
     settings.setValue(QStringLiteral("audio/music"),

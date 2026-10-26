@@ -139,8 +139,8 @@ void Main::render(QPainter &painter, const std::vector<Card> &cards,
         const QString action = card.custom
                                    ? (active ? QStringLiteral("ENTER  EDIT")
                                              : QStringLiteral("CLICK  EDIT"))
-                                   : (active ? QStringLiteral("ENTER  DEPLOY")
-                                             : QStringLiteral("READY"));
+                                   : (active ? QStringLiteral("ENTER  MAP")
+                                             : QStringLiteral("CLICK  MAP"));
         Base::text(painter, Base::techSmallFont(), action,
                    active ? Base::Cyan : Base::Muted,
                    {float(rect.right()) - 24.0f, float(rect.bottom()) - 22.0f},
@@ -217,12 +217,10 @@ Main::Command Main::keyPress(int key, const std::vector<Card> &cards)
         if (cards[size_t(selected_)].custom) {
             command.action = Action::OpenEditor;
         } else {
-            command.action = Action::StartLevel;
-            command.level = selected_;
+            command.action = Action::OpenMap;
         }
     } else if (key == Qt::Key_1) {
-        command.action = Action::StartLevel;
-        command.level = 0;
+        command.action = Action::OpenMap;
     } else if (key == Qt::Key_2) {
         command.action = Action::OpenEditor;
     }
@@ -250,7 +248,7 @@ Main::Command Main::mousePress(const Math::Vec2 &position,
         selected_ = i;
         command.level = i;
         command.action = cards[size_t(i)].custom ? Action::OpenEditor
-                                                 : Action::StartLevel;
+                                                 : Action::OpenMap;
         return command;
     }
     return command;

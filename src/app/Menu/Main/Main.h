@@ -23,7 +23,7 @@ public:
 
     enum class Action {
         None,
-        StartLevel,
+        OpenMap,
         OpenEditor,
         OpenShop,
         OpenSettings,

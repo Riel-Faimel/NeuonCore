@@ -66,8 +66,10 @@ cpp/src/
 │  │  ├─ Upgrades/Upgrades.h/.cpp 组件：强化池、抽取与应用
 │  │  └─ Renderer/Renderer.h/.cpp 组件：局内画面与特效
 │  ├─ Data/GameData.h              编译期数值表（展开自 src/json）
+│  ├─ Data/Settings.h              配置存储（注册表 / ini）
 │  ├─ Menu/Menu.h / Menu.cpp
 │  │  ├─ Main/Main.h/.cpp         标题页组件
+│  │  ├─ Map/Map.h/.cpp           星区地图组件
 │  │  ├─ Match/Match.h/.cpp       当前对局组件
 │  │  ├─ Result/Result.h/.cpp     结算覆盖层组件
 │  │  ├─ Editor/Editor.h/.cpp     台本编辑器组件
@@ -89,9 +91,10 @@ cpp/src/
 ├─ json/
 │  ├─ player.json                   玩家基础数值
 │  ├─ enemies.json                  敌人基础数值
-│  ├─ waves.json                    战役台本 + 出怪节奏
+│  ├─ waves/level-01.json           第 1 关台本 + 出怪节奏
 │  ├─ upgrades.json                 强化数值区间
 │  ├─ items.json                    商店道具（地雷）
+│  ├─ levels.json                   星区地图节点
 │  └─ bullets.json                  敌方子弹数值
 ├─ tools/
 │  └─ embed_json.cpp                构建期把 JSON 嵌成 raw string
@@ -140,7 +143,7 @@ cpp/src/
 - 把 `Arena::Feedback` 转发给 `games::Renderer`；
 - 把胜负结果交给 `Menu`，自己不再画标题或结算。
 
-积分由全局 `ShopService.score()`（`shop::Score`，`src/app/Shop/Score/`）统一持有：`Games` 构造时调用 `beginRun()`（只重置本局统计），`arena::Events::handleKill()` 击杀时调用 `addKill(enemy.score)`。全局余额跨局累计并写入 exe 同级的 `settings.ini`（`[score] total`），HUD 显示钱包，结算显示本局获得（`Games::runScore()`）；`Score::spend()` 供商店使用。
+积分由全局 `ShopService.score()`（`shop::Score`，`src/app/Shop/Score/`）统一持有：`Games` 构造时调用 `beginRun()`（只重置本局统计），`arena::Events::handleKill()` 击杀时调用 `addKill(enemy.score)`。全局余额跨局累计并写入配置存储（Windows 注册表 `HKCU\Software\NeonCore\NeonCore`，其他平台 exe 同级 `settings.ini`；键 `score/total`），HUD 显示钱包，结算显示本局获得（`Games::runScore()`）；`Score::spend()` 供商店使用。
 
 一局的结束条件只由台本决定：清空最后一波即胜利。`Boss` 只是一个带阶段的强敌，击杀它不会结束对局，只触发表现反馈（目标摧毁横幅、震屏、音效），所以它可以被放在任意一波。
 
@@ -151,20 +154,21 @@ cpp/src/
 | 组件 | 职责 |
 | --- | --- |
 | `Main` | 标题页：标题、关卡卡、商店/设置入口；选中状态和命中测试 |
+| `Map` | 星区地图：关卡节点、锁定状态、选择与进入 |
 | `Match` | 持有当前这一局 `Games`：开局、推进、渲染、局内输入转发 |
 | `Result` | 结算覆盖层：只接收一份只读 `Summary`，不读取 `Games` |
-| `Editor` | 自定义台本编辑器：持有 `customScript_`，逐波表格编辑 |
+| `Editor` | 自定义台本编辑器：动态列（底部敌人库拖入）、逐波编辑 |
 | `Depot` | 补给站界面：展示钱包/库存，把购买意图转给全局 `Shop` |
-| `Settings` | 音效 / 背景音乐音量，读写 `settings.ini` |
+| `Settings` | 音效 / 背景音乐音量，读写配置存储 |
 
 `Menu` 自己只负责：
 
-- 屏幕状态机（`Main / Match / Result / Editor / Shop / Settings`）和输入路由；
-- 把 `Main` / `Editor` / `Depot` / `Settings` 的意图（`StartLevel / OpenEditor / OpenShop / Deploy / Back` 等 `Action`）翻译成开局、进编辑器、进商店、回主菜单；
+- 屏幕状态机（`Main / Map / Match / Result / Editor / Shop / Settings`）和输入路由；
+- 把 `Main` / `Map` / `Editor` / `Depot` / `Settings` 的意图（`OpenMap / Start / OpenEditor / OpenShop / Deploy / Back` 等 `Action`）翻译成进地图、开局、进编辑器、进商店、回主菜单；
 - 开局时把 `Games::Level`（展示信息 + 台本 + 起始波）交给 `Match`；回主菜单时让 `Match` 销毁这一局；
 - 给 `Result` 组装 `Summary`（胜负、得分、击杀、波次、时间）；
 - 管理关卡表 `levels_`：标准协议与自定义协议的展示信息，自定义协议部署时用 `Editor::script()` 覆盖台本、固定从第 1 波开始；
-- 启动时按需初始化音频（`BaseService.initAudio()`），并按 `settings.ini` 恢复音量（`Shop` 的加载/保存在 `main()`）；
+- 启动时按需初始化音频（`BaseService.initAudio()`），并按配置存储恢复音量（`Shop` 的加载/保存在 `main()`）；
 
 `Games` 一旦构造就由 `Match` 持有，`Menu` 不再直接访问；`Menu` 不参与战斗、波次或强化计算，也不直接画任何屏幕（组件的 `render()` 才画）。
 
@@ -177,7 +181,7 @@ cpp/src/
 | `Score` | 全局积分钱包、本局获得/击杀、`spend()` |
 | `Inventory` | 地雷库存、`takeMine()` |
 
-`Shop` 只做组合与持久化：`load()/save()` 读写 `settings.ini` 的 `[score] total` 和 `[inventory] mines`，`buyMine()` 负责扣款 + 入库。持久化生命周期由 `main()` 管：启动时 `ShopService.load()`，退出前 `ShopService.save()`；`Menu` / `Games` / `Arena` / `menu::Depot` 都直接使用 `ShopService`，不再由某个模块持有并向下传递引用。
+`Shop` 只做组合与持久化：`load()/save()` 读写配置存储的 `score/total` 和 `inventory/mines`（Windows 注册表 / 其他平台 ini，见 `Data/Settings.h`），`buyMine()` 负责扣款 + 入库。持久化生命周期由 `main()` 管：启动时 `ShopService.load()`，退出前 `ShopService.save()`；`Menu` / `Games` / `Arena` / `menu::Depot` 都直接使用 `ShopService`，不再由某个模块持有并向下传递引用。
 
 ### Arena
 
@@ -278,6 +282,7 @@ struct Damage {
     float amount = 0.0f;
     bool critical = false;
     DamageSource source = DamageSource::Bullet;
+    bool shared = false;   // linker 转来的伤害，不再二次分担
 };
 
 class Fighter {
@@ -301,6 +306,33 @@ public:
 
 接口只放共同动作和只读查询，不把 `PlayerState` / `Enemy` 字段塞进基类。`Enemy::fireAimed` 是 private helper，不进入接口。
 
+## 敌人与支援光环
+
+`Enemy::Kind` 目前覆盖 11 种：drone / spitter / tank / splitter / mini / boss，加上 6 种支援与特殊类型。数值（含光环参数）全部来自 `src/json/enemies.json`，热路径行为在 `Enemy::update()`，击杀触发在 `Events::handleKill()`：
+
+| kind | 机制 |
+| --- | --- |
+| `amplifier` | 150 范围内友军伤害 +30%，每帧刷新 0.35s buff；敌方子弹伤害和接触伤害都吃加成 |
+| `linker` | 170 范围内友军受到的 45% 伤害转给自己；只转一层，多个 linker 均分 |
+| `mender` | 每秒为 150 范围内友军恢复 7 HP |
+| `rusher` | 300 速度直冲，每 1.6s 以 2.3 倍速度突进 |
+| `necromancer` | 220 范围内友军阵亡时 30% 概率半血复活；复活体不再连锁复活，分数减半 |
+| `summoner` | 每个友军阵亡积累 +1 进度，满 3 时在自身周围召唤 3 只 mini |
+
+支援型敌人的光环半径画在 `Enemy::draw()`，被增伤的敌人有一圈琥珀色提示；伤害分担通过 `Damage.shared` 防止递归。
+
+### 寻路角色
+
+`Enemy::Role` 决定基础走位，`roleOf()` 是唯一分类入口：
+
+| Role | 成员 | 走位 |
+| --- | --- | --- |
+| `Melee` | drone / tank / splitter / mini / rusher | 直冲玩家，以接触为目标（rusher 额外周期突进） |
+| `Ranged` | spitter / boss / summoner | 保持 205–340 的距离并绕圈；检测 140 距离内、横向 34 以内的玩家弹幕，触发 0.12s 侧闪，冷却 1.6s |
+| `Support` | amplifier / linker / mender / necromancer | 扫描友军，选 150 半径内邻居最多的目标点靠拢；没有友军时退回中距离走位 |
+
+辅助函数都在 `Enemy` 私有区：`avoidPlayerBullets()` 只读 `Bullets::playerBullets()`，`allyClusterDirection()` 只读 `Combatants::enemies()`，不引入新的组件依赖。
+
 ## 依赖方向
 
 ```text
@@ -309,9 +341,10 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
             │
             ├─ BaseService ────────► base::Input / Audio / Music / Pointer / Paint（全局单例）
             ├─ RandomService ──────► 随机引擎（全局单例）
-            ├─ ShopService ────────► shop::Score / Inventory（全局单例，settings.ini）
-            └─ Menu（持有商店外的关卡表，组合 6 个界面组件）
+            ├─ ShopService ────────► shop::Score / Inventory（全局单例，注册表 / ini）
+            └─ Menu（持有商店外的关卡表，组合 7 个界面组件）
                ├─ menu::Main ─────────► 关卡卡 / 商店与设置入口（数据由 Menu 提供）
+├─ menu::Map ──────────► 星区地图节点（levels.json），Start → 开局
                ├─ menu::Match ────────► Games(Level)   ← 一局一个实例
                │  └─ Games
                │     ├─ Arena ────► 私有继承 arena::Bullets / Combatants / Entities / Events / State
@@ -322,7 +355,7 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
                ├─ menu::Result ───────► 只读 Summary
                ├─ menu::Editor ───────► games::Script（自己持有）
                ├─ menu::Depot ────────► ShopService（buyMine）+ 只读钱包/库存
-               └─ menu::Settings ─────► BaseService 音量接口 + settings.ini
+               └─ menu::Settings ─────► BaseService 音量接口 + 配置存储
 ```
 
 依赖是单向的：
@@ -345,6 +378,7 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
 GameWindow::tick()
 ├─ Menu::update(dt)
 │  ├─ Main:   菜单动画（menu::Main 自己推进时间）
+│  ├─ Map:    menu::Map 自己推进时间/悬停
 │  ├─ Editor: 输入自处理（menu::Editor），Menu 不更新
 │  ├─ Shop:   输入自处理（menu::Depot），Menu 不更新
 │  ├─ Match:  menu::Match → Games::update(dt)
@@ -357,6 +391,7 @@ GameWindow::tick()
 ├─ BaseService.pointerUpdate(dt)   ← 指针独立时钟，暂停时也推进
 ├─ Menu::render()
 │  ├─ Main:    menu::Main   绘制菜单
+│  ├─ Map:     menu::Map    绘制星区地图
 │  ├─ Editor:  menu::Editor 绘制台本表格
 │  ├─ Shop:    menu::Depot  绘制补给站
 │  ├─ Settings: menu::Settings 绘制设置页
@@ -377,10 +412,11 @@ GameWindow::paintEvent()
 | --- | --- |
 | 玩家血量 / 移速 / 伤害 / 射速 / 弹速 / 弹体半径 | `src/json/player.json` |
 | 敌人血量 / 速度 / 半径 / 接触伤害 / 分数、Boss 基础值 | `src/json/enemies.json` |
-| 战役波次组成、出怪节奏、波次成长系数 | `src/json/waves.json` |
+| 战役波次组成、出怪节奏、波次成长系数 | `src/json/waves/level-01.json` |
 | 强化每轮的随机区间 | `src/json/upgrades.json` |
 | 敌方子弹速度 / 伤害 / 半径 | `src/json/bullets.json` |
 | 地雷价格 / 伤害 / 感应与爆炸半径 / 引爆延迟 / 寿命 | `src/json/items.json` |
+| 星区地图节点位置 / 名称 / 是否解锁 | `src/json/levels.json` |
 
 改完直接 `make`：JSON 会重新嵌成 raw string，包含数值表的 TU 自动重编译；写错格式会在编译期由 `static_assert` 报错。
 
@@ -399,9 +435,10 @@ GameWindow::paintEvent()
 
 ### 加 / 改波次
 
-只改 `src/json/waves.json` 的 `campaign`：每一波是 `[{"kind": "...", "count": N}, ...]`，最后一波带 `boss` 即为 Boss 波；`Menu::standardScript()` 把它转成 `games::Script` 提交。
+只改 `src/json/waves/level-01.json` 的 `campaign`：每一波是 `[{"kind": "...", "count": N}, ...]`，最后一波带 `boss` 即为 Boss 波；`Menu::standardScript()` 把它转成 `games::Script` 提交。每个关卡一个文件（`src/json/waves/level-0N.json`），`levels.json` 的节点用 `waves` 字段登记文件 id；新增文件后同步 Makefile 的嵌入参数和 `GameData` 里的文档常量。
 
 - 台本是数据，开局时作为 `Games::Level.script` 提交，`Waves` 只负责按它排队出生，不再有内置台本；
+- 星区地图节点在 `src/json/levels.json`；把节点 `locked` 设为 `false` 前，需要先在关卡表里补上对应的标准关卡（目前只有第一个区域可用）；
 - 出怪节奏（首波/后续延迟、间隔区间）在同一个文件的 `spawn` 段；
 - 总波数 = 台本长度，HUD 通过 `Waves::totalWaves()` 读取，结算通过 `Games` 的快照读取；
 - `boss` 出现在某一波里，那一波就是 Boss 波（`Waves::isBossWave()`），并且 Boss 永远第一个出场；击杀 Boss 不会结束对局，只有最后一波清空才胜利。
@@ -432,7 +469,7 @@ GameWindow::paintEvent()
 
 ### 加敌人 / 状态 / 事件
 
-- 敌人：数值在 `src/json/enemies.json`，颜色与行为在 `src/app/Arena/Combatants/Enemy.*`，出生在 `Waves`。
+- 敌人：数值在 `src/json/enemies.json`，颜色与行为在 `src/app/Arena/Combatants/Enemy.*`，出生在 `Waves`；支援/特殊敌人的光环参数也在 `enemies.json`。
 - 状态：`src/app/Arena/State.*`。
 - 碰撞/击杀：`src/app/Arena/Events.*`。
 - 实体：`src/app/Arena/Entities/*`。

@@ -32,7 +32,6 @@ public:
     QRectF backRect() const;
 
 private:
-    static QString path();
     void adjust(int row, float delta);
     void setFromPointer(const Math::Vec2 &position);
     void save() const;

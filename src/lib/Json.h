@@ -95,6 +95,11 @@ public:
                                                                : std::string_view{};
     }
 
+    constexpr bool boolean(const Node *value, bool fallback = false) const
+    {
+        return value != nullptr && value->type == Type::Bool ? value->boolean : fallback;
+    }
+
 private:
     friend struct Parser;
 

@@ -20,7 +20,6 @@ public:
 private:
     friend class ::SelfTest;
 
-    static QString path();
 
     int mines_ = 0;
 };

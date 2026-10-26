@@ -102,6 +102,10 @@ void Menu::update(float dt)
     }
     if (screen_ == Screen::Main) {
         main_.update(dt, cards(), mouse_, mouseActive_);
+    } else if (screen_ == Screen::Map) {
+        map_.update(dt, mouse_, mouseActive_);
+    } else if (screen_ == Screen::Editor) {
+        editor_.update(dt);
     }
 }
 
@@ -119,7 +123,9 @@ void Menu::render()
         return;
     }
     QPainter painter(&frame_);
-    if (screen_ == Screen::Editor) {
+    if (screen_ == Screen::Map) {
+        map_.render(painter);
+    } else if (screen_ == Screen::Editor) {
         editor_.render(painter, BaseService.muted());
     } else if (screen_ == Screen::Shop) {
         depot_.render(painter);
@@ -172,8 +178,10 @@ void Menu::keyPress(int key, bool autoRepeat)
     case Screen::Main: {
         const menu::Main::Command command = main_.keyPress(key, cards());
         switch (command.action) {
-        case menu::Main::Action::StartLevel:
-            startLevel(command.level);
+        case menu::Main::Action::OpenMap:
+            map_.reset();
+            screen_ = Screen::Map;
+            BaseService.playSound(QStringLiteral("ui"));
             break;
         case menu::Main::Action::OpenEditor:
             openEditor();
@@ -189,6 +197,21 @@ void Menu::keyPress(int key, bool autoRepeat)
             break;
         case menu::Main::Action::None:
             break;
+        }
+        break;
+    }
+    case Screen::Map: {
+        const menu::Map::Command command = map_.keyPress(key);
+        if (command.action == menu::Map::Action::Start) {
+            if (command.level >= 0 && command.level < CustomLevelIndex) {
+                startLevel(command.level);
+            } else {
+                // 区域已解锁但还没有对应标准关卡：等关卡内容补齐再放行。
+                BaseService.playSound(QStringLiteral("ui"));
+            }
+        } else if (command.action == menu::Map::Action::Back) {
+            screen_ = Screen::Main;
+            BaseService.playSound(QStringLiteral("ui"));
         }
         break;
     }
@@ -211,7 +234,7 @@ void Menu::keyPress(int key, bool autoRepeat)
         break;
     }
     case Screen::Editor: {
-        const menu::Editor::Action action = editor_.keyPress(key);
+        const menu::Editor::Action action = editor_.keyPress(key, autoRepeat);
         if (action == menu::Editor::Action::Deploy) {
             startLevel(CustomLevelIndex);
         } else if (action == menu::Editor::Action::Back) {
@@ -242,6 +265,8 @@ void Menu::keyRelease(int key)
 {
     if (screen_ == Screen::Match) {
         match_.keyRelease(key);
+    } else if (screen_ == Screen::Editor) {
+        editor_.keyRelease(key);
     }
 }
 
@@ -253,6 +278,8 @@ void Menu::mouseMove(const Math::Vec2 &position)
         match_.mouseMove(position);
     } else if (screen_ == Screen::Settings) {
         settings_.mouseMove(position);
+    } else if (screen_ == Screen::Editor) {
+        editor_.mouseMove(position);
     }
 }
 
@@ -264,8 +291,10 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
     case Screen::Main: {
         const menu::Main::Command command = main_.mousePress(position, cards());
         switch (command.action) {
-        case menu::Main::Action::StartLevel:
-            startLevel(command.level);
+        case menu::Main::Action::OpenMap:
+            map_.reset();
+            screen_ = Screen::Map;
+            BaseService.playSound(QStringLiteral("ui"));
             break;
         case menu::Main::Action::OpenEditor:
             openEditor();
@@ -281,6 +310,21 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
             break;
         case menu::Main::Action::None:
             break;
+        }
+        break;
+    }
+    case Screen::Map: {
+        const menu::Map::Command command = map_.mousePress(position);
+        if (command.action == menu::Map::Action::Start) {
+            if (command.level >= 0 && command.level < CustomLevelIndex) {
+                startLevel(command.level);
+            } else {
+                // 区域已解锁但还没有对应标准关卡：等关卡内容补齐再放行。
+                BaseService.playSound(QStringLiteral("ui"));
+            }
+        } else if (command.action == menu::Map::Action::Back) {
+            screen_ = Screen::Main;
+            BaseService.playSound(QStringLiteral("ui"));
         }
         break;
     }
@@ -337,6 +381,8 @@ void Menu::mouseReleaseLeft()
     settings_.mouseRelease();
     if (screen_ == Screen::Match) {
         match_.mouseReleaseLeft();
+    } else if (screen_ == Screen::Editor) {
+        editor_.mouseRelease();
     }
 }
 
