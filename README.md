@@ -158,15 +158,17 @@ cpp/
 │  │  │     ├─ Portal / Pickup
 │  │  │     └─ Particle / FloatingText / Shockwave
 │  │  ├─ Base/
-│  │  │  ├─ Base.h / Base.cpp     模块入口：组合 Input / Audio / Music / Paint；含全局单例 BaseService
+│  │  │  ├─ Base.h / Base.cpp     模块入口：组合 Input / Audio / Music / Pointer / Paint；含全局单例 BaseService
 │  │  │  ├─ Input/Input.h/.cpp    组件：键鼠状态
 │  │  │  ├─ Audio/Audio.h/.cpp    组件：程序化 WAV 音效
 │  │  │  ├─ Audio/Music.h/.cpp    组件：背景音乐管理器（常驻）
+│  │  │  ├─ Pointer/Pointer.h/.cpp 组件：全局鼠标指针（窗口每帧通过 BaseService 叠加）
 │  │  │  └─ Paint/Paint.h/.cpp    组件：颜色/字体/绘制原语
 │  │  ├─ Games/
 │  │  │  ├─ Games.h / Games.cpp   模块入口：局内状态机与组件编排
 │  │  │  ├─ Waves/Waves.h/.cpp    组件：按提交的台本出生敌人
-│  │  │  └─ Upgrades/Upgrades.h/.cpp 组件：强化池、抽取与应用
+│  │  │  ├─ Upgrades/Upgrades.h/.cpp 组件：强化池、抽取与应用
+│  │  │  └─ Renderer/Renderer.h/.cpp 组件：局内背景、发光、HUD、卡片、暂停
 │  │  ├─ Menu/Menu.h/.cpp          模块入口：屏幕状态机、输入路由、关卡表
 │  │  ├─ Menu/Main/Main.h/.cpp     组件：标题页与关卡卡
 │  │  ├─ Menu/Match/Match.h/.cpp   组件：当前对局（持有 Games）
@@ -174,11 +176,9 @@ cpp/
 │  │  ├─ Menu/Editor/Editor.h/.cpp 组件：自定义台本编辑器
 │  │  ├─ Menu/Depot/Depot.h/.cpp   组件：补给站界面（地雷商店）
 │  │  ├─ Menu/Settings/Settings.h/.cpp 组件：音量设置
-│  │  ├─ Renderer.h / Renderer.cpp 局内背景、发光、HUD、卡片、暂停
 │  │  ├─ Shop/Shop.h / Shop.cpp   全局模块：组合 Score / Inventory
 │  │  │  ├─ Score/Score.h/.cpp    组件：全局积分（持久化）
 │  │  │  └─ Inventory/Inventory.h/.cpp 组件：地雷库存（持久化）
-│  │  ├─ Pointer.h / Pointer.cpp  全局鼠标指针（窗口每帧叠加）
 │  │  ├─ app.rc                   Windows 资源：嵌入应用图标
 │  │  └─ main.cpp                 QWidget 窗口、输入桥接、全局服务初始化、release 入口
 │  ├─ Data/GameData.h             编译期数值表（展开自 src/json）
@@ -212,9 +212,9 @@ cpp/
 └─ dist/NeonCore/                 交付用 release GUI + 运行库
 ```
 
-`src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Music`、`Paint` 四个 `namespace base` 组件。`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），Menu / Games / Arena / Renderer / Shop 都直接调用 `BaseService`，不再通过构造函数传递 `Base&`。`Base.h` 仍只暴露 Base 的输入/音频/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Music` 的 QMediaPlayer、`Paint` 的 QFontDatabase 细节都在各自组件内。字体由 `main()` 在 `QApplication` 之后调 `Base::initialize()`；音频由 `BaseService.initAudio()` 按需初始化，`main()` 退出前调 `BaseService.shutdown()` 释放 Qt 音频对象。
+`src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Music`、`Pointer`、`Paint` 五个 `namespace base` 组件。`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），Menu / Games / Arena / Renderer / Shop 都直接调用 `BaseService`，不再通过构造函数传递 `Base&`。`Base.h` 仍只暴露 Base 的输入/音频/指针/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Music` 的 QMediaPlayer、`Pointer` 的位置/时钟/准星、`Paint` 的 QFontDatabase 细节都在各自组件内。字体由 `main()` 在 `QApplication` 之后调 `Base::initialize()`；音频由 `BaseService.initAudio()` 按需初始化，`main()` 退出前调 `BaseService.shutdown()` 释放 Qt 音频对象。窗口通过 `BaseService.pointerMoveTo/pointerSetVisible/pointerUpdate/pointerDraw` 驱动全局指针。
 
-`src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades` 两个 `namespace games` 组件，并拥有 `Arena`、`Renderer`。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Games` 负责局内状态机和调用顺序。随机数走全局 `RandomService`，不再作为构造参数传入。
+`src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades`、`Renderer` 三个 `namespace games` 组件，并拥有 `Arena`。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Renderer` 只负责这一局的画面与特效（标题/结算在 `menu::*`，鼠标指针在 `BaseService` 的 `base::Pointer`），`Games` 负责局内状态机和调用顺序。随机数走全局 `RandomService`，不再作为构造参数传入。
 
 积分和库存由进程级单例 `ShopService` 持有（`extern Shop ShopService;`）：`Shop` 组合 `shop::Score`（跨局钱包，写入 `settings.ini` 的 `[score] total`）和 `shop::Inventory`（地雷库存，写入 `[inventory] mines`）。`main()` 启动时调 `ShopService.load()`、退出前调 `ShopService.save()`；`arena::Events::handleKill()` 击杀上报积分；HUD 显示全局钱包，结算显示本局获得（`runScore()`）；`Shop::buyMine()` 负责扣款入库。
 
@@ -294,7 +294,7 @@ mingw32-make -j12 test
 
 - C++ 版使用 Qt 6 的字体渲染，字形和抗锯齿效果与 pygame 版略有差异；布局、配色和逻辑保持一致。
 - 中文使用系统微软雅黑/黑体。若字体缺失，可在 `src/app/Base/Paint/Paint.cpp` 的 `Paint::initialize()` 中更换字体路径。
-- 鼠标指针是全局元素（`src/app/Pointer.*`）：窗口每帧把它叠在画面最上层，`Base::reticle()` 是唯一画法，所有界面共用同一个指针和同一个时钟（局内暂停时外弧也照常旋转）；窗口内隐藏系统光标，指针移出窗口时恢复系统箭头。
+- 鼠标指针是全局元素，属于 `Base` 的 `base::Pointer` 组件（`src/app/Base/Pointer/`）：窗口每帧通过 `BaseService.pointerDraw()` 把它叠在画面最上层，`base::Paint::reticle()` 是唯一画法，所有界面共用同一个指针和同一个时钟（局内暂停时外弧也照常旋转）；窗口内隐藏系统光标，指针移出窗口时恢复系统箭头。
 - 第三方运行库：Qt 6（LGPLv3）与 FFmpeg（LGPLv2.1+）。分发时请保留相应的许可证信息，见 [`THIRD_PARTY.txt`](THIRD_PARTY.txt)。
 
 更多画面：[标题](screenshots/title.png) · [商店](screenshots/shop.png) · [设置](screenshots/settings.png) · [台本编辑器](screenshots/editor.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)

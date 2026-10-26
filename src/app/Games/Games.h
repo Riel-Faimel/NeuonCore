@@ -1,9 +1,9 @@
 #pragma once
 
 #include "Arena/Arena.h"
+#include "Games/Renderer/Renderer.h"
 #include "Games/Upgrades/Upgrades.h"
 #include "Games/Waves/Waves.h"
-#include "Renderer.h"
 #include "Shop/Shop.h"
 
 #include <QImage>
@@ -75,7 +75,7 @@ private:
     Arena arena_;
     games::Waves waves_;
     games::Upgrades upgrades_;
-    Renderer renderer_;
+    games::Renderer renderer_;
 
     State state_ = State::Playing;
     float runTime_ = 0.0f;

@@ -1,8 +1,10 @@
-#include "Pointer.h"
+#include "Base/Pointer/Pointer.h"
 
-#include "Base/Base.h"
+#include "Base/Paint/Paint.h"
 
 #include <QPainter>
+
+namespace base {
 
 void Pointer::moveTo(const Math::Vec2 &position)
 {
@@ -17,6 +19,8 @@ void Pointer::draw(QPainter &painter) const
     }
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, true);
-    Base::reticle(painter, position_, time_);
+    Paint::reticle(painter, position_, time_);
     painter.restore();
 }
+
+} // namespace base

@@ -8,14 +8,14 @@
    - 波次台本由 `Menu` 定义成数据（`games::Script`），开局时提交给 `Games`；`games::Waves` 只按台本生成出生队列。
    - 强化池、可选性和强化效果由 `games::Upgrades` 决定。
    - 敌人 AI、碰撞、Boss 阶段、分数由 `Arena` 及其组件决定。
-   - 画面布局和局内表现反馈由 `Renderer` 决定。
+   - 画面布局和局内表现反馈由 `Games` 的 `Renderer` 组件决定。
    - 主菜单、关卡选择和对局结算由 `Menu` 决定。
    - 输入、音频、字体和绘制原语由 `Base` 及其组件提供；`Base` 是进程级单例 `BaseService`，任何模块直接使用，不通过构造参数传递。
    - `Games` 只负责一局游戏的局内状态机、组件组合和调用顺序。
 
 2. **模块是全局类，组件是 namespace 中的类**
    - 除 `main` / `WinMain` 外，没有自由函数。
-   - 全局模块类：`GameConfig / Math / Random / Base / Arena / Games / Shop / Menu / Renderer / Pointer / GameWindow / SelfTest`。
+   - 全局模块类：`GameConfig / Math / Random / Base / Arena / Games / Shop / Menu / GameWindow / SelfTest`。
    - 进程级单例服务（`extern` 全局对象，不挂在任何模块上）：`BaseService`（输入/音频/字体）、`RandomService`（随机引擎）、`ShopService`（钱包/库存）。业务模块直接引用它们，不通过构造参数传递。
    - `Base` 的组件在 `namespace base`：`Input / Audio / Music / Paint`。
    - `Games` 的组件在 `namespace games`：`Waves / Upgrades`。
@@ -37,6 +37,7 @@ cpp/src/
 │  │  ├─ Input/Input.h/.cpp
 │  │  ├─ Audio/Audio.h/.cpp
 │  │  ├─ Audio/Music.h/.cpp
+│  │  ├─ Pointer/Pointer.h/.cpp   全局鼠标指针
 │  │  └─ Paint/Paint.h/.cpp
 │  ├─ Arena/
 │  │  ├─ Arena.h / Arena.cpp      私有继承组件 + 编排
@@ -61,8 +62,9 @@ cpp/src/
 │  │     └─ Shockwave.h/.cpp
 │  ├─ Games/
 │  │  ├─ Games.h / Games.cpp
-│  │  ├─ Waves/Waves.h/.cpp
-│  │  └─ Upgrades/Upgrades.h/.cpp
+│  │  ├─ Waves/Waves.h/.cpp       组件：按台本出生敌人
+│  │  ├─ Upgrades/Upgrades.h/.cpp 组件：强化池、抽取与应用
+│  │  └─ Renderer/Renderer.h/.cpp 组件：局内画面与特效
 │  ├─ Data/GameData.h              编译期数值表（展开自 src/json）
 │  ├─ Menu/Menu.h / Menu.cpp
 │  │  ├─ Main/Main.h/.cpp         标题页组件
@@ -74,8 +76,6 @@ cpp/src/
 │  ├─ Shop/Shop.h / Shop.cpp      模块入口：组合 Score / Inventory
 │  │  ├─ Score/Score.h/.cpp       组件：全局积分
 │  │  └─ Inventory/Inventory.h/.cpp 组件：消耗品库存
-│  ├─ Renderer.h / Renderer.cpp
-│  ├─ Pointer.h / Pointer.cpp
 │  ├─ app.rc
 │  └─ main.cpp
 ├─ lib/
@@ -103,39 +103,41 @@ cpp/src/
 
 ### Base
 
-`Base` 是全局模块类，组合 4 个 `namespace base` 组件（`Input / Audio / Music` 由 `Impl` 持有，`Paint` 是全静态）：
+`Base` 是全局模块类，组合 5 个 `namespace base` 组件（`Input / Audio / Music / Pointer` 由 `Impl` 持有，`Paint` 是全静态）：
 
 | 组件 | 职责 |
 | --- | --- |
 | `Input` | 键鼠状态、移动轴、射击状态 |
 | `Audio` | 程序化 WAV 音效、QSoundEffect 池、设备重试、静音 |
 | `Music` | 背景音乐管理：固定目录轮转、设备等待、静音；播放器常驻，不随界面重建 |
+| `Pointer` | 全局鼠标指针：位置、独立时钟、可见性；准星画法转发 `Paint::reticle` |
 | `Paint` | 颜色、字体、文字排版、发光、条形/面板等绘制原语，鼠标准星、齿轮与应用图标 |
 
-`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），所有模块直接调用 `BaseService.playSound(...)` / `BaseService.movementAxis()`，不再通过构造函数把 `Base&` 一层层传下去。`Base::Impl` 持有 `base::Input`、`base::Audio`、`base::Music`；静态绘制/颜色/字体/准星接口转发给 `base::Paint`。`Base.h` 不暴露组件头。
+`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），所有模块直接调用 `BaseService.playSound(...)` / `BaseService.movementAxis()`，不再通过构造函数把 `Base&` 一层层传下去。`Base::Impl` 持有 `base::Input`、`base::Audio`、`base::Music`、`base::Pointer`；静态绘制/颜色/字体/准星接口转发给 `base::Paint`。`Base.h` 不暴露组件头，指针的对外接口是 `pointerMoveTo / pointerSetVisible / pointerUpdate / pointerDraw`。
 
 单例的构造只分配组件对象（不创建 `QSoundEffect` / `QMediaPlayer`，也不要求 `QApplication` 已存在）；字体在 `main()` 里 `QApplication` 之后用 `Base::initialize()` 初始化；音频仍由 `BaseService.initAudio()` 按需初始化，`main()` 在退出前调用 `BaseService.shutdown()`，保证 Qt 音频对象在 `QApplication` 还活着时释放。
 
 音频是进程级服务，拆成两个组件：`Audio` 在 `%TEMP%\neon_core_cpp_audio\<pid>` 下生成自己的 WAV（同时开两个实例不会互相覆盖），启动时设备还没就绪的话会在 `play()` 里节流重试初始化；`Music` 是独立的背景音乐管理器，只初始化一次、由主线程的定时器推进曲目，任何音频重试、界面切换、开局/结算都不会重建播放器。`QMediaPlayer` 自带解码线程，`Music` 只负责在主线程上做状态管理。
 
-指针是全局元素，不属于任何一局、也不属于任何画面：`Pointer` 持有指针位置和独立时钟，`GameWindow` 每帧在 `paintEvent` 里把它叠在 `Menu::frame()` 之上。所以主菜单、局内、强化、暂停、结算共用同一个指针，暂停时外弧也照常旋转。准星的画法只有一份，在 `base::Paint::reticle()`；窗口内隐藏系统光标，指针离开窗口时恢复系统箭头。
+指针是全局元素，不属于任何一局、也不属于任何画面，现在是 `Base` 的 `Pointer` 组件：`BaseService` 持有指针位置和独立时钟，`GameWindow` 每帧在 `paintEvent` 里通过 `BaseService.pointerDraw()` 把它叠在 `Menu::frame()` 之上（`pointerMoveTo` / `pointerSetVisible` 由窗口事件驱动）。所以主菜单、局内、强化、暂停、结算共用同一个指针，暂停时外弧也照常旋转。准星的画法只有一份，在 `base::Paint::reticle()`；窗口内隐藏系统光标，指针离开窗口时恢复系统箭头。
 
 ### Games
 
-`Games` 是全局模块类，组合 2 个 `namespace games` 组件：
+`Games` 是全局模块类，组合 3 个 `namespace games` 组件：
 
 | 组件 | 职责 |
 | --- | --- |
 | `Waves` | 按运行时提交的台本生成出生队列、Boss 波判定、出生间隔 |
 | `Upgrades` | 强化定义、可选性、三选一、叠加、效果应用 |
+| `Renderer` | 局内画面与特效：背景/星空/发光合成、震屏闪屏、HUD、Boss 条、强化卡、暂停遮罩 |
 
-`Games` 还拥有 `Arena`、`Renderer`，构造时只接收 `Level`（台本在里面）。`BaseService` / `RandomService` / `ShopService` 都是全局单例，不在构造参数里，负责：
+`Games` 还拥有 `Arena`，构造时只接收 `Level`（台本在里面）。`BaseService` / `RandomService` / `ShopService` 都是全局单例，不在构造参数里，负责：
 
 - 一局内的 `Playing / Upgrade / Paused / Victory / Defeat` 状态；
 - 将输入转发给 `BaseService` / `Arena`；
 - 推进 `Arena` 和 `games::Waves`；
 - 波次清空后打开 `games::Upgrades`；
-- 把 `Arena::Feedback` 转发给 `Renderer`；
+- 把 `Arena::Feedback` 转发给 `games::Renderer`；
 - 把胜负结果交给 `Menu`，自己不再画标题或结算。
 
 积分由全局 `ShopService.score()`（`shop::Score`，`src/app/Shop/Score/`）统一持有：`Games` 构造时调用 `beginRun()`（只重置本局统计），`arena::Events::handleKill()` 击杀时调用 `addKill(enemy.score)`。全局余额跨局累计并写入 exe 同级的 `settings.ini`（`[score] total`），HUD 显示钱包，结算显示本局获得（`Games::runScore()`）；`Score::spend()` 供商店使用。
@@ -228,7 +230,7 @@ public:
 
 ### Renderer
 
-只读 `Games` / `Arena` / `games::Waves` / `games::Upgrades`，随机抖动取自全局 `RandomService`，负责：
+`games::Renderer` 是 `Games` 的**局内组件**（一局一个实例，随 `Games` 构造/销毁），只读 `Games` / `Arena` / `games::Waves` / `games::Upgrades`，随机抖动取自全局 `RandomService`，负责：
 
 - 局内背景、星空、发光合成；
 - 局内 HUD、Boss 血条、波次横幅；
@@ -236,7 +238,7 @@ public:
 - 暂停界面；
 - 震屏、闪屏、横幅状态。
 
-标题、失败/胜利结算、对局统计不在 Renderer 中，由 `Menu` 绘制。
+标题、失败/胜利结算、对局统计不在 Renderer 中，由 `Menu` 绘制；跨屏幕的鼠标指针在 `BaseService` 的 `base::Pointer` 组件里。`Renderer` 每局重建（`initialize()` 重新生成背景图和星空），所以切局时视觉动画从头开始。
 
 ### lib / include / tests
 
@@ -303,31 +305,31 @@ public:
 
 ```text
 main() ──► Base::initialize()（字体） + ShopService.load()
-GameWindow
-├─ Pointer ────────────► Base（准星画法，静态）
-├─ BaseService ────────► base::Input / Audio / Music / Paint（全局单例）
-├─ RandomService ──────► 随机引擎（全局单例）
-├─ ShopService ────────► shop::Score / Inventory（全局单例，settings.ini）
-└─ Menu（持有商店外的关卡表，组合 6 个界面组件）
-   ├─ menu::Main ─────────► 关卡卡 / 商店与设置入口（数据由 Menu 提供）
-   ├─ menu::Match ────────► Games(Level)   ← 一局一个实例
-   │  └─ Games
-   │     ├─ Arena ────► 继承 arena::Bullets / Combatants / Entities / Events / State
-   │     │              （组件回调模块反馈走 arena::Host 虚接口）
-   │     ├─ games::Waves ─────► Arena, RandomService
-   │     ├─ games::Upgrades ──► Arena, RandomService（音效走 BaseService）
-   │     └─ Renderer ─────────► Games/Arena/Waves/Upgrades(只读), RandomService
-   ├─ menu::Result ───────► 只读 Summary
-   ├─ menu::Editor ───────► games::Script（自己持有）
-   ├─ menu::Depot ────────► ShopService（buyMine）+ 只读钱包/库存
-   └─ menu::Settings ─────► BaseService 音量接口 + settings.ini
+GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
+            │
+            ├─ BaseService ────────► base::Input / Audio / Music / Pointer / Paint（全局单例）
+            ├─ RandomService ──────► 随机引擎（全局单例）
+            ├─ ShopService ────────► shop::Score / Inventory（全局单例，settings.ini）
+            └─ Menu（持有商店外的关卡表，组合 6 个界面组件）
+               ├─ menu::Main ─────────► 关卡卡 / 商店与设置入口（数据由 Menu 提供）
+               ├─ menu::Match ────────► Games(Level)   ← 一局一个实例
+               │  └─ Games
+               │     ├─ Arena ────► 私有继承 arena::Bullets / Combatants / Entities / Events / State
+               │     │              （组件回调模块反馈走 arena::Host 虚接口）
+               │     ├─ games::Waves ─────► Arena, RandomService
+               │     ├─ games::Upgrades ──► Arena, RandomService（音效走 BaseService）
+               │     └─ games::Renderer ──► Games/Arena/Waves/Upgrades(只读), RandomService
+               ├─ menu::Result ───────► 只读 Summary
+               ├─ menu::Editor ───────► games::Script（自己持有）
+               ├─ menu::Depot ────────► ShopService（buyMine）+ 只读钱包/库存
+               └─ menu::Settings ─────► BaseService 音量接口 + settings.ini
 ```
 
 依赖是单向的：
 
-- `GameWindow` 持有 `Menu` 和 `Pointer`，负责把两者的结果合成到窗口上。
+- `GameWindow` 持有 `Menu`，负责把画面和 `BaseService` 的指针合成到窗口上。
 - `BaseService` / `RandomService` / `ShopService` 是叶子服务：只被调用，不反向依赖任何业务模块；需要它们的模块直接引用全局符号。
-- `Pointer` 只依赖 `Base` 的准星画法（静态接口），不知道游戏业务。
+- `base::Pointer` 只依赖 `base::Paint` 的准星画法，不知道游戏业务。
 - `Menu` 只做状态机、输入路由和关卡表；界面在 `menu::*` 组件里，`Games` 由 `menu::Match` 持有。
 - `Games` 只负责一局内的逻辑，不知道 `Menu`；一局的安排由构造参数进入，之后不再外泄。
 - `Games` 只通过 `Arena` 公共接口访问战斗世界。
@@ -352,19 +354,19 @@ GameWindow::tick()
 │  │          ├─ Paused: 冻结
 │  │          └─ Victory/Defeat: 只推进视觉
 │  └─ Result: menu::Match 继续 Games::update(dt) 退场表现
-├─ Pointer::update(dt)      ← 独立时钟，暂停时也推进
+├─ BaseService.pointerUpdate(dt)   ← 指针独立时钟，暂停时也推进
 ├─ Menu::render()
 │  ├─ Main:    menu::Main   绘制菜单
 │  ├─ Editor:  menu::Editor 绘制台本表格
 │  ├─ Shop:    menu::Depot  绘制补给站
 │  ├─ Settings: menu::Settings 绘制设置页
-│  ├─ Match:  menu::Match → Games::render() → Renderer
+│  ├─ Match:  menu::Match → Games::render() → games::Renderer
 │  └─ Result: menu::Match 画面 + menu::Result 结算覆盖层
 └─ QWidget::update()
 
 GameWindow::paintEvent()
-├─ drawImage(Menu::frame())    ← 当前画面
-└─ Pointer::draw()             ← 全局指针叠在最上层
+├─ drawImage(Menu::frame())              ← 当前画面
+└─ BaseService.pointerDraw()             ← 全局指针叠在最上层
 ```
 
 ## 加机制应该改哪里
@@ -447,7 +449,7 @@ GameWindow::paintEvent()
 - 输入：`src/app/Base/Input/`。
 - 音效：`src/app/Base/Audio/Audio.*`；背景音乐：`src/app/Base/Audio/Music.*`。
 - 字体/颜色/绘制：`src/app/Base/Paint/`。
-- 鼠标指针：`src/app/Pointer.*`（位置 + 时钟 + 叠加时机）；准星画法在 `base::Paint::reticle()`。
+- 鼠标指针：`src/app/Base/Pointer/`（位置 + 时钟 + 可见性，`BaseService` 转发）；准星画法在 `base::Paint::reticle()`。
 - `Base` 只保留转发接口。
 
 ## 测试与交付

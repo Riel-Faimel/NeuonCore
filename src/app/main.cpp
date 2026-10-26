@@ -1,6 +1,5 @@
 #include "Menu/Menu.h"
 #include "Base/Base.h"
-#include "Pointer.h"
 #include "Shop/Shop.h"
 
 #include <QApplication>
@@ -81,7 +80,7 @@ protected:
             painter.save();
             painter.scale(float(width()) / float(GameConfig::ScreenWidth),
                           float(height()) / float(GameConfig::ScreenHeight));
-            pointer_.draw(painter);
+            BaseService.pointerDraw(painter);
             painter.restore();
         }
     }
@@ -104,7 +103,7 @@ protected:
     {
         const Math::Vec2 position = toGamePos(event->position());
         menu_.mouseMove(position);
-        pointer_.moveTo(position);
+        BaseService.pointerMoveTo(position);
         event->accept();
     }
 
@@ -118,7 +117,7 @@ protected:
             } else {
                 menu_.mousePressRight(position);
             }
-            pointer_.moveTo(position);
+            BaseService.pointerMoveTo(position);
             event->accept();
         }
     }
@@ -137,7 +136,7 @@ protected:
         setCursor(Qt::BlankCursor);
         const Math::Vec2 position = toGamePos(event->position());
         menu_.mouseMove(position);
-        pointer_.moveTo(position);
+        BaseService.pointerMoveTo(position);
         QWidget::enterEvent(event);
     }
 
@@ -145,7 +144,7 @@ protected:
     void leaveEvent(QEvent *event) override
     {
         setCursor(Qt::ArrowCursor);
-        pointer_.setVisible(false);
+        BaseService.pointerSetVisible(false);
         QWidget::leaveEvent(event);
     }
 
@@ -171,7 +170,7 @@ protected:
         if (rect().contains(local)) {
             const Math::Vec2 position = toGamePos(QPointF(local));
             menu_.mouseMove(position);
-            pointer_.moveTo(position);
+            BaseService.pointerMoveTo(position);
         }
     }
 
@@ -198,13 +197,12 @@ private:
         dt = Math::clamp(dt, 0.0f, 1.0f / 30.0f);
 
         menu_.update(dt);
-        pointer_.update(dt);
+        BaseService.pointerUpdate(dt);
         menu_.render();
         update();
     }
 
     Menu menu_;
-    Pointer pointer_;
     QTimer timer_;
     QElapsedTimer clock_;
     bool centered_ = false;

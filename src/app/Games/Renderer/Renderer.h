@@ -17,13 +17,15 @@ class Arena;
 class Games;
 
 namespace games {
-class Upgrades;
-class Waves;
-}
 
-// Renderer 模块：封装整个画面表现。
-// 工具：Random（抖动/标题粒子）、Base（输入/音频/字体/绘制）、各业务模块的只读状态。
-// 封装：星空、发光合成、屏幕震动/闪屏、标题、HUD、Boss 血条、强化卡、结算。
+class Waves;
+
+// Renderer 组件：Games 的局内画面表现（一局一个实例，由 Games 持有）。
+// 它不画标题和结算——那些是 menu::*；也不跨局保存状态，切局即重建。
+// 工具：BaseService（绘制原语/输入）、RandomService（抖动/粒子）、
+//       Arena / Waves / Upgrades 的只读状态。
+// 封装：背景、星空、发光合成、屏幕震动/闪屏、波次横幅、HUD、Boss 血条、
+//       强化三选一、暂停遮罩、胜利彩带。
 // 暴露：渲染一帧、frame、表现反馈（shake/flash/banner）、强化卡命中测试。
 class Renderer {
 public:
@@ -31,8 +33,8 @@ public:
 
     void initialize();
     void update(float dt);
-    void render(const Games &game, const Arena &arena, const games::Waves &waves,
-                const games::Upgrades &upgrades);
+    void render(const Games &game, const Arena &arena, const Waves &waves,
+                const Upgrades &upgrades);
     const QImage &frame() const { return frame_; }
 
     void shake(float amount);
@@ -44,7 +46,7 @@ public:
     int upgradeIndexAt(const Math::Vec2 &pos) const;
 
 private:
-    friend class SelfTest;
+    friend class ::SelfTest;
 
     struct Star {
         Math::Vec2 pos;
@@ -71,15 +73,15 @@ private:
     void updateSparks(float dt);
     void drawStars(QPainter &world, QPainter &glow) const;
     void drawSparks(QPainter &world, QPainter &glow) const;
-    void drawHUD(QPainter &painter, const Arena &arena, const games::Waves &waves);
+    void drawHUD(QPainter &painter, const Arena &arena, const Waves &waves);
     void drawBossBar(QPainter &painter, const Arena &arena);
     void drawWaveBanner(QPainter &painter);
     void drawPlayHints(QPainter &painter);
-    void drawUpgradeOverlay(QPainter &painter, const games::Upgrades &upgrades,
-                            const games::Waves &waves);
+    void drawUpgradeOverlay(QPainter &painter, const Upgrades &upgrades,
+                            const Waves &waves);
     void drawUpgradeCard(QPainter &painter, int index,
-                         const games::Upgrades::Offer &offer, const QRectF &rect, bool hovered);
-    void drawPauseOverlay(QPainter &painter, const Arena &arena, const games::Waves &waves);
+                         const Upgrades::Offer &offer, const QRectF &rect, bool hovered);
+    void drawPauseOverlay(QPainter &painter, const Arena &arena, const Waves &waves);
     QRectF cardRect(int index) const;
 
     QImage background_;
@@ -103,3 +105,5 @@ private:
     float bannerTimer_ = 0.0f;
     float bannerDuration_ = 1.0f;
 };
+
+} // namespace games

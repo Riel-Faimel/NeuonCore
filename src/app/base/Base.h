@@ -13,7 +13,7 @@
 
 #include <memory>
 
-// Base 是全局模块类，组合 namespace base 的 Input / Audio / Music / Paint 组件。
+// Base 是全局模块类，组合 namespace base 的 Input / Audio / Music / Pointer / Paint 组件。
 // 对外仍只暴露 Base 这一组接口，组件细节不泄露给业务模块。
 //
 // Base 是进程级单例：唯一实例是 Base.cpp 里的 BaseService，业务模块直接使用它，
@@ -40,6 +40,14 @@ public:
     bool mouseActive() const;
     Math::Vec2 mousePosition() const;
     void setMouseActive(bool active);
+
+    // ----- 指针（转发 base::Pointer） -----
+    // 指针是全局元素：窗口每帧在画面之上调用 pointerDraw()，切屏/暂停都连续。
+    void pointerMoveTo(const Math::Vec2 &position);
+    void pointerSetVisible(bool visible);
+    bool pointerVisible() const;
+    void pointerUpdate(float dt);
+    void pointerDraw(QPainter &painter) const;
 
     // ----- 音频（转发 base::Audio / base::Music） -----
     void initAudio();

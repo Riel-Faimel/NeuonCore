@@ -1,4 +1,4 @@
-#include "Renderer.h"
+#include "Games/Renderer/Renderer.h"
 
 #include "Arena/Arena.h"
 #include "Games/Games.h"
@@ -16,6 +16,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+
+namespace games {
 
 Renderer::Renderer() = default;
 
@@ -612,4 +614,6 @@ void Renderer::drawPauseOverlay(QPainter &painter, const Arena &arena, const gam
                 {GameConfig::ScreenWidth / 2.0f, float(panel.top()) + 234.0f},
                 QStringLiteral("center"), 190);
 }
+
+} // namespace games
 

@@ -4,6 +4,7 @@
 #include "Base/Audio/Music.h"
 #include "Base/Input/Input.h"
 #include "Base/Paint/Paint.h"
+#include "Base/Pointer/Pointer.h"
 
 #include <memory>
 
@@ -15,6 +16,7 @@ struct Base::Impl {
     base::Input input;
     base::Audio audio;
     base::Music music;
+    base::Pointer pointer;
 };
 
 Base::Base() : impl_(std::make_unique<Impl>()) {}
@@ -84,6 +86,31 @@ Math::Vec2 Base::mousePosition() const
 void Base::setMouseActive(bool active)
 {
     impl_->input.setMouseActive(active);
+}
+
+void Base::pointerMoveTo(const Math::Vec2 &position)
+{
+    impl_->pointer.moveTo(position);
+}
+
+void Base::pointerSetVisible(bool visible)
+{
+    impl_->pointer.setVisible(visible);
+}
+
+bool Base::pointerVisible() const
+{
+    return impl_->pointer.visible();
+}
+
+void Base::pointerUpdate(float dt)
+{
+    impl_->pointer.update(dt);
+}
+
+void Base::pointerDraw(QPainter &painter) const
+{
+    impl_->pointer.draw(painter);
 }
 
 void Base::initAudio()

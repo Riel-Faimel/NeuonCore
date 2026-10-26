@@ -5,7 +5,6 @@
 
 #include "Menu/Menu.h"
 #include "Base/Base.h"
-#include "Pointer.h"
 #include "Data/GameData.h"
 #include "Arena/Bullets/StandardBullet.h"
 
@@ -496,11 +495,10 @@ public:
         }
         Menu menu(false);
         Games *game = nullptr;
-        // 截图模拟窗口的合成顺序：画面 + 全局指针。
-        Pointer pointer;
+        // 截图模拟窗口的合成顺序：画面 + 全局指针（BaseService 的 base::Pointer 组件）。
         auto movePointer = [&](const Math::Vec2 &position) {
             menu.mouseMove(position);
-            pointer.moveTo(position);
+            BaseService.pointerMoveTo(position);
         };
         auto save = [&](const QString &name) {
             menu.render();
@@ -508,7 +506,7 @@ public:
             QImage frame = menu.frame().copy();
             {
                 QPainter overlay(&frame);
-                pointer.draw(overlay);
+                BaseService.pointerDraw(overlay);
             }
             if (!frame.save(path)) {
                 std::fprintf(stderr, "Failed to save %s\n", path.toUtf8().constData());
