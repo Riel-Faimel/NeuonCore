@@ -6,6 +6,11 @@
 #include "Arena/Combatants/Combatants.h"
 #include "Arena/Entities/Entities.h"
 #include "Arena/Combatants/Enemy.h"
+#include "Arena/Combatants/Enemies/DroneEnemy.h"
+#include "Arena/Combatants/Enemies/MiniEnemy.h"
+#include "Arena/Combatants/Enemies/SpitterEnemy.h"
+#include "Arena/Combatants/Enemies/SplitterEnemy.h"
+#include "Arena/Combatants/Enemies/TankEnemy.h"
 #include "Arena/Combatants/Player.h"
 #include "Arena/Entities/FloatingText.h"
 #include "Arena/Entities/Mine.h"
@@ -242,20 +247,21 @@ void Events::handleKill(const Context &ctx, Enemy &enemy)
     }
 
     float dropChance = 0.06f;
-    if (enemy.kind == QStringLiteral("drone")) {
+    if (dynamic_cast<const DroneEnemy *>(&enemy) != nullptr) {
         dropChance = 0.055f;
-    } else if (enemy.kind == QStringLiteral("mini")) {
+    } else if (dynamic_cast<const MiniEnemy *>(&enemy) != nullptr) {
         dropChance = 0.03f;
-    } else if (enemy.kind == QStringLiteral("spitter")) {
+    } else if (dynamic_cast<const SpitterEnemy *>(&enemy) != nullptr) {
         dropChance = 0.10f;
-    } else if (enemy.kind == QStringLiteral("tank")) {
+    } else if (dynamic_cast<const TankEnemy *>(&enemy) != nullptr) {
         dropChance = 0.18f;
-    } else if (enemy.kind == QStringLiteral("splitter")) {
+    } else if (dynamic_cast<const SplitterEnemy *>(&enemy) != nullptr) {
         dropChance = 0.14f;
     }
     if (RandomService.real(0.0f, 1.0f) < dropChance) {
-        ctx.entities.spawnPickup(ctx, enemy.pos,
-                                 enemy.kind == QStringLiteral("tank") ? 22 : 16);
+        ctx.entities.spawnPickup(
+            ctx, enemy.pos,
+            dynamic_cast<const TankEnemy *>(&enemy) != nullptr ? 22 : 16);
     }
 }
 

@@ -8,9 +8,9 @@ namespace arena {
 
 class OffensiveEnemy : public Enemy {
 protected:
-    OffensiveEnemy(std::string_view kindName, Role role,
+    OffensiveEnemy(Type type, Role role,
                    const Math::Vec2 &position, int wave)
-        : Enemy(kindName, role, Archetype::Offensive, position, wave)
+        : Enemy(type, role, Archetype::Offensive, position, wave)
     {
     }
 
@@ -21,9 +21,9 @@ protected:
 
 class RangedEnemy : public Enemy {
 protected:
-    RangedEnemy(std::string_view kindName, Role role,
+    RangedEnemy(Type type, Role role,
                 const Math::Vec2 &position, int wave)
-        : Enemy(kindName, role, Archetype::Ranged, position, wave)
+        : Enemy(type, role, Archetype::Ranged, position, wave)
     {
     }
 
@@ -35,9 +35,9 @@ protected:
 
 class DefensiveEnemy : public Enemy {
 protected:
-    DefensiveEnemy(std::string_view kindName, Role role,
+    DefensiveEnemy(Type type, Role role,
                    const Math::Vec2 &position, int wave)
-        : Enemy(kindName, role, Archetype::Defensive, position, wave)
+        : Enemy(type, role, Archetype::Defensive, position, wave)
     {
     }
 
@@ -46,9 +46,9 @@ protected:
 
 class SupportEnemy : public Enemy {
 protected:
-    SupportEnemy(std::string_view kindName, Role role,
+    SupportEnemy(Type type, Role role,
                  const Math::Vec2 &position, int wave)
-        : Enemy(kindName, role, Archetype::Support, position, wave)
+        : Enemy(type, role, Archetype::Support, position, wave)
     {
     }
 
@@ -61,9 +61,9 @@ protected:
 
 class SelfDestructEnemy : public Enemy {
 protected:
-    SelfDestructEnemy(std::string_view kindName, Role role,
+    SelfDestructEnemy(Type type, Role role,
                       const Math::Vec2 &position, int wave)
-        : Enemy(kindName, role, Archetype::SelfDestruct, position, wave)
+        : Enemy(type, role, Archetype::SelfDestruct, position, wave)
     {
     }
 

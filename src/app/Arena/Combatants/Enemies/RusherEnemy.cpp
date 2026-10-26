@@ -20,9 +20,9 @@ const EnemyRegistrar<RusherEnemy> kRegistration(
 }
 
 RusherEnemy::RusherEnemy(const Math::Vec2 &position, int wave)
-    : OffensiveEnemy("rusher", Role::Melee, position, wave)
+    : OffensiveEnemy(typeid(RusherEnemy), Role::Melee, position, wave)
 {
-    const EnemyStats &stats = statsFor(kind);
+    const EnemyStats &stats = statsFor(type());
     lungeInterval = std::max(0.4f, stats.lungeInterval);
     lungeTimer = RandomService.real(0.4f, 1.1f);
 }

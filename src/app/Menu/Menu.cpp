@@ -1,5 +1,6 @@
 #include "Menu/Menu.h"
 
+#include "Arena/Combatants/Enemy.h"
 #include "Base/Base.h"
 #include "Data/GameData.h"
 
@@ -41,8 +42,11 @@ games::Script Menu::standardScript()
         wave.enemies.reserve(size_t(definition.count));
         for (int i = 0; i < definition.count; ++i) {
             const data::WaveSpawn &spawn = definition.spawns[size_t(i)];
-            wave.enemies.push_back({QString::fromUtf8(spawn.kind.data(), int(spawn.kind.size())),
-                                    spawn.count});
+            const auto type = arena::Enemy::typeForKey(
+                QString::fromUtf8(spawn.kind.data(), int(spawn.kind.size())));
+            if (type) {
+                wave.enemies.push_back({*type, spawn.count});
+            }
         }
         script.push_back(wave);
     }

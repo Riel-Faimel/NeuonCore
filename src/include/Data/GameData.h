@@ -116,6 +116,16 @@ constexpr const EnemyBase *findEnemy(std::string_view kind)
     return nullptr;
 }
 
+constexpr int findEnemyIndex(std::string_view kind)
+{
+    for (int i = 0; i < kEnemies.count; ++i) {
+        if (kEnemies.items[i].kind == kind) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 // ----- 战役台本与出怪节奏（src/json/waves/level-01.json） -----
 struct WaveSpawn {
     std::string_view kind;

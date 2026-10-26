@@ -13,9 +13,9 @@ const EnemyRegistrar<MenderEnemy> kRegistration(
 }
 
 MenderEnemy::MenderEnemy(const Math::Vec2 &position, int wave)
-    : SupportEnemy("mender", Role::Support, position, wave)
+    : SupportEnemy(typeid(MenderEnemy), Role::Support, position, wave)
 {
-    const EnemyStats &stats = statsFor(kind);
+    const EnemyStats &stats = statsFor(type());
     supportRadius = stats.healRadius;
     supportValue = stats.healRate;
 }

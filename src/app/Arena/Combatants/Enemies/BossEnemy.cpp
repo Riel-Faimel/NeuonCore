@@ -23,11 +23,11 @@ const EnemyRegistrar<BossEnemy> kRegistration(
 }
 
 BossEnemy::BossEnemy(const Math::Vec2 &position, int wave)
-    : Enemy("boss", Role::Ranged, Archetype::Boss, position, wave)
+    : Enemy(typeid(BossEnemy), Role::Ranged, Archetype::Boss, position, wave)
 {
     // Boss 不吃波次成长：数值直接用 JSON 基础值。
     boss = true;
-    const EnemyStats &stats = statsFor(kind);
+    const EnemyStats &stats = statsFor(type());
     maxHp = stats.hp;
     speed = stats.speed;
     damage = stats.damage;

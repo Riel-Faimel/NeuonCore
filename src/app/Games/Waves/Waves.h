@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QString>
+#include "Arena/Combatants/EnemyType.h"
 
 #include <vector>
 
@@ -11,8 +11,9 @@ namespace games {
 
 // 台本：一局里每一波的敌人组成。
 // 它是运行时提交的数据，Waves 只负责按它生成出生队列，不再内置任何固定波次表。
+// 类型在数据边界（JSON/编辑器）解析成 EnemyType，游戏逻辑不再比较字符串。
 struct EnemySpawn {
-    QString kind;
+    arena::EnemyType type;
     int count = 1;
 };
 
@@ -44,12 +45,12 @@ public:
 private:
     friend class ::SelfTest;
 
-    std::vector<QString> buildQueue(int wave) const;
+    std::vector<arena::EnemyType> buildQueue(int wave) const;
     bool waveHasBoss(int wave) const;
 
     Arena &arena_;
     const Script &script_;
-    std::vector<QString> queue_;
+    std::vector<arena::EnemyType> queue_;
     int currentWave_ = 0;
     int waveTotal_ = 0;
     float spawnTimer_ = 0.0f;

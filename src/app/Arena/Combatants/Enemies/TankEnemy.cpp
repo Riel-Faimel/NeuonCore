@@ -15,7 +15,7 @@ const EnemyRegistrar<TankEnemy> kRegistration(
 }
 
 TankEnemy::TankEnemy(const Math::Vec2 &position, int wave)
-    : DefensiveEnemy("tank", Role::Melee, position, wave)
+    : DefensiveEnemy(typeid(TankEnemy), Role::Melee, position, wave)
 {
 }
 

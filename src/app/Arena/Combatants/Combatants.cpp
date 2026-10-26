@@ -1,5 +1,6 @@
 #include "Combatants.h"
 
+#include "Arena/Combatants/Enemies/MiniEnemy.h"
 #include "Arena/Context.h"
 #include "Arena/Entities/Entities.h"
 #include "Arena/Host.h"
@@ -75,10 +76,10 @@ void Combatants::draw(QPainter &world, QPainter &glow, const Context &ctx) const
     player_.draw(world, glow, ctx);
 }
 
-void Combatants::spawnEnemy(const Context &ctx, const QString &kind,
+void Combatants::spawnEnemy(const Context &ctx, EnemyType type,
                             const Math::Vec2 &pos, int wave)
 {
-    std::unique_ptr<Enemy> enemy = Enemy::create(kind, pos, wave);
+    std::unique_ptr<Enemy> enemy = Enemy::create(type, pos, wave);
     if (!enemy) {
         return;
     }
@@ -93,14 +94,22 @@ void Combatants::spawnEnemy(const Context &ctx, const QString &kind,
     }
 }
 
+void Combatants::spawnEnemy(const Context &ctx, const QString &dataKey,
+                            const Math::Vec2 &pos, int wave)
+{
+    if (const auto type = Enemy::typeForKey(dataKey)) {
+        spawnEnemy(ctx, *type, pos, wave);
+    }
+}
+
 void Combatants::spawnMinions(const Context &ctx, const Math::Vec2 &pos, int count, int wave)
 {
     for (int i = 0; i < count; ++i) {
         const float angle = RandomService.real(0.0f, Math::Tau);
         const Math::Vec2 offset = Math::Vec2(std::cos(angle), std::sin(angle))
             * RandomService.real(60.0f, 90.0f);
-        std::unique_ptr<Enemy> child = Enemy::create(QStringLiteral("mini"),
-                                                     pos + offset, wave);
+        std::unique_ptr<Enemy> child = Enemy::create(
+            EnemyType(typeid(MiniEnemy)), pos + offset, wave);
         if (!child) {
             continue;
         }

@@ -114,7 +114,7 @@ dist\NeonCore\NeonCore.exe  交付用 release GUI，不包含测试逻辑
 ```text
 src/json/*.json
   → build/embed_json.exe 生成 build/generated/GameDataJson.h（原样 raw string）
-  → src/app/Data/GameData.h 用 constexpr 解析器（src/lib/Json.h）展开成
+  → src/include/Data/GameData.h 用 constexpr 解析器（src/lib/Json.h）展开成
      data::kPlayer / kEnemies / kCampaign / kWaveTiming / kUpgradeRanges / k*Bullet
   → 游戏代码直接读这些 inline constexpr 常量
 ```
@@ -151,10 +151,10 @@ cpp/
 │  │  │  ├─ Combatants/
 │  │  │  │  ├─ Combatants.h/.cpp  组件：玩家、敌人、Boss
 │  │  │  │  ├─ Player.h/.cpp      玩家类型
-│  │  │  │  ├─ Enemy.h/.cpp       敌人基类 + kind→工厂运行时表
+│  │  │  │  ├─ Enemy.h/.cpp       敌人基类 + RTTI 类型注册表
 │  │  │  │  └─ Enemies/
 │  │  │  │     ├─ EnemyTypes.h/.cpp   六个虚基类（进攻/远程/防御/辅助/自毁/Boss）
-│  │  │  │     ├─ EnemyRegistry.h     CRTP 自动注册器
+│  │  │  │     ├─ EnemyRegistry.h     CRTP 自动注册器（按 EnemyType）
 │  │  │  │     └─ *Enemy.h/.cpp       每种敌人的走位、攻击、光环、绘制
 │  │  │  └─ Entities/
 │  │  │     ├─ Entities.h/.cpp    组件：实体容器
@@ -187,13 +187,13 @@ cpp/
 │  │  │  └─ Inventory/Inventory.h/.cpp 组件：地雷库存（持久化）
 │  │  ├─ app.rc                   Windows 资源：嵌入应用图标
 │  │  └─ main.cpp                 QWidget 窗口、输入桥接、全局服务初始化、release 入口
-│  ├─ Data/GameData.h             编译期数值表（展开自 src/json）
-│  ├─ Data/Settings.h             配置存储（Windows 注册表 / 其他平台 ini）
 │  ├─ lib/
 │  │  ├─ Math.h / Math.cpp        向量与几何
 │  │  ├─ Json.h                   constexpr JSON 解析器
 │  │  └─ Random.h / Random.cpp    可注入随机数
 │  ├─ include/
+│  │  ├─ Data/GameData.h          编译期数值表（展开自 src/json）
+│  │  ├─ Data/Settings.h          配置存储（Windows 注册表 / 其他平台 ini）
 │  │  ├─ GameConfig.h             全局尺寸常量
 │  │  ├─ Fighter.h                Player/Enemy 的公共虚接口
 │  │  └─ Bullet.h                 子弹的全局纯虚接口（池只认这一层）
@@ -253,7 +253,7 @@ cpp/
 - 辅助型（amplifier / mender / necromancer）：躲在防御者背后，朝“非自毁型”友军最密集的位置靠拢；
 - Boss：独立走位（中距离绕圈 + 定向/环形弹幕）。
 
-敌人实现按 `Enemy` → 进攻 / 远程 / 防御 / 辅助 / 自毁 / Boss 六个虚基类拆分（`Enemies/EnemyTypes.h`），每个 kind 一个 `*Enemy.cpp`。各文件用 `EnemyRegistrar<T>`（CRTP）在静态初始化时登记到 `Enemy.cpp` 的 kind→工厂表，运行时 `Enemy::create()` 查表构造；没有 Kind 枚举，具体类型由 vtable / `dynamic_cast` 判断，`Enemy.cpp` 里不再有按 kind 的 `switch`。
+敌人实现按 `Enemy` → 进攻 / 远程 / 防御 / 辅助 / 自毁 / Boss 六个虚基类拆分（`Enemies/EnemyTypes.h`），每个具体类型一个 `*Enemy.cpp`。类型身份直接用 RTTI（`arena::EnemyType = std::type_index`）：子类构造时传 `typeid(Self)`，各文件用 `EnemyRegistrar<T>`（CRTP）把 `typeid(T)` 登记到 `Enemy.cpp` 的类型注册表，运行时 `Enemy::create(EnemyType)` 查表构造；`enemies.json` 的字符串键只在 `Menu::standardScript()` / 编辑器等数据边界解析成类型，`games::EnemySpawn` 之后只保存 `EnemyType`，游戏逻辑判断类型用 `typeid` / `dynamic_cast`，不再比较字符串。`Enemy::Archetype` 缓存只用于 AI 筛选友军，避免每帧 RTTI。
 
 `src/lib/` 放不依赖应用层的通用模块：`Math`（向量/几何）和 `Random`（可注入随机数，并提供全局 `RandomService`）。
 

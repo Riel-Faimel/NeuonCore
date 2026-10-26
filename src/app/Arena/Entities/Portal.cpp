@@ -11,13 +11,13 @@
 
 namespace arena {
 
-Portal::Portal(const QString &portalKind, const Math::Vec2 &position, int waveNumber)
-    : kind(portalKind), pos(position), wave(waveNumber)
+Portal::Portal(EnemyType enemyType, const Math::Vec2 &position, int waveNumber)
+    : type(enemyType), boss(Enemy::isBoss(enemyType)), pos(position), wave(waveNumber)
 {
-    color = Enemy::statsFor(kind).color;
-    duration = kind == QStringLiteral("boss") ? 1.25f : 0.66f;
+    color = Enemy::statsFor(type).color;
+    duration = boss ? 1.25f : 0.66f;
     timer = duration;
-    radius = kind == QStringLiteral("boss") ? 54.0f : 23.0f;
+    radius = boss ? 54.0f : 23.0f;
 }
 
 void Portal::update(const Context &ctx, float dt)
@@ -25,10 +25,8 @@ void Portal::update(const Context &ctx, float dt)
     timer -= dt;
     if (timer <= 0.0f) {
         alive = false;
-        ctx.combatants.spawnEnemy(ctx, kind, pos, wave);
-        ctx.entities.spawnBurst(ctx, pos, color,
-                                 kind == QStringLiteral("boss") ? 16 : 8,
-                                 160.0f, 0.5f);
+        ctx.combatants.spawnEnemy(ctx, type, pos, wave);
+        ctx.entities.spawnBurst(ctx, pos, color, boss ? 16 : 8, 160.0f, 0.5f);
     }
 }
 

@@ -1,10 +1,10 @@
 #pragma once
 
+#include "Arena/Combatants/EnemyType.h"
 #include "Math.h"
 
 #include <QColor>
 #include <QPainter>
-#include <QString>
 
 namespace arena {
 
@@ -13,7 +13,8 @@ struct Context;
 // 传送门实体：倒计时结束后生成敌人。
 class Portal {
 public:
-    QString kind;
+    EnemyType type;
+    bool boss = false;
     Math::Vec2 pos;
     int wave = 1;
     QColor color;
@@ -22,7 +23,7 @@ public:
     bool alive = true;
     float radius = 23.0f;
 
-    Portal(const QString &portalKind, const Math::Vec2 &position, int waveNumber);
+    Portal(EnemyType type, const Math::Vec2 &position, int waveNumber);
     void update(const Context &ctx, float dt);
     void draw(QPainter &world, QPainter &glow) const;
 };

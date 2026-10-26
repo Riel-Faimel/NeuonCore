@@ -9,6 +9,10 @@
 #include "Arena/Bullets/StandardBullet.h"
 #include "Arena/Combatants/Enemies/EnemyTypes.h"
 #include "Arena/Combatants/Enemies/BossEnemy.h"
+#include "Arena/Combatants/Enemies/DroneEnemy.h"
+#include "Arena/Combatants/Enemies/MiniEnemy.h"
+#include "Arena/Combatants/Enemies/SpitterEnemy.h"
+#include "Arena/Combatants/Enemies/TankEnemy.h"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -341,7 +345,7 @@ public:
         summoner->summonCount = 2;
         int minisBefore = 0;
         for (const auto &other : game->arena_.enemies()) {
-            if (other->kind == QStringLiteral("mini")) {
+            if (other->type() == typeid(arena::MiniEnemy)) {
                 ++minisBefore;
             }
         }
@@ -352,7 +356,7 @@ public:
         }
         int minisAfter = 0;
         for (const auto &other : game->arena_.enemies()) {
-            if (other->kind == QStringLiteral("mini")) {
+            if (other->type() == typeid(arena::MiniEnemy)) {
                 ++minisAfter;
             }
         }
@@ -367,7 +371,7 @@ public:
         }
         int minisAfterMiniDeaths = 0;
         for (const auto &other : game->arena_.enemies()) {
-            if (other->kind == QStringLiteral("mini")) {
+            if (other->type() == typeid(arena::MiniEnemy)) {
                 ++minisAfterMiniDeaths;
             }
         }
@@ -468,9 +472,12 @@ public:
 
         log(QStringLiteral("Mid-script boss"));
         games::Script bossMid;
-        bossMid.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("drone"), 1}}});
-        bossMid.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("boss"), 1}}});
-        bossMid.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("drone"), 1}}});
+        bossMid.push_back(games::Wave{{games::EnemySpawn{
+            arena::EnemyType(typeid(arena::DroneEnemy)), 1}}});
+        bossMid.push_back(games::Wave{{games::EnemySpawn{
+            arena::EnemyType(typeid(arena::BossEnemy)), 1}}});
+        bossMid.push_back(games::Wave{{games::EnemySpawn{
+            arena::EnemyType(typeid(arena::DroneEnemy)), 1}}});
         menu.levels_.push_back({QStringLiteral("中局 Boss"),
                                 QStringLiteral("测试台本"), 2, bossMid});
         menu.startLevel(int(menu.levels_.size()) - 1);
@@ -717,9 +724,12 @@ public:
 
         log(QStringLiteral("Submitted script"));
         games::Script shortScript;
-        shortScript.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("drone"), 2},
-                                           games::EnemySpawn{QStringLiteral("tank"), 1}}});
-        shortScript.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("spitter"), 3}}});
+        shortScript.push_back(games::Wave{{games::EnemySpawn{
+                                               arena::EnemyType(typeid(arena::DroneEnemy)), 2},
+                                           games::EnemySpawn{
+                                               arena::EnemyType(typeid(arena::TankEnemy)), 1}}});
+        shortScript.push_back(games::Wave{{games::EnemySpawn{
+            arena::EnemyType(typeid(arena::SpitterEnemy)), 3}}});
         menu.levels_.push_back({QStringLiteral("测试台本"),
                                 QStringLiteral("运行时提交"), 1, shortScript});
         menu.startLevel(int(menu.levels_.size()) - 1);
@@ -751,7 +761,8 @@ public:
         game->state_ = Games::State::Playing;
         game->runTime_ = 112.0f;
         game->waves_.start(4);
-        game->waves_.queue_ = {QStringLiteral("drone"), QStringLiteral("spitter")};
+        game->waves_.queue_ = {arena::EnemyType(typeid(arena::DroneEnemy)),
+                               arena::EnemyType(typeid(arena::SpitterEnemy))};
         game->waves_.waveTotal_ = 17;
 
         arena.enemies().clear();
@@ -781,7 +792,8 @@ public:
         for (int i = 0; i < 12; ++i) {
             arena.spawnEnemy(ctx, QString::fromLatin1(kinds[size_t(i)]), spots[size_t(i)], 4);
         }
-        arena.portals().emplace_back(QStringLiteral("spitter"), Math::Vec2(1160, 615), 4);
+        arena.portals().emplace_back(arena::EnemyType(typeid(arena::SpitterEnemy)),
+                                     Math::Vec2(1160, 615), 4);
         arena.spawnPickup(ctx, {360, 315}, 16);
         arena.player().shoot(ctx);
         arena.spawnBurst(ctx, {860, 290}, Base::Coral, 14, 130.0f, 0.7f);
@@ -914,7 +926,8 @@ public:
         game->state_ = Games::State::Playing;
         game->runTime_ = 112.0f;
         game->waves_.start(4);
-        game->waves_.queue_ = {QStringLiteral("drone"), QStringLiteral("spitter")};
+        game->waves_.queue_ = {arena::EnemyType(typeid(arena::DroneEnemy)),
+                               arena::EnemyType(typeid(arena::SpitterEnemy))};
         game->waves_.waveTotal_ = 17;
         game->arena_.enemies().clear();
         game->arena_.portals().clear();
@@ -956,8 +969,8 @@ public:
             }
             ++enemyIndex;
         }
-        game->arena_.portals().emplace_back(QStringLiteral("spitter"),
-                                                     Math::Vec2(1160, 615), 4);
+        game->arena_.portals().emplace_back(
+            arena::EnemyType(typeid(arena::SpitterEnemy)), Math::Vec2(1160, 615), 4);
         game->arena_.spawnPickup(game->arena_.context(), {360, 315}, 16);
         game->arena_.player().shoot(game->arena_.context());
         game->arena_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(650, 360), Math::Vec2(900, -250), 12.5f, Base::Cyan, Bullet::Standpoint::Player, 3.2f));

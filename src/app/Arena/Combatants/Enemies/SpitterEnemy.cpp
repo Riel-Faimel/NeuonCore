@@ -24,7 +24,7 @@ const EnemyRegistrar<SpitterEnemy> kRegistration(
 }
 
 SpitterEnemy::SpitterEnemy(const Math::Vec2 &position, int wave)
-    : RangedEnemy("spitter", Role::Ranged, position, wave)
+    : RangedEnemy(typeid(SpitterEnemy), Role::Ranged, position, wave)
 {
 }
 

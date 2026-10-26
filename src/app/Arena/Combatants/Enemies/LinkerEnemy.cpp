@@ -18,9 +18,9 @@ const EnemyRegistrar<LinkerEnemy> kRegistration(
 }
 
 LinkerEnemy::LinkerEnemy(const Math::Vec2 &position, int wave)
-    : DefensiveEnemy("linker", Role::Support, position, wave)
+    : DefensiveEnemy(typeid(LinkerEnemy), Role::Support, position, wave)
 {
-    const EnemyStats &stats = statsFor(kind);
+    const EnemyStats &stats = statsFor(type());
     supportRadius = stats.shareRadius;
     supportValue = stats.shareRatio;
 }

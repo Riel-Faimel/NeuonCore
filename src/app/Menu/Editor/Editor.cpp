@@ -1,5 +1,7 @@
 #include "Menu/Editor/Editor.h"
 
+#include "Arena/Combatants/Enemies/DroneEnemy.h"
+#include "Arena/Combatants/Enemy.h"
 #include "Base/Base.h"
 
 #include <QLinearGradient>
@@ -37,7 +39,7 @@ Editor::Editor()
 void Editor::reset()
 {
     games::Wave wave;
-    wave.enemies.push_back({kindKey(0), 6});
+    wave.enemies.push_back({kindType(0), 6});
     script_ = {wave};
     row_ = 0;
     column_ = 0;
@@ -55,9 +57,11 @@ void Editor::prepare()
     dragKind_ = -1;
 }
 
-QString Editor::kindKey(int kind)
+arena::EnemyType Editor::kindType(int kind)
 {
-    return kind >= 0 && kind < Kinds ? kKeys[size_t(kind)] : QString();
+    const QString key = kind >= 0 && kind < Kinds ? kKeys[size_t(kind)] : kKeys[0];
+    const auto type = arena::Enemy::typeForKey(key);
+    return type ? *type : arena::EnemyType(typeid(arena::DroneEnemy));
 }
 
 QString Editor::kindLabel(int kind)
@@ -95,9 +99,9 @@ QColor Editor::kindColor(int kind)
 
 bool Editor::waveHasKind(const games::Wave &wave, int kind)
 {
-    const QString key = kindKey(kind);
+    const arena::EnemyType type = kindType(kind);
     for (const games::EnemySpawn &spawn : wave.enemies) {
-        if (spawn.kind == key) {
+        if (spawn.type == type) {
             return true;
         }
     }
@@ -143,9 +147,9 @@ int Editor::enemyCountKind(int row, int kind) const
     if (row < 0 || row >= waveCount() || kind < 0 || kind >= Kinds) {
         return 0;
     }
-    const QString key = kindKey(kind);
+    const arena::EnemyType type = kindType(kind);
     for (const games::EnemySpawn &spawn : script_[size_t(row)].enemies) {
-        if (spawn.kind == key) {
+        if (spawn.type == type) {
             return spawn.count;
         }
     }
@@ -158,9 +162,9 @@ void Editor::setEnemyCountKind(int row, int kind, int count)
         return;
     }
     std::vector<games::EnemySpawn> &enemies = script_[size_t(row)].enemies;
-    const QString key = kindKey(kind);
+    const arena::EnemyType type = kindType(kind);
     for (auto it = enemies.begin(); it != enemies.end(); ++it) {
-        if (it->kind == key) {
+        if (it->type == type) {
             if (count <= 0) {
                 enemies.erase(it);
             } else {
@@ -170,7 +174,7 @@ void Editor::setEnemyCountKind(int row, int kind, int count)
         }
     }
     if (count > 0) {
-        enemies.push_back({key, count});
+        enemies.push_back({type, count});
     }
 }
 
@@ -188,12 +192,12 @@ void Editor::setWaveBoss(int row, bool on)
     for (games::Wave &wave : script_) {
         wave.enemies.erase(std::remove_if(wave.enemies.begin(), wave.enemies.end(),
                                           [](const games::EnemySpawn &spawn) {
-                                              return spawn.kind == kindKey(4);
+                                              return spawn.type == kindType(4);
                                           }),
                            wave.enemies.end());
     }
     if (on && row >= 0 && row < waveCount()) {
-        script_[size_t(row)].enemies.push_back({kindKey(4), 1});
+        script_[size_t(row)].enemies.push_back({kindType(4), 1});
     }
     clampColumn();
 }
@@ -266,7 +270,7 @@ void Editor::addWave()
     if (!script_.empty()) {
         // 复制最后一波的组成；Boss 不复制，全台本只留一个。
         for (const games::EnemySpawn &spawn : script_.back().enemies) {
-            if (spawn.kind != kindKey(4)) {
+            if (spawn.type != kindType(4)) {
                 wave.enemies.push_back(spawn);
             }
         }

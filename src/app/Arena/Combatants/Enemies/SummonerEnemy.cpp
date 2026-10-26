@@ -1,5 +1,7 @@
 #include "SummonerEnemy.h"
 
+#include "MiniEnemy.h"
+
 #include "Arena/Combatants/Combatants.h"
 #include "Arena/Combatants/Enemies/EnemyRegistry.h"
 #include "Arena/Context.h"
@@ -19,9 +21,9 @@ const EnemyRegistrar<SummonerEnemy> kRegistration(
 }
 
 SummonerEnemy::SummonerEnemy(const Math::Vec2 &position, int wave)
-    : RangedEnemy("summoner", Role::Ranged, position, wave)
+    : RangedEnemy(typeid(SummonerEnemy), Role::Ranged, position, wave)
 {
-    const EnemyStats &stats = statsFor(kind);
+    const EnemyStats &stats = statsFor(type());
     chargeRequired = std::max(1, stats.chargeRequired);
     summonCount = std::max(1, stats.summonCount);
 }
@@ -29,7 +31,7 @@ SummonerEnemy::SummonerEnemy(const Math::Vec2 &position, int wave)
 void SummonerEnemy::onAllyKilled(const Context &ctx, Enemy &dead)
 {
     // 召唤物不计入进度，否则会“杀 mini → 再召唤”无限循环。
-    if (!alive || dead.kind == QStringLiteral("mini")) {
+    if (!alive || dynamic_cast<const MiniEnemy *>(&dead) != nullptr) {
         return;
     }
     ++charge;

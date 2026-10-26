@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Arena/Combatants/EnemyType.h"
 #include "Games/Games.h"
 #include "GameConfig.h"
 #include "Math.h"
@@ -74,7 +75,7 @@ private:
     static constexpr float PaletteGap = 10.0f;
     static constexpr float PaletteChipsLeft = Left + 220.0f;
 
-    static QString kindKey(int kind);
+    static arena::EnemyType kindType(int kind);
     static QString kindLabel(int kind);
     static QColor kindColor(int kind);
     static bool waveHasKind(const games::Wave &wave, int kind);

@@ -15,9 +15,9 @@ const EnemyRegistrar<AmplifierEnemy> kRegistration(
 }
 
 AmplifierEnemy::AmplifierEnemy(const Math::Vec2 &position, int wave)
-    : SupportEnemy("amplifier", Role::Support, position, wave)
+    : SupportEnemy(typeid(AmplifierEnemy), Role::Support, position, wave)
 {
-    const EnemyStats &stats = statsFor(kind);
+    const EnemyStats &stats = statsFor(type());
     supportRadius = stats.auraRadius;
     supportValue = stats.auraValue;
 }

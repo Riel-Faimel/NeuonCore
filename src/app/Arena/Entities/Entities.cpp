@@ -140,14 +140,14 @@ void Entities::drawTexts(QPainter &world) const
     }
 }
 
-void Entities::spawnPortal(const Context &ctx, const QString &kind, int wave)
+void Entities::spawnPortal(const Context &ctx, EnemyType type, int wave)
 {
     const Math::Vec2 position =
-        kind == QStringLiteral("boss")
+        Enemy::isBoss(type)
             ? Math::Vec2(GameConfig::ScreenWidth / 2.0f, 190.0f)
             : randomSpawnPosition(ctx);
-    portals_.emplace_back(kind, position, wave);
-    spawnBurst(ctx, position, Enemy::statsFor(kind).color, 5, 50.0f, 0.35f);
+    portals_.emplace_back(type, position, wave);
+    spawnBurst(ctx, position, Enemy::statsFor(type).color, 5, 50.0f, 0.35f);
 }
 
 void Entities::spawnPickup(const Context &ctx, const Math::Vec2 &pos, int amount)

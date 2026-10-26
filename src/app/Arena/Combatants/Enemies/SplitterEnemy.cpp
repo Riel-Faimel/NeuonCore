@@ -1,5 +1,7 @@
 #include "SplitterEnemy.h"
 
+#include "MiniEnemy.h"
+
 #include "Arena/Combatants/Combatants.h"
 #include "Arena/Combatants/Enemies/EnemyRegistry.h"
 #include "Arena/Context.h"
@@ -19,7 +21,7 @@ const EnemyRegistrar<SplitterEnemy> kRegistration(
 }
 
 SplitterEnemy::SplitterEnemy(const Math::Vec2 &position, int wave)
-    : SelfDestructEnemy("splitter", Role::Melee, position, wave)
+    : SelfDestructEnemy(typeid(SplitterEnemy), Role::Melee, position, wave)
 {
 }
 
@@ -28,7 +30,7 @@ void SplitterEnemy::onKilled(const Context &ctx)
     for (int side = -1; side <= 1; side += 2) {
         const Math::Vec2 offset(float(side) * 18.0f,
                                 RandomService.real(-12.0f, 12.0f));
-        auto child = Enemy::create(QStringLiteral("mini"), pos + offset, wave);
+        auto child = Enemy::create(EnemyType(typeid(MiniEnemy)), pos + offset, wave);
         if (!child) {
             continue;
         }

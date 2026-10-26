@@ -15,7 +15,7 @@ const EnemyRegistrar<DroneEnemy> kRegistration(
 }
 
 DroneEnemy::DroneEnemy(const Math::Vec2 &position, int wave)
-    : OffensiveEnemy("drone", Role::Melee, position, wave)
+    : OffensiveEnemy(typeid(DroneEnemy), Role::Melee, position, wave)
 {
 }
 

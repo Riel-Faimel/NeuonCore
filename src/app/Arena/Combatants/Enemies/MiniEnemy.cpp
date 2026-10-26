@@ -15,7 +15,7 @@ const EnemyRegistrar<MiniEnemy> kRegistration(
 }
 
 MiniEnemy::MiniEnemy(const Math::Vec2 &position, int wave)
-    : OffensiveEnemy("mini", Role::Melee, position, wave)
+    : OffensiveEnemy(typeid(MiniEnemy), Role::Melee, position, wave)
 {
 }
 

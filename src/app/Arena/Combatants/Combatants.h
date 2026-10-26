@@ -30,7 +30,10 @@ public:
     void cleanup();
     void draw(QPainter &world, QPainter &glow, const Context &ctx) const;
 
-    void spawnEnemy(const Context &ctx, const QString &kind,
+    void spawnEnemy(const Context &ctx, EnemyType type,
+                    const Math::Vec2 &pos, int wave);
+    // 数据/测试边界：字符串键在入口解析成 EnemyType。
+    void spawnEnemy(const Context &ctx, const QString &dataKey,
                     const Math::Vec2 &pos, int wave);
     void spawnMinions(const Context &ctx, const Math::Vec2 &pos, int count, int wave);
     void clearForVictory(const Context &ctx);

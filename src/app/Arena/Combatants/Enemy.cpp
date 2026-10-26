@@ -2,6 +2,7 @@
 
 #include "Arena/Bullets/Bullets.h"
 #include "Arena/Combatants/Combatants.h"
+#include "Arena/Combatants/Enemies/BossEnemy.h"
 #include "Arena/Combatants/Enemies/EnemyRegistry.h"
 #include "Arena/Context.h"
 #include "Arena/Entities/Entities.h"
@@ -17,6 +18,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <unordered_map>
 
 #include <QHash>
 
@@ -35,31 +37,57 @@ QString toQString(std::string_view text)
     return QString::fromUtf8(text.data(), int(text.size()));
 }
 
-QColor registryColor(const QString &kind)
+const EnemyDef *defFor(EnemyType type)
 {
     const EnemyRegistry &registry = enemyRegistry();
-    const auto it = registry.find(kind.toStdString());
-    return it != registry.end() ? it->second.color : Base::Coral;
+    const auto it = registry.find(type);
+    return it != registry.end() ? &it->second : nullptr;
 }
 
 } // namespace
 
 int Enemy::sNextId = 1;
 
-std::unique_ptr<Enemy> Enemy::create(const QString &kind,
-                                     const Math::Vec2 &position, int wave)
+std::unique_ptr<Enemy> Enemy::create(Type type, const Math::Vec2 &position, int wave)
 {
-    const EnemyRegistry &registry = enemyRegistry();
-    const auto it = registry.find(kind.toStdString());
-    if (it == registry.end() || it->second.factory == nullptr) {
+    const EnemyDef *def = defFor(type);
+    if (def == nullptr || def->factory == nullptr) {
         return nullptr;
     }
-    return it->second.factory(position, wave);
+    return def->factory(position, wave);
 }
 
-const EnemyStats &Enemy::statsFor(const QString &kind)
+std::unique_ptr<Enemy> Enemy::create(const QString &dataKey,
+                                     const Math::Vec2 &position, int wave)
 {
-    // 数值来自 src/json/enemies.json（编译期常量），颜色由注册表提供。
+    const auto type = typeForKey(dataKey);
+    return type ? create(*type, position, wave) : nullptr;
+}
+
+std::optional<EnemyType> Enemy::typeForKey(const QString &dataKey)
+{
+    static const QHash<QString, EnemyType> keys = [] {
+        QHash<QString, EnemyType> result;
+        for (const auto &[type, def] : enemyRegistry()) {
+            result.insert(toQString(def.dataKey), type);
+        }
+        return result;
+    }();
+    const auto it = keys.constFind(dataKey);
+    if (it == keys.constEnd()) {
+        return std::nullopt;
+    }
+    return it.value();
+}
+
+bool Enemy::isBoss(Type type)
+{
+    return type == Type(typeid(BossEnemy));
+}
+
+const EnemyStats &Enemy::statsFor(Type type)
+{
+    // 数值来自 src/json/enemies.json（编译期常量），颜色由类型注册表提供。
     static const std::array<EnemyStats, data::MaxEnemyKinds> table = [] {
         std::array<EnemyStats, data::MaxEnemyKinds> result{};
         for (int i = 0; i < data::kEnemies.count; ++i) {
@@ -81,33 +109,47 @@ const EnemyStats &Enemy::statsFor(const QString &kind)
             stats.lungeInterval = base.lungeInterval;
             stats.chargeRequired = base.chargeRequired;
             stats.summonCount = base.summonCount;
-            stats.color = registryColor(toQString(base.kind));
+            stats.color = Base::Coral;
+            if (const auto type = typeForKey(toQString(base.kind))) {
+                if (const EnemyDef *def = defFor(*type)) {
+                    stats.color = def->color;
+                }
+            }
             result[size_t(i)] = stats;
         }
         return result;
     }();
-    // kind -> 下标查表，避免每次生敌都线性扫描并分配 QString。
-    static const QHash<QString, int> indices = [] {
-        QHash<QString, int> result;
-        for (int i = 0; i < data::kEnemies.count; ++i) {
-            result.insert(toQString(data::kEnemies.items[size_t(i)].kind), i);
+    // EnemyType -> 数据表下标；首次使用时由类型注册表建立。
+    static const std::unordered_map<EnemyType, int> indices = [] {
+        std::unordered_map<EnemyType, int> result;
+        for (const auto &[type, def] : enemyRegistry()) {
+            const int index = data::findEnemyIndex(def.dataKey);
+            if (index >= 0) {
+                result.emplace(type, index);
+            }
         }
         return result;
     }();
-    const auto it = indices.constFind(kind);
-    return table[size_t(it != indices.constEnd() ? it.value() : 0)];
+    const auto it = indices.find(type);
+    return table[size_t(it != indices.end() ? it->second : 0)];
 }
 
-Enemy::Enemy(std::string_view kindName, Role role, Archetype archetype,
+const EnemyStats &Enemy::statsFor(const QString &dataKey)
+{
+    const auto type = typeForKey(dataKey);
+    return statsFor(type ? *type : Type(typeid(Enemy)));
+}
+
+Enemy::Enemy(Type type, Role role, Archetype archetype,
              const Math::Vec2 &position, int waveNumber)
-    : kind(toQString(kindName)),
+    : type_(type),
       eid(sNextId++),
       pos(position),
       wave(waveNumber),
       role_(role),
       archetype_(archetype)
 {
-    const EnemyStats &stats = statsFor(kind);
+    const EnemyStats &stats = statsFor(type_);
     radius = stats.radius;
     color = stats.color;
     score = stats.score;

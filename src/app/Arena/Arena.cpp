@@ -106,9 +106,9 @@ void Arena::draw(QPainter &world, QPainter &glow) const
     Entities::drawForeground(world, glow);
 }
 
-void Arena::spawnPortal(const QString &kind, int wave)
+void Arena::spawnPortal(arena::EnemyType type, int wave)
 {
-    Entities::spawnPortal(context(), kind, wave);
+    Entities::spawnPortal(context(), type, wave);
 }
 
 void Arena::placeMine(const Math::Vec2 &position)

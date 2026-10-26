@@ -19,9 +19,9 @@ const EnemyRegistrar<NecromancerEnemy> kRegistration(
 }
 
 NecromancerEnemy::NecromancerEnemy(const Math::Vec2 &position, int wave)
-    : SupportEnemy("necromancer", Role::Support, position, wave)
+    : SupportEnemy(typeid(NecromancerEnemy), Role::Support, position, wave)
 {
-    const EnemyStats &stats = statsFor(kind);
+    const EnemyStats &stats = statsFor(type());
     supportRadius = stats.reviveRadius;
     supportValue = stats.reviveChance;
 }
@@ -37,7 +37,7 @@ void NecromancerEnemy::onAllyKilled(const Context &ctx, Enemy &dead)
     if (RandomService.real(0.0f, 1.0f) >= supportValue) {
         return;
     }
-    auto revived = Enemy::create(dead.kind, dead.pos, dead.wave);
+    auto revived = Enemy::create(dead.type(), dead.pos, dead.wave);
     if (!revived) {
         return;
     }

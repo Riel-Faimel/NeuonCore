@@ -1,12 +1,13 @@
 #pragma once
 
+#include "Arena/Combatants/EnemyType.h"
 #include "Fighter.h"
 
 #include <QColor>
 #include <QString>
 
 #include <memory>
-#include <string_view>
+#include <optional>
 #include <vector>
 
 namespace arena {
@@ -37,7 +38,12 @@ struct EnemyStats {
 // 具体敌人的走位、攻击、光环、死亡效果在 Enemies/ 下的子类里实现；
 // Enemy.cpp 只负责基类和“kind -> 工厂”的注册表。
 class Enemy : public Fighter {
+private:
+    // RTTI 类型标识；具体类型由子类构造函数传入 typeid(T)。
+    EnemyType type_;
+
 public:
+    using Type = EnemyType;
     // 寻路/走位类别：近战贴人、远程躲弹幕、增益向友军集群靠拢。
     enum class Role {
         Melee,
@@ -55,7 +61,6 @@ public:
         Boss,
     };
 
-    QString kind;
     int eid = 0;
     Math::Vec2 pos;
     Math::Vec2 vel;
@@ -98,11 +103,16 @@ public:
     Enemy(const Enemy &) = delete;
     Enemy &operator=(const Enemy &) = delete;
 
-    // ----- 注册表 -----
-    // 运行时按 kind 查表创建具体敌人；未注册的 kind 返回 nullptr。
-    static std::unique_ptr<Enemy> create(const QString &kind,
+    // ----- 注册表（按 RTTI 类型组织） -----
+    // 运行时按类型创建具体敌人；字符串键只在数据边界（spawn/台本）使用。
+    static std::unique_ptr<Enemy> create(Type type, const Math::Vec2 &position, int wave);
+    static std::unique_ptr<Enemy> create(const QString &dataKey,
                                          const Math::Vec2 &position, int wave);
-    static const EnemyStats &statsFor(const QString &kind);
+    static const EnemyStats &statsFor(Type type);
+    static const EnemyStats &statsFor(const QString &dataKey);
+    static std::optional<Type> typeForKey(const QString &dataKey);
+    static bool isBoss(Type type);
+    Type type() const { return type_; }
     Role role() const { return role_; }
     Archetype archetype() const { return archetype_; }
 
@@ -130,7 +140,7 @@ public:
     virtual float damageShareRatio() const { return 0.0f; }
 
 protected:
-    Enemy(std::string_view kindName, Role role, Archetype archetype,
+    Enemy(Type type, Role role, Archetype archetype,
           const Math::Vec2 &position, int waveNumber);
 
     // 具体敌人只需返回期望速度，积分、边界、闪避由基类统一处理。

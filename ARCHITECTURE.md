@@ -52,10 +52,10 @@ cpp/src/
 │  │  ├─ Combatants/
 │  │  │  ├─ Combatants.h/.cpp
 │  │  │  ├─ Player.h/.cpp
-│  │  │  ├─ Enemy.h/.cpp              敌人基类 + kind→工厂表
+│  │  │  ├─ Enemy.h/.cpp              敌人基类 + RTTI 类型注册表
 │  │  │  └─ Enemies/
 │  │  │     ├─ EnemyTypes.h/.cpp      六个虚基类
-│  │  │     ├─ EnemyRegistry.h        CRTP 注册器
+│  │  │     ├─ EnemyRegistry.h        CRTP 注册器（按 EnemyType）
 │  │  │     ├─ DroneEnemy.h/.cpp
 │  │  │     ├─ SpitterEnemy.h/.cpp
 │  │  │     ├─ TankEnemy.h/.cpp
@@ -81,8 +81,6 @@ cpp/src/
 │  │  ├─ Waves/Waves.h/.cpp       组件：按台本出生敌人
 │  │  ├─ Upgrades/Upgrades.h/.cpp 组件：强化池、抽取与应用
 │  │  └─ Renderer/Renderer.h/.cpp 组件：局内画面与特效
-│  ├─ Data/GameData.h              编译期数值表（展开自 src/json）
-│  ├─ Data/Settings.h              配置存储（注册表 / ini）
 │  ├─ Menu/Menu.h / Menu.cpp
 │  │  ├─ Main/Main.h/.cpp         标题页组件
 │  │  ├─ Map/Map.h/.cpp           星区地图组件
@@ -101,6 +99,8 @@ cpp/src/
 │  ├─ Json.h                        constexpr JSON 解析器
 │  └─ Random.h / Random.cpp
 ├─ include/
+│  ├─ Data/GameData.h              编译期数值表（展开自 src/json）
+│  ├─ Data/Settings.h              配置存储（注册表 / ini）
 │  ├─ GameConfig.h
 │  ├─ Bullet.h
 │  └─ Fighter.h
@@ -286,7 +286,7 @@ public:
 ```text
 src/json/*.json
   └─ tools/embed_json.cpp（构建期）→ build/generated/GameDataJson.h（原样 raw string）
-       └─ src/app/Data/GameData.h：inline constexpr auto doc = json::parse(...)
+       └─ src/include/Data/GameData.h：inline constexpr auto doc = json::parse(...)
             └─ data::kPlayer / kEnemies / kCampaign / kWaveTiming / kUpgradeRanges / k*Bullet
                  └─ 游戏代码直接读常量（零运行时解析开销）
 ```
@@ -335,7 +335,7 @@ public:
 
 ## 敌人与支援光环
 
-`Enemy` 是抽象基类：只保留共享状态、通用移动积分、受击/死亡/绘制骨架。`Enemies/EnemyTypes.h` 定义六个虚基类，`Enemies/<Kind>Enemy.cpp` 是每个 kind 的具体实现：
+`Enemy` 是抽象基类：只保留共享状态、通用移动积分、受击/死亡/绘制骨架。类型身份用 RTTI：`arena::EnemyType = std::type_index`，每个具体敌人在构造时把 `typeid(Self)` 传给基类，`Enemy` 里没有分类字符串字段。`Enemies/EnemyTypes.h` 定义六个虚基类，`Enemies/<Kind>Enemy.cpp` 是每个具体类型的实现：
 
 | 虚基类 | 实现 |
 | --- | --- |
@@ -346,9 +346,9 @@ public:
 | `SelfDestructEnemy` | splitter（死亡分裂） |
 | `BossEnemy` | boss |
 
-目前有 11 个 kind 字符串（**没有 Kind 枚举**），具体类型由 vtable 区分、测试/外部判断用 `dynamic_cast`；数值（含光环参数）全部来自 `src/json/enemies.json`。击杀触发在 `Events::handleKill()`，由各敌人虚函数 `onKilled()` / `onAllyKilled()` 接管：
+数值（含光环参数）全部来自 `src/json/enemies.json`，按 `EnemyType` 取；JSON 里的类型键只在注册和数据边界使用。击杀触发在 `Events::handleKill()`，由各敌人虚函数 `onKilled()` / `onAllyKilled()` 接管；掉落类型等分支用 `dynamic_cast` 判断具体类，不比较字符串：
 
-| kind | 机制 |
+| 类型（JSON 键） | 机制 |
 | --- | --- |
 | `amplifier` | 150 范围内友军伤害 +30%，每帧刷新 0.35s buff；敌方子弹伤害和接触伤害都吃加成 |
 | `linker` | 170 范围内友军受到的 45% 伤害转给自己；只转一层，多个 linker 均分 |
@@ -361,7 +361,7 @@ public:
 
 ### 寻路与阵型
 
-类别归属直接用虚基类（`dynamic_cast<DefensiveEnemy*>` 等）判断；`Enemy::Role` 只决定是否需要弹幕闪避：
+类别归属用 `Enemy::Archetype` 缓存（`Offensive / Ranged / Defensive / Support / SelfDestruct / Boss`），由虚基类构造时写入，避免每帧 RTTI；`Enemy::Role` 只决定是否需要弹幕闪避：
 
 | 类型 | 成员 | 走位 |
 | --- | --- | --- |
@@ -372,11 +372,11 @@ public:
 | 辅助型 | amplifier / mender / necromancer | 优先躲到最近防御者背后；朝“非自毁型”友军最密集点靠拢（150 半径邻居数），并只考虑防御线后方的友军；贴玩家过近时后退 |
 | Boss | boss | 独立走位：保持 185–265 距离、绕圈、定向弹幕 + 环形弹幕 |
 
-辅助函数：`avoidPlayerBullets()` 只读 `Bullets::playerBullets()`；`nearestDefender()` / `densestAlly()` / `behindDefender()` 在 `EnemyTypes.cpp` 内用 `dynamic_cast` 读 `Combatants::enemies()`，不引入新的组件依赖。
+辅助函数：`avoidPlayerBullets()` 只读 `Bullets::playerBullets()`；`nearestDefender()` / `densestAlly()` / `behindDefender()` 在 `EnemyTypes.cpp` 内按 `Archetype` 读 `Combatants::enemies()`，不引入新的组件依赖。
 
 ### 注册与新增敌人
 
-注册走 CRTP：
+注册走 CRTP，键是 RTTI 类型：
 
 ```cpp
 namespace {
@@ -384,9 +384,10 @@ const EnemyRegistrar<DroneEnemy> kRegistration("drone", Base::Coral);
 }
 ```
 
-- 每个 `*Enemy.cpp` 定义自己的静态注册器，构造时写入 `enemyRegistry()`（`Enemy.cpp` 里的函数内 `static std::unordered_map`）；
-- `Enemy::create(kind, pos, wave)` 运行时查表，未注册返回 `nullptr`；
-- `Enemy.cpp` 不再有按 kind 的走位/绘制 `switch`，只保留基类逻辑、`statsFor()` 和注册表；
+- 每个 `*Enemy.cpp` 定义自己的静态注册器，构造时写入 `enemyRegistry()`（`std::unordered_map<EnemyType, EnemyDef>`）；`EnemyDef` 保存颜色、工厂和仅用于 JSON/台本的 `dataKey`；
+- `Enemy::create(EnemyType, pos, wave)` 按类型查表，未注册返回 `nullptr`；`Enemy::create(QString)` 只在数据/测试边界把 `dataKey` 解析成类型；
+- 台本在数据边界完成解析：`Menu::standardScript()` 和 `Editor` 把 JSON/编辑器键解析成 `EnemyType`，`games::EnemySpawn` 只存类型；`Waves::buildQueue()` 直接用类型排队，Boss 判定用 `Enemy::isBoss(type)`，传送门也不再保存 kind 字符串；
+- `Enemy.cpp` 不再有按 kind 的走位/绘制 `switch`，只保留基类逻辑、`statsFor(EnemyType)` 和注册表；
 - 新增敌人：`enemies.json` 加数值 → 在 `Enemies/` 新建 `XEnemy.h/.cpp`，继承对应虚基类并写走位/绘制 → 在 cpp 里放 `EnemyRegistrar` → Makefile 的 `ARENA_COMPONENTS` 加对象 → 编辑器敌人库（`Menu/Editor/Editor.cpp` 的 `kKeys/kLabels/kindColor`）加一项 → 波次里使用。
 
 ## 依赖方向

@@ -1,6 +1,7 @@
 #include "Games/Waves/Waves.h"
 
 #include "Arena/Arena.h"
+#include "Arena/Combatants/Enemy.h"
 #include "Data/GameData.h"
 #include "Random.h"
 
@@ -30,9 +31,9 @@ void Waves::update(float dt)
     if (spawnTimer_ > 0.0f) {
         return;
     }
-    const QString kind = queue_.front();
+    const arena::EnemyType type = queue_.front();
     queue_.erase(queue_.begin());
-    arena_.spawnPortal(kind, currentWave_);
+    arena_.spawnPortal(type, currentWave_);
     if (!queue_.empty()) {
         spawnTimer_ = RandomService.real(data::kWaveTiming.gapMin, data::kWaveTiming.gapMax);
     }
@@ -64,32 +65,34 @@ bool Waves::waveHasBoss(int wave) const
         return false;
     }
     for (const EnemySpawn &spawn : script_[size_t(wave - 1)].enemies) {
-        if (spawn.kind == QStringLiteral("boss")) {
+        if (arena::Enemy::isBoss(spawn.type)) {
             return true;
         }
     }
     return false;
 }
 
-std::vector<QString> Waves::buildQueue(int wave) const
+std::vector<arena::EnemyType> Waves::buildQueue(int wave) const
 {
-    std::vector<QString> plan;
+    std::vector<arena::EnemyType> plan;
     if (wave < 1 || wave > totalWaves()) {
         return plan;
     }
     for (const EnemySpawn &spawn : script_[size_t(wave - 1)].enemies) {
         for (int i = 0; i < spawn.count; ++i) {
-            plan.push_back(spawn.kind);
+            plan.push_back(spawn.type);
         }
     }
     RandomService.shuffle(plan);
     // Boss 台本里如果有 Boss，永远让它第一个出场。
-    if (waveHasBoss(wave)) {
-        const auto it = std::find(plan.begin(), plan.end(), QStringLiteral("boss"));
-        if (it != plan.end()) {
-            plan.erase(it);
-            plan.insert(plan.begin(), QStringLiteral("boss"));
-        }
+    const auto boss = std::find_if(plan.begin(), plan.end(),
+                                   [](arena::EnemyType type) {
+                                       return arena::Enemy::isBoss(type);
+                                   });
+    if (boss != plan.end()) {
+        const arena::EnemyType type = *boss;
+        plan.erase(boss);
+        plan.insert(plan.begin(), type);
     }
     return plan;
 }
