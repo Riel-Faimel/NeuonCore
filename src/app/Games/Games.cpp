@@ -7,7 +7,7 @@
 // 构造即开局：一局的安排（含台本）在这里被接收，之后只对内使用。
 // 新的一局就是一个新对象，因此不存在需要手工清空的跨局状态。
 Games::Games(const Level &level, Base &base)
-    : level_(level), base_(base), arena_(random_, base_),
+    : level_(level), base_(base), arena_(random_, base_, score_),
       waves_(random_, arena_, level_.script), upgrades_(random_, arena_, base_),
       renderer_(random_, base_)
 {

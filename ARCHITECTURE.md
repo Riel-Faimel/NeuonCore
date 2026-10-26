@@ -15,7 +15,7 @@
 
 2. **模块是全局类，组件是 namespace 中的类**
    - 除 `main` / `WinMain` 外，没有自由函数。
-   - 全局模块类：`GameConfig / Math / Random / Base / Arena / Games / Menu / Renderer / Pointer / GameWindow / SelfTest`。
+   - 全局模块类：`GameConfig / Math / Random / Base / Arena / Games / Score / Menu / Renderer / Pointer / GameWindow / SelfTest`。
    - `Base` 的组件在 `namespace base`：`Input / Audio / Paint`。
    - `Games` 的组件在 `namespace games`：`Waves / Upgrades`。
    - `Arena` 的组件在 `namespace arena`：`Combatants / Entities / Events / State`。
@@ -66,6 +66,7 @@ cpp/src/
 │  │  ├─ Editor/Editor.h/.cpp     台本编辑器组件
 │  │  └─ Settings/Settings.h/.cpp 音量设置组件
 │  ├─ Renderer.h / Renderer.cpp
+│  ├─ Score.h / Score.cpp
 │  ├─ Pointer.h / Pointer.cpp
 │  ├─ app.rc
 │  └─ main.cpp
@@ -107,7 +108,7 @@ cpp/src/
 | `Waves` | 按运行时提交的台本生成出生队列、Boss 波判定、出生间隔 |
 | `Upgrades` | 强化定义、可选性、三选一、叠加、效果应用 |
 
-`Games` 还拥有 `Random`、`Arena`、`Renderer`（`Base` 由 `Menu` 持有，以引用传入），负责：
+`Games` 还拥有 `Random`、`Arena`、`Renderer`、`Score`（`Base` 由 `Menu` 持有，以引用传入），负责：
 
 - 一局内的 `Playing / Upgrade / Paused / Victory / Defeat` 状态；
 - 将输入转发给 `Base` / `Arena`；
@@ -115,6 +116,8 @@ cpp/src/
 - 波次清空后打开 `games::Upgrades`；
 - 把 `Arena::Feedback` 转发给 `Renderer`；
 - 把胜负结果交给 `Menu`，自己不再画标题或结算。
+
+一局内的积分与击杀数由全局模块 `Score`（`src/app/Score.h/.cpp`）累计：`Games` 持有它，`Arena` 以引用拿到它，`arena::Events::handleKill()` 击杀时调用 `addKill(enemy.score)`；HUD 与结算只读 `Games::score()/kills()`。
 
 一局的结束条件只由台本决定：清空最后一波即胜利。`Boss` 只是一个带阶段的强敌，击杀它不会结束对局，只触发表现反馈（目标摧毁横幅、震屏、音效），所以它可以被放在任意一波。
 
@@ -151,7 +154,7 @@ cpp/src/
 | `Combatants` | 玩家、敌人容器、Boss 指针；推进/绘制战斗者 |
 | `Entities` | 传送门、掉落、粒子、飘字、冲击波 |
 | `Events` | 碰撞、接触伤害、敌人分离、击杀 |
-| `State` | Boss 阶段、Boss 击败、玩家失败、分数/击杀数 |
+| `State` | Boss 阶段、Boss 击败、玩家失败 |
 
 `Arena` 只编排顺序并汇总 `Feedback`。
 
@@ -246,6 +249,7 @@ GameWindow
    │  └─ Games
    │     ├─ Base ─────► base::Input / Audio / Music / Paint（引用，由 Menu 持有）
    │     ├─ Arena ────► arena::Bullets / Combatants / Entities / Events / State
+   │     ├─ Score ────► 一局积分/击杀（Arena 以引用上报）
    │     ├─ games::Waves ─────► Arena, Random
    │     ├─ games::Upgrades ──► Arena, Base, Random
    │     ├─ Renderer ─────────► Games/Arena/Waves/Upgrades(只读), Base, Random

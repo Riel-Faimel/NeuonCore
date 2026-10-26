@@ -11,6 +11,7 @@
 
 class Base;
 class Random;
+class Score;
 class SelfTest;
 
 namespace games {
@@ -31,7 +32,7 @@ public:
         float shake = 0.0f;
     };
 
-    explicit Arena(Random &random, Base &base);
+    Arena(Random &random, Base &base, Score &score);
     ~Arena();
 
     Arena(const Arena &) = delete;
@@ -45,8 +46,8 @@ public:
     void spawnPortal(const QString &kind, int wave);
 
     const PlayerState &player() const { return combatants_.player().state; }
-    int score() const { return state_.score(); }
-    int kills() const { return state_.kills(); }
+    int score() const;
+    int kills() const;
     int aliveEnemyCount() const { return combatants_.aliveEnemyCount(); }
     int portalCount() const { return entities_.portalCount(); }
     bool playerDefeated() const { return state_.playerDefeated(); }
@@ -84,6 +85,7 @@ private:
 
     Random &random_;
     Base &base_;
+    Score &score_;
 
     arena::Bullets bullets_;
     arena::Combatants combatants_;

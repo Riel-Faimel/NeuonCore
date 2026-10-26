@@ -10,6 +10,7 @@
 #include "Bullet.h"
 #include "GameConfig.h"
 #include "Random.h"
+#include "Score.h"
 #include "Base/Base.h"
 
 #include <algorithm>
@@ -161,7 +162,7 @@ void Events::handleKill(Arena &arena, Enemy &enemy)
         return;
     }
     enemy.alive = false;
-    arena.state_.addKill(enemy.score);
+    arena.score_.addKill(enemy.score);
     arena.entities_.spawnBurst(arena, enemy.pos, enemy.color,
                                enemy.boss ? 32 : 14,
                                enemy.boss ? 240.0f : 150.0f, 0.65f);

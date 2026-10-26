@@ -498,8 +498,8 @@ public:
         game->arena_.entities_.particles().clear();
         game->arena_.entities_.floatingTexts().clear();
         game->arena_.entities_.shockwaves().clear();
-        game->arena_.state_.total_ = 2840;
-        game->arena_.state_.kills_ = 31;
+        game->score_.total_ = 2840;
+        game->score_.kills_ = 31;
         Arena::PlayerState &player = game->arena_.combatants_.player().state;
         player.pos = {475, 430};
         player.hp = 74;
@@ -566,8 +566,8 @@ public:
         game->waves_.waveTotal_ = 16;
         game->arena_.beginWave();
         game->runTime_ = 304.0f;
-        game->arena_.state_.total_ = 9870;
-        game->arena_.state_.kills_ = 63;
+        game->score_.total_ = 9870;
+        game->score_.kills_ = 63;
         game->arena_.combatants_.enemies().clear();
         game->arena_.bullets_.player().clear();
         game->arena_.bullets_.clearEnemy();
@@ -625,8 +625,8 @@ public:
         game->waves_.queue_.clear();
         game->waves_.waveTotal_ = 12;
         game->runTime_ = 86.0f;
-        game->arena_.state_.total_ = 1240;
-        game->arena_.state_.kills_ = 17;
+        game->score_.total_ = 1240;
+        game->score_.kills_ = 17;
         game->arena_.combatants_.player().state.hp = 8;
         game->arena_.combatants_.player().state.invuln = 0.0f;
         game->arena_.combatants_.player().takeDamage(

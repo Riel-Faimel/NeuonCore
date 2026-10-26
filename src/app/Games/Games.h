@@ -6,6 +6,7 @@
 #include "Games/Waves/Waves.h"
 #include "Random.h"
 #include "Renderer.h"
+#include "Score.h"
 
 #include <QImage>
 #include <QString>
@@ -45,8 +46,8 @@ public:
 
     State state() const { return state_; }
     float runTime() const { return runTime_; }
-    int score() const { return arena_.score(); }
-    int kills() const { return arena_.kills(); }
+    int score() const { return score_.total(); }
+    int kills() const { return score_.kills(); }
     int currentWave() const { return waves_.currentWave(); }
     int totalWaves() const { return waves_.totalWaves(); }
     const QImage &frame() const { return renderer_.frame(); }
@@ -73,6 +74,7 @@ private:
     Level level_;
     Random random_;
     Base &base_;
+    Score score_;
     Arena arena_;
     games::Waves waves_;
     games::Upgrades upgrades_;

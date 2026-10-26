@@ -2,14 +2,26 @@
 
 #include "GameConfig.h"
 #include "Random.h"
+#include "Score.h"
 #include "Base/Base.h"
 
 #include <algorithm>
 #include <array>
 
-Arena::Arena(Random &random, Base &base) : random_(random), base_(base)
+Arena::Arena(Random &random, Base &base, Score &score)
+    : random_(random), base_(base), score_(score)
 {
     reset();
+}
+
+int Arena::score() const
+{
+    return score_.total();
+}
+
+int Arena::kills() const
+{
+    return score_.kills();
 }
 
 Arena::~Arena() = default;

@@ -8,8 +8,6 @@ namespace arena {
 
 void State::reset()
 {
-    total_ = 0;
-    kills_ = 0;
     phase2_ = false;
     phase3_ = false;
     bossDefeated_ = false;
@@ -21,12 +19,6 @@ void State::beginWave()
     phase2_ = false;
     phase3_ = false;
     bossDefeated_ = false;
-}
-
-void State::addKill(int points)
-{
-    total_ += points;
-    ++kills_;
 }
 
 void State::onBossDamage(Arena &arena, Enemy &boss)

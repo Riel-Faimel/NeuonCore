@@ -134,6 +134,7 @@ cpp/
 │  │  ├─ Menu/Editor/Editor.h/.cpp 组件：自定义台本编辑器
 │  │  ├─ Menu/Settings/Settings.h/.cpp 组件：音量设置
 │  │  ├─ Renderer.h / Renderer.cpp 局内背景、发光、HUD、卡片、暂停
+│  │  ├─ Score.h / Score.cpp      全局模块：一局积分与击杀累计
 │  │  ├─ Pointer.h / Pointer.cpp  全局鼠标指针（窗口每帧叠加）
 │  │  ├─ app.rc                   Windows 资源：嵌入应用图标
 │  │  └─ main.cpp                 QWidget 窗口、输入桥接、release 入口
@@ -159,11 +160,11 @@ cpp/
 
 `src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Music`、`Paint` 四个 `namespace base` 组件。`Base.h` 仍只暴露 Base 的输入/音频/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Music` 的 QMediaPlayer、`Paint` 的 QFontDatabase 细节都在各自组件内。
 
-`src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades` 两个 `namespace games` 组件，并拥有 `Random`、`Arena`、`Renderer`。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Games` 负责局内状态机和调用顺序。
+`src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades` 两个 `namespace games` 组件，并拥有 `Random`、`Arena`、`Renderer`、`Score`。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Games` 负责局内状态机和调用顺序。一局的积分/击杀由全局模块 `Score` 累计，`arena::Events::handleKill()` 击杀时上报；HUD 和结算只读 `Games::score()/kills()`。
 
 `src/app/Menu/` 和 `Arena/` 同构：`Menu` 只持有进程级的 `Base`、关卡表、当前屏幕和输入路由，五个界面是 `namespace menu` 组件——`Main`（标题/关卡卡/设置入口）、`Match`（持有这一局的 `Games`）、`Result`（只读 `Summary` 的结算层）、`Editor`（持有自定义台本）、`Settings`（音量 + `settings.ini`）。组件把玩家意图作为 `Action` 交回 `Menu`，`Menu` 负责开局、进编辑器和回主菜单；“自定义协议”点开即进编辑器，逐波编辑台本（1–12 波、四种敌人数量、单 Boss），部署时由 `Menu` 把 `Editor::script()` 写进 `Level.script` 交给 `Match`。
 
-`src/app/Arena/` 是模块目录：`Arena` 是全局模块类，组合 `Bullets`、`Combatants`、`Entities`、`Events`、`State` 五个 `namespace arena` 组件。`Bullet` 是 `src/include/Bullet.h` 里的全局纯虚接口，具体弹种（目前是 `StandardBullet`）在 `Arena/Bullets/`；发射方只 `submit()` 对象，推进、回收和绘制都由池统一做。`Fighter` 也放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段、分数和玩家失败。
+`src/app/Arena/` 是模块目录：`Arena` 是全局模块类，组合 `Bullets`、`Combatants`、`Entities`、`Events`、`State` 五个 `namespace arena` 组件。`Bullet` 是 `src/include/Bullet.h` 里的全局纯虚接口，具体弹种（目前是 `StandardBullet`）在 `Arena/Bullets/`；发射方只 `submit()` 对象，推进、回收和绘制都由池统一做。`Fighter` 也放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段和玩家失败（积分在全局模块 `Score`）。
 
 `src/lib/` 放不依赖应用层的通用模块：`Math`（向量/几何）和 `Random`（可注入随机数）。
 
