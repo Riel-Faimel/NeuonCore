@@ -404,35 +404,35 @@ public:
                            QStringLiteral("escape leaves settings"));
 
         log(QStringLiteral("Score"));
-        const int wallet = menu.score_.total();
-        menu.score_.beginRun();
-        menu.score_.addKill(120);
-        success &= require(menu.score_.total() == wallet + 120
-                               && menu.score_.run() == 120 && menu.score_.kills() == 1,
+        const int wallet = menu.shop_.score().total();
+        menu.shop_.score().beginRun();
+        menu.shop_.score().addKill(120);
+        success &= require(menu.shop_.score().total() == wallet + 120
+                               && menu.shop_.score().run() == 120 && menu.shop_.score().kills() == 1,
                            QStringLiteral("kill adds to global wallet and run total"));
-        success &= require(menu.score_.spend(50) && menu.score_.total() == wallet + 70,
+        success &= require(menu.shop_.score().spend(50) && menu.shop_.score().total() == wallet + 70,
                            QStringLiteral("spend deducts from the wallet"));
-        success &= require(!menu.score_.spend(999999),
+        success &= require(!menu.shop_.score().spend(999999),
                            QStringLiteral("overdraft is rejected"));
-        menu.score_.beginRun();
-        success &= require(menu.score_.kills() == 0 && menu.score_.run() == 0
-                               && menu.score_.total() == wallet + 70,
+        menu.shop_.score().beginRun();
+        success &= require(menu.shop_.score().kills() == 0 && menu.shop_.score().run() == 0
+                               && menu.shop_.score().total() == wallet + 70,
                            QStringLiteral("beginRun resets only the run stats"));
-        menu.score_.total_ = wallet;   // 还原，避免测试改动持久化余额
+        menu.shop_.score().total_ = wallet;   // 还原，避免测试改动持久化余额
 
         log(QStringLiteral("Shop"));
-        menu.score_.total_ = 500;
-        const int startMines = menu.inventory_.mines();
+        menu.shop_.score().total_ = 500;
+        const int startMines = menu.shop_.inventory().mines();
         const QRectF shopButton = menu.main_.shopButtonRect();
         menu.mousePressLeft({float(shopButton.center().x()),
                              float(shopButton.center().y())});
         success &= require(menu.screen() == Menu::Screen::Shop,
                            QStringLiteral("shop button opens shop"));
-        const QRectF buyButton = menu.shop_.buyRect();
+        const QRectF buyButton = menu.depot_.buyRect();
         menu.mousePressLeft({float(buyButton.center().x()),
                              float(buyButton.center().y())});
-        success &= require(menu.score_.total() == 500 - data::kMine.price
-                               && menu.inventory_.mines() == startMines + 1,
+        success &= require(menu.shop_.score().total() == 500 - data::kMine.price
+                               && menu.shop_.inventory().mines() == startMines + 1,
                            QStringLiteral("buying a mine spends score and adds stock"));
         menu.keyPress(Qt::Key_Escape);
         success &= require(menu.screen() == Menu::Screen::Main,
@@ -451,10 +451,10 @@ public:
             if (!mineGame->arena_.combatants_.enemies().empty()) {
                 arena::Enemy *victim = mineGame->arena_.combatants_.enemies().front().get();
                 const Math::Vec2 spot = victim->pos;
-                const int stockBefore = menu.inventory_.mines();
+                const int stockBefore = menu.shop_.inventory().mines();
                 menu.mousePressRight(spot);
                 success &= require(mineGame->arena_.mineCount() == 1
-                                       && menu.inventory_.mines() == stockBefore - 1,
+                                       && menu.shop_.inventory().mines() == stockBefore - 1,
                                    QStringLiteral("right click places a mine"));
                 const int killsBefore = mineGame->kills();
                 for (int i = 0; i < 60 && mineGame->arena_.mineCount() > 0; ++i) {
@@ -524,8 +524,8 @@ public:
         save(QStringLiteral("title.png"));
 
         // 商店
-        menu.score_.total_ = 2400;
-        menu.inventory_.addMine(2);
+        menu.shop_.score().total_ = 2400;
+        menu.shop_.inventory().addMine(2);
         const QRectF shopEntry = menu.main_.shopButtonRect();
         movePointer({float(shopEntry.center().x()), float(shopEntry.center().y())});
         menu.mousePressLeft({float(shopEntry.center().x()),
@@ -574,8 +574,8 @@ public:
         game->arena_.entities_.particles().clear();
         game->arena_.entities_.floatingTexts().clear();
         game->arena_.entities_.shockwaves().clear();
-        menu.score_.total_ = 2840;
-        menu.score_.kills_ = 31;
+        menu.shop_.score().total_ = 2840;
+        menu.shop_.score().kills_ = 31;
         Arena::PlayerState &player = game->arena_.combatants_.player().state;
         player.pos = {475, 430};
         player.hp = 74;
@@ -643,8 +643,8 @@ public:
         game->waves_.waveTotal_ = 16;
         game->arena_.beginWave();
         game->runTime_ = 304.0f;
-        menu.score_.total_ = 9870;
-        menu.score_.kills_ = 63;
+        menu.shop_.score().total_ = 9870;
+        menu.shop_.score().kills_ = 63;
         game->arena_.combatants_.enemies().clear();
         game->arena_.bullets_.player().clear();
         game->arena_.bullets_.clearEnemy();
@@ -702,8 +702,8 @@ public:
         game->waves_.queue_.clear();
         game->waves_.waveTotal_ = 12;
         game->runTime_ = 86.0f;
-        menu.score_.total_ = 1240;
-        menu.score_.kills_ = 17;
+        menu.shop_.score().total_ = 1240;
+        menu.shop_.score().kills_ = 17;
         game->arena_.combatants_.player().state.hp = 8;
         game->arena_.combatants_.player().state.invuln = 0.0f;
         game->arena_.combatants_.player().takeDamage(

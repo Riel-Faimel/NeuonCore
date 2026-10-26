@@ -35,15 +35,17 @@ LIBS := -L$(QTDIR)/lib \
         -luser32 -lkernel32 -lgdi32 -lwinmm -limm32 -lversion \
         -ldwmapi -luxtheme -lmsimg32 -static-libgcc -static-libstdc++
 
-APP_SRC := Renderer Pointer Score Inventory
+APP_SRC := Renderer Pointer
 APP_OBJS := $(addprefix $(BUILD)/app/,$(addsuffix .o,$(APP_SRC)))
 GAMES_COMPONENTS := Games Waves/Waves Upgrades/Upgrades
 GAMES_OBJS := $(addprefix $(BUILD)/app/Games/,$(addsuffix .o,$(GAMES_COMPONENTS)))
-MENU_COMPONENTS := Menu Main/Main Match/Match Result/Result Editor/Editor Shop/Shop Settings/Settings
+MENU_COMPONENTS := Menu Main/Main Match/Match Result/Result Editor/Editor Depot/Depot Settings/Settings
 MENU_OBJS := $(addprefix $(BUILD)/app/Menu/,$(addsuffix .o,$(MENU_COMPONENTS)))
 LIB_SRC := Math Random
 LIB_OBJS := $(addprefix $(BUILD)/lib/,$(addsuffix .o,$(LIB_SRC)))
 BASE_COMPONENTS := Base Input/Input Audio/Audio Audio/Music Paint/Paint
+SHOP_COMPONENTS := Shop Score/Score Inventory/Inventory
+SHOP_OBJS := $(addprefix $(BUILD)/app/Shop/,$(addsuffix .o,$(SHOP_COMPONENTS)))
 BASE_OBJS := $(addprefix $(BUILD)/app/Base/,$(addsuffix .o,$(BASE_COMPONENTS)))
 MAIN_RELEASE_OBJ := $(BUILD)/app/main_release.o
 MAIN_TEST_OBJ := $(BUILD)/app/main_test.o
@@ -62,7 +64,7 @@ ARENA_COMPONENTS := Arena Bullets/Bullets Bullets/StandardBullet \
                     Entities/Particle Entities/FloatingText Entities/Shockwave
 ARENA_OBJS := $(addprefix $(BUILD)/app/Arena/,$(addsuffix .o,$(ARENA_COMPONENTS)))
 
-SHARED_OBJS := $(BASE_OBJS) $(LIB_OBJS) $(APP_OBJS) $(GAMES_OBJS) $(MENU_OBJS) $(ARENA_OBJS)
+SHARED_OBJS := $(BASE_OBJS) $(LIB_OBJS) $(APP_OBJS) $(GAMES_OBJS) $(MENU_OBJS) $(SHOP_OBJS) $(ARENA_OBJS)
 RELEASE_OBJS := $(SHARED_OBJS) $(MAIN_RELEASE_OBJ) $(ICON_RES_OBJ)
 TEST_OBJS := $(SHARED_OBJS) $(MAIN_TEST_OBJ)
 DEPS := $(RELEASE_OBJS:.o=.d) $(TEST_OBJS:.o=.d)
@@ -88,11 +90,15 @@ $(BUILD):
 	@if not exist "$(BUILD_WIN)\app\Games\Waves" mkdir "$(BUILD_WIN)\app\Games\Waves"
 	@if not exist "$(BUILD_WIN)\app\Games\Upgrades" mkdir "$(BUILD_WIN)\app\Games\Upgrades"
 	@if not exist "$(BUILD_WIN)\app\Menu" mkdir "$(BUILD_WIN)\app\Menu"
+	@if not exist "$(BUILD_WIN)\app\Shop" mkdir "$(BUILD_WIN)\app\Shop"
+	@if not exist "$(BUILD_WIN)\app\Shop\Score" mkdir "$(BUILD_WIN)\app\Shop\Score"
+	@if not exist "$(BUILD_WIN)\app\Shop\Inventory" mkdir "$(BUILD_WIN)\app\Shop\Inventory"
 	@if not exist "$(BUILD_WIN)\app\Menu\Main" mkdir "$(BUILD_WIN)\app\Menu\Main"
 	@if not exist "$(BUILD_WIN)\app\Menu\Match" mkdir "$(BUILD_WIN)\app\Menu\Match"
 	@if not exist "$(BUILD_WIN)\app\Menu\Result" mkdir "$(BUILD_WIN)\app\Menu\Result"
 	@if not exist "$(BUILD_WIN)\app\Menu\Editor" mkdir "$(BUILD_WIN)\app\Menu\Editor"
 	@if not exist "$(BUILD_WIN)\app\Menu\Settings" mkdir "$(BUILD_WIN)\app\Menu\Settings"
+	@if not exist "$(BUILD_WIN)\app\Menu\Depot" mkdir "$(BUILD_WIN)\app\Menu\Depot"
 	@if not exist "$(BUILD_WIN)\app\Arena" mkdir "$(BUILD_WIN)\app\Arena"
 	@if not exist "$(BUILD_WIN)\app\Arena\Combatants" mkdir "$(BUILD_WIN)\app\Arena\Combatants"
 	@if not exist "$(BUILD_WIN)\app\Arena\Bullets" mkdir "$(BUILD_WIN)\app\Arena\Bullets"
@@ -107,6 +113,11 @@ $(LIB_OBJS): $(BUILD)/lib/%.o: src/lib/%.cpp | $(BUILD)
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
 $(GAMES_OBJS): $(BUILD)/app/Games/%.o: src/app/Games/%.cpp | $(BUILD)
+	@echo [CXX] $<
+	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
+
+$(SHOP_OBJS): $(BUILD)/app/Shop/%.o: src/app/Shop/%.cpp | $(BUILD)
+	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
 	@echo [CXX] $<
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 

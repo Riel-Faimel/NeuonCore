@@ -2,13 +2,13 @@
 
 #include "GameConfig.h"
 #include "Random.h"
-#include "Score.h"
+#include "Shop/Score/Score.h"
 #include "Base/Base.h"
 
 #include <algorithm>
 #include <array>
 
-Arena::Arena(Random &random, Base &base, Score &score)
+Arena::Arena(Random &random, Base &base, shop::Score &score)
     : random_(random), base_(base), score_(score)
 {
     reset();

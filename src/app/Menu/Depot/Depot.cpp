@@ -1,60 +1,45 @@
-#include "Menu/Shop/Shop.h"
+#include "Menu/Depot/Depot.h"
 
 #include "Base/Base.h"
 #include "Data/GameData.h"
 #include "GameConfig.h"
-#include "Inventory.h"
-#include "Score.h"
+#include "Shop/Shop.h"
 
 #include <QLinearGradient>
 #include <QPainter>
 #include <QPen>
 #include <Qt>
 
-#include <array>
 #include <cmath>
 
 namespace menu {
 
-void Shop::reset()
+void Depot::reset()
 {
     purchases_ = 0;
 }
 
-QRectF Shop::itemRect() const
+QRectF Depot::itemRect() const
 {
     return QRectF(300.0f, 214.0f, 680.0f, 290.0f);
 }
 
-QRectF Shop::buyRect() const
+QRectF Depot::buyRect() const
 {
     return QRectF(700.0f, 430.0f, 240.0f, 42.0f);
 }
 
-QRectF Shop::backRect() const
+QRectF Depot::backRect() const
 {
     return QRectF(GameConfig::ScreenWidth / 2.0f - 90.0f, 600.0f, 180.0f, 42.0f);
 }
 
-bool Shop::buy(Score &score, Inventory &inventory, Base &base)
-{
-    const int price = data::kMine.price;
-    if (!score.spend(price)) {
-        base.playSound(QStringLiteral("ui"));
-        return false;
-    }
-    inventory.addMine(1);
-    inventory.save();
-    score.save();
-    base.playSound(QStringLiteral("upgrade"));
-    ++purchases_;
-    return true;
-}
-
-Shop::Action Shop::keyPress(int key, Score &score, Inventory &inventory, Base &base)
+Depot::Action Depot::keyPress(int key, Shop &shop, Base &base)
 {
     if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Space) {
-        buy(score, inventory, base);
+        if (shop.buyMine(base)) {
+            ++purchases_;
+        }
         return Action::None;
     }
     if (key == Qt::Key_Escape || key == Qt::Key_Q) {
@@ -63,20 +48,21 @@ Shop::Action Shop::keyPress(int key, Score &score, Inventory &inventory, Base &b
     return Action::None;
 }
 
-Shop::Action Shop::mousePress(const Math::Vec2 &position, Score &score,
-                              Inventory &inventory, Base &base)
+Depot::Action Depot::mousePress(const Math::Vec2 &position, Shop &shop, Base &base)
 {
     const QPointF point(position.x, position.y);
     if (backRect().contains(point)) {
         return Action::Back;
     }
     if (buyRect().contains(point)) {
-        buy(score, inventory, base);
+        if (shop.buyMine(base)) {
+            ++purchases_;
+        }
     }
     return Action::None;
 }
 
-void Shop::render(QPainter &painter, const Score &score, const Inventory &inventory) const
+void Depot::render(QPainter &painter, const Shop &shop) const
 {
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
@@ -110,7 +96,7 @@ void Shop::render(QPainter &painter, const Score &score, const Inventory &invent
                 Base::Amber);
 
     Base::text(painter, Base::techSmallFont(),
-               QStringLiteral("积分  %1").arg(score.total()), Base::Amber,
+               QStringLiteral("积分  %1").arg(shop.score().total()), Base::Amber,
                {GameConfig::ScreenWidth - 34.0f, 34.0f}, QStringLiteral("topright"),
                235);
 
@@ -153,11 +139,11 @@ void Shop::render(QPainter &painter, const Score &score, const Inventory &invent
                      {float(card.right()) - 40.0f, float(card.bottom()) - 92.0f},
                      Base::shade(Base::Amber, 0.35f), 1.0f);
     Base::text(painter, Base::smallFont(),
-               QStringLiteral("持有  ×%1").arg(inventory.mines()), Base::Text,
+               QStringLiteral("持有  ×%1").arg(shop.inventory().mines()), Base::Text,
                {float(card.left()) + 40.0f, float(card.bottom()) - 56.0f},
                QStringLiteral("midleft"), 220);
 
-    const bool affordable = score.total() >= data::kMine.price;
+    const bool affordable = shop.score().total() >= data::kMine.price;
     Base::panel(painter, buyRect(), affordable ? Base::Amber : QColor(70, 84, 96),
                 affordable ? 230 : 170, 9,
                 affordable ? QColor(10, 24, 34) : QColor(8, 14, 22));

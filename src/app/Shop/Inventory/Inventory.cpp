@@ -1,9 +1,11 @@
-#include "Inventory.h"
+#include "Shop/Inventory/Inventory.h"
 
 #include <QCoreApplication>
 #include <QSettings>
 
 #include <algorithm>
+
+namespace shop {
 
 QString Inventory::path()
 {
@@ -37,3 +39,5 @@ bool Inventory::takeMine()
     --mines_;
     return true;
 }
+
+} // namespace shop

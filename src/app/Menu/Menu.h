@@ -2,15 +2,14 @@
 
 #include "Base/Base.h"
 #include "Games/Games.h"
-#include "Inventory.h"
-#include "Score.h"
+#include "Shop/Shop.h"
 
+#include "Menu/Depot/Depot.h"
 #include "Menu/Editor/Editor.h"
 #include "Menu/Main/Main.h"
 #include "Menu/Match/Match.h"
 #include "Menu/Result/Result.h"
 #include "Menu/Settings/Settings.h"
-#include "Menu/Shop/Shop.h"
 
 #include <QImage>
 
@@ -18,7 +17,7 @@
 
 class SelfTest;
 
-// Menu 模块：只组合 6 个界面组件和进程级资源（Base、Score、Inventory、关卡表），
+// Menu 模块：只组合 6 个界面组件和进程级资源（Base、Shop、关卡表），
 // 负责屏幕状态机、输入路由和组件之间的数据传递。
 // 和 Arena 一样，组件在 namespace menu 里，Menu 是唯一的模块入口。
 class Menu {
@@ -69,15 +68,14 @@ private:
     void openEditor();
 
     Base base_;
-    Score score_;
-    Inventory inventory_;
+    Shop shop_;
     std::vector<Games::Level> levels_;
 
     menu::Main main_;
     menu::Match match_;
     menu::Result result_;
     menu::Editor editor_;
-    menu::Shop shop_;
+    menu::Depot depot_;
     menu::Settings settings_;
 
     Screen screen_ = Screen::Main;

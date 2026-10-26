@@ -12,7 +12,7 @@
 #include "Data/GameData.h"
 #include "GameConfig.h"
 #include "Random.h"
-#include "Score.h"
+#include "Shop/Score/Score.h"
 #include "Base/Base.h"
 
 #include <algorithm>

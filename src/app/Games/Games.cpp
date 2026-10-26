@@ -1,7 +1,7 @@
 #include "Games/Games.h"
 
 #include "GameConfig.h"
-#include "Inventory.h"
+#include "Shop/Shop.h"
 
 #include <Qt>
 
@@ -9,13 +9,12 @@
 
 // 构造即开局：一局的安排（含台本）在这里被接收，之后只对内使用。
 // 新的一局就是一个新对象，因此不存在需要手工清空的跨局状态。
-Games::Games(const Level &level, Base &base, Score &score, Inventory &inventory)
-    : level_(level), base_(base), score_(score), inventory_(inventory),
-      arena_(random_, base_, score),
+Games::Games(const Level &level, Base &base, Shop &shop)
+    : level_(level), base_(base), shop_(shop), arena_(random_, base_, shop.score()),
       waves_(random_, arena_, level_.script), upgrades_(random_, arena_, base_),
       renderer_(random_, base_)
 {
-    score_.beginRun();
+    shop_.score().beginRun();
     renderer_.initialize();
     base_.setMouseActive(true);
     base_.playSound(QStringLiteral("ui"));
@@ -236,11 +235,11 @@ void Games::mousePressRight(const Math::Vec2 &position)
         || position.y < GameConfig::FieldTop || position.y > GameConfig::FieldBottom) {
         return;
     }
-    if (!inventory_.takeMine()) {
+    if (!shop_.inventory().takeMine()) {
         base_.playSound(QStringLiteral("ui"));
         return;
     }
-    inventory_.save();
+    shop_.inventory().save();
     arena_.placeMine(position);
 }
 

@@ -4,9 +4,10 @@
 
 class SelfTest;
 
-// Score 模块：全局积分（未来商店的货币）与单局击杀统计。
-// 积分跨局累计，写入 exe 同级的 settings.ini（[score] total）；
-// 每局开始时由 Games 调用 beginRun() 只重置“本局”统计，不动全局余额。
+namespace shop {
+
+// Score 组件：全局积分（商店货币）与单局击杀统计。
+// 属于 Shop 全局模块；积分跨局累计，写入 exe 同级的 settings.ini（[score] total）。
 class Score {
 public:
     void load();
@@ -30,3 +31,5 @@ private:
     int runStart_ = 0;
     int kills_ = 0;
 };
+
+} // namespace shop

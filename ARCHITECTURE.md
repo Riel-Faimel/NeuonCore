@@ -15,7 +15,7 @@
 
 2. **模块是全局类，组件是 namespace 中的类**
    - 除 `main` / `WinMain` 外，没有自由函数。
-   - 全局模块类：`GameConfig / Math / Random / Base / Arena / Games / Score / Menu / Renderer / Pointer / GameWindow / SelfTest`。
+   - 全局模块类：`GameConfig / Math / Random / Base / Arena / Games / Shop / Menu / Renderer / Pointer / GameWindow / SelfTest`。
    - `Base` 的组件在 `namespace base`：`Input / Audio / Paint`。
    - `Games` 的组件在 `namespace games`：`Waves / Upgrades`。
    - `Arena` 的组件在 `namespace arena`：`Combatants / Entities / Events / State`。
@@ -66,11 +66,12 @@ cpp/src/
 │  │  ├─ Match/Match.h/.cpp       当前对局组件
 │  │  ├─ Result/Result.h/.cpp     结算覆盖层组件
 │  │  ├─ Editor/Editor.h/.cpp     台本编辑器组件
-│  │  ├─ Shop/Shop.h/.cpp         补给站组件
+│  │  ├─ Depot/Depot.h/.cpp       补给站界面组件
 │  │  └─ Settings/Settings.h/.cpp 音量设置组件
+│  ├─ Shop/Shop.h / Shop.cpp      模块入口：组合 Score / Inventory
+│  │  ├─ Score/Score.h/.cpp       组件：全局积分
+│  │  └─ Inventory/Inventory.h/.cpp 组件：消耗品库存
 │  ├─ Renderer.h / Renderer.cpp
-│  ├─ Score.h / Score.cpp
-│  ├─ Inventory.h / Inventory.cpp
 │  ├─ Pointer.h / Pointer.cpp
 │  ├─ app.rc
 │  └─ main.cpp
@@ -138,7 +139,7 @@ cpp/src/
 
 ### Menu
 
-`Menu` 是顶层界面模块入口，结构和 `Arena` 一样：自己只持有进程级的 `Base`、`Score`、`Inventory`、关卡表、当前屏幕和输入路由，把六个界面拆成 `namespace menu` 组件：
+`Menu` 是顶层界面模块入口，结构和 `Arena` 一样：自己只持有进程级的 `Base`、`Shop`、关卡表、当前屏幕和输入路由，把六个界面拆成 `namespace menu` 组件：
 
 | 组件 | 职责 |
 | --- | --- |
@@ -146,19 +147,30 @@ cpp/src/
 | `Match` | 持有当前这一局 `Games`：开局、推进、渲染、局内输入转发 |
 | `Result` | 结算覆盖层：只接收一份只读 `Summary`，不读取 `Games` |
 | `Editor` | 自定义台本编辑器：持有 `customScript_`，逐波表格编辑 |
-| `Shop` | 补给站：地雷购买（扣 `Score`、加 `Inventory`），读写 `settings.ini` |
+| `Depot` | 补给站界面：展示钱包/库存，把购买意图转给全局 `Shop` |
 | `Settings` | 音效 / 背景音乐音量，读写 `settings.ini` |
 
 `Menu` 自己只负责：
 
 - 屏幕状态机（`Main / Match / Result / Editor / Shop / Settings`）和输入路由；
-- 把 `Main` / `Editor` / `Shop` / `Settings` 的意图（`StartLevel / OpenEditor / OpenShop / Deploy / Back` 等 `Action`）翻译成开局、进编辑器、进商店、回主菜单；
+- 把 `Main` / `Editor` / `Depot` / `Settings` 的意图（`StartLevel / OpenEditor / OpenShop / Deploy / Back` 等 `Action`）翻译成开局、进编辑器、进商店、回主菜单；
 - 开局时把 `Games::Level`（展示信息 + 台本 + 起始波）交给 `Match`；回主菜单时让 `Match` 销毁这一局；
 - 给 `Result` 组装 `Summary`（胜负、得分、击杀、波次、时间）；
 - 管理关卡表 `levels_`：标准协议与自定义协议的展示信息，自定义协议部署时用 `Editor::script()` 覆盖台本、固定从第 1 波开始；
-- 启动时初始化 `Base`（音频/输入/字体）、加载钱包与库存，并按 `settings.ini` 恢复音量。
+- 启动时初始化 `Base`（音频/输入/字体）、加载 `Shop`（钱包与库存），并按 `settings.ini` 恢复音量。
 
 `Games` 一旦构造就由 `Match` 持有，`Menu` 不再直接访问；`Menu` 不参与战斗、波次或强化计算，也不直接画任何屏幕（组件的 `render()` 才画）。
+
+### Shop
+
+`Shop` 是全局模块类，组合 2 个 `namespace shop` 组件：
+
+| 组件 | 职责 |
+| --- | --- |
+| `Score` | 全局积分钱包、本局获得/击杀、`spend()` |
+| `Inventory` | 地雷库存、`takeMine()` |
+
+`Shop` 只做组合与持久化：`load()/save()` 读写 `settings.ini` 的 `[score] total` 和 `[inventory] mines`，`buyMine()` 负责扣款 + 入库。界面（`menu::Depot`）只调用这些接口；`Games` 拿到 `Shop&` 后把 `shop.score()` 交给 `Arena`、把 `shop.inventory()` 用于右键扣库存。
 
 ### Arena
 
@@ -279,22 +291,24 @@ public:
 ```text
 GameWindow
 ├─ Pointer ────────────► Base（准星画法）
-└─ Menu（持有 Base、Score、Inventory、关卡表，组合 6 个界面组件）
+└─ Menu（持有 Base、Shop、关卡表，组合 6 个界面组件）
    ├─ menu::Main ─────────► 关卡卡 / 商店与设置入口（数据由 Menu 提供）
-   ├─ menu::Match ────────► Games(Level, Base&, Score&, Inventory&)   ← 一局一个实例
+   ├─ menu::Match ────────► Games(Level, Base&, Shop&)   ← 一局一个实例
    │  └─ Games
    │     ├─ Base ─────► base::Input / Audio / Music / Paint（引用，由 Menu 持有）
    │     ├─ Arena ────► arena::Bullets / Combatants / Entities / Events / State
-   │     ├─ Score ────► 全局钱包 / 本局统计（Menu 持有，Arena 以引用上报）
-   │     ├─ Inventory ─► 地雷库存（Menu 持有，右键布置时扣减）
+   │     ├─ Shop ─────► shop::Score（Arena 以引用上报）+ shop::Inventory（右键扣减）
    │     ├─ games::Waves ─────► Arena, Random
    │     ├─ games::Upgrades ──► Arena, Base, Random
    │     ├─ Renderer ─────────► Games/Arena/Waves/Upgrades(只读), Base, Random
    │     └─ Random
    ├─ menu::Result ───────► 只读 Summary
    ├─ menu::Editor ───────► games::Script（自己持有）
-   ├─ menu::Shop ─────────► Score（扣款）+ Inventory（库存）+ settings.ini
+   ├─ menu::Depot ────────► Shop（buyMine）+ 只读钱包/库存
    └─ menu::Settings ─────► Base 音量接口 + settings.ini
+
+Menu
+└─ Shop ──► shop::Score / Inventory（settings.ini: [score] / [inventory]）
 ```
 
 依赖是单向的：
@@ -317,7 +331,7 @@ GameWindow::tick()
 ├─ Menu::update(dt)
 │  ├─ Main:   菜单动画（menu::Main 自己推进时间）
 │  ├─ Editor: 输入自处理（menu::Editor），Menu 不更新
-│  ├─ Shop:   输入自处理（menu::Shop），Menu 不更新
+│  ├─ Shop:   输入自处理（menu::Depot），Menu 不更新
 │  ├─ Match:  menu::Match → Games::update(dt)
 │  │          ├─ Renderer::update(dt)
 │  │          ├─ Playing: Arena→Waves→Feedback→胜负/波次判断
@@ -329,7 +343,7 @@ GameWindow::tick()
 ├─ Menu::render()
 │  ├─ Main:    menu::Main   绘制菜单
 │  ├─ Editor:  menu::Editor 绘制台本表格
-│  ├─ Shop:    menu::Shop   绘制补给站
+│  ├─ Shop:    menu::Depot  绘制补给站
 │  ├─ Settings: menu::Settings 绘制设置页
 │  ├─ Match:  menu::Match → Games::render() → Renderer
 │  └─ Result: menu::Match 画面 + menu::Result 结算覆盖层

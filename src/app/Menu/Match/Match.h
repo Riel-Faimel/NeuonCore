@@ -7,8 +7,7 @@
 #include <memory>
 
 class Base;
-class Inventory;
-class Score;
+class Shop;
 class SelfTest;
 
 namespace menu {
@@ -17,7 +16,7 @@ namespace menu {
 // 只活一局：Menu 开局时 start()，回主菜单时 stop()。
 class Match {
 public:
-    void start(const Games::Level &level, Base &base, Score &score, Inventory &inventory);
+    void start(const Games::Level &level, Base &base, Shop &shop);
     void stop();
     bool active() const { return games_ != nullptr; }
 

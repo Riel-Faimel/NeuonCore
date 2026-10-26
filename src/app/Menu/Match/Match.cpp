@@ -1,12 +1,12 @@
 #include "Menu/Match/Match.h"
 
-#include "Inventory.h"
+#include "Shop/Shop.h"
 
 namespace menu {
 
-void Match::start(const Games::Level &level, Base &base, Score &score, Inventory &inventory)
+void Match::start(const Games::Level &level, Base &base, Shop &shop)
 {
-    games_ = std::make_unique<Games>(level, base, score, inventory);
+    games_ = std::make_unique<Games>(level, base, shop);
 }
 
 void Match::stop()

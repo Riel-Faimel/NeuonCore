@@ -6,12 +6,11 @@
 #include "Games/Waves/Waves.h"
 #include "Random.h"
 #include "Renderer.h"
-#include "Score.h"
+#include "Shop/Shop.h"
 
 #include <QImage>
 #include <QString>
 
-class Inventory;
 class SelfTest;
 
 // Games 模块：一局游戏的全部内容。
@@ -36,7 +35,7 @@ public:
         Defeat,
     };
 
-    Games(const Level &level, Base &base, Score &score, Inventory &inventory);
+    Games(const Level &level, Base &base, Shop &shop);
     ~Games();
 
     Games(const Games &) = delete;
@@ -47,9 +46,9 @@ public:
 
     State state() const { return state_; }
     float runTime() const { return runTime_; }
-    int score() const { return score_.total(); }
-    int runScore() const { return score_.run(); }
-    int kills() const { return score_.kills(); }
+    int score() const { return shop_.score().total(); }
+    int runScore() const { return shop_.score().run(); }
+    int kills() const { return shop_.score().kills(); }
     int currentWave() const { return waves_.currentWave(); }
     int totalWaves() const { return waves_.totalWaves(); }
     const QImage &frame() const { return renderer_.frame(); }
@@ -77,8 +76,7 @@ private:
     Level level_;
     Random random_;
     Base &base_;
-    Score &score_;
-    Inventory &inventory_;
+    Shop &shop_;
     Arena arena_;
     games::Waves waves_;
     games::Upgrades upgrades_;

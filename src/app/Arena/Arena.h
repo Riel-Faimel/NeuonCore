@@ -11,7 +11,10 @@
 
 class Base;
 class Random;
+
+namespace shop {
 class Score;
+}
 class SelfTest;
 
 namespace games {
@@ -32,7 +35,7 @@ public:
         float shake = 0.0f;
     };
 
-    Arena(Random &random, Base &base, Score &score);
+    Arena(Random &random, Base &base, shop::Score &score);
     ~Arena();
 
     Arena(const Arena &) = delete;
@@ -87,7 +90,7 @@ private:
 
     Random &random_;
     Base &base_;
-    Score &score_;
+    shop::Score &score_;
 
     arena::Bullets bullets_;
     arena::Combatants combatants_;

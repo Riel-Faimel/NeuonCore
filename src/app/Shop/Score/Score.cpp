@@ -1,9 +1,11 @@
-#include "Score.h"
+#include "Shop/Score/Score.h"
 
 #include <QCoreApplication>
 #include <QSettings>
 
 #include <algorithm>
+
+namespace shop {
 
 QString Score::path()
 {
@@ -52,3 +54,5 @@ bool Score::spend(int points)
     total_ -= points;
     return true;
 }
+
+} // namespace shop
