@@ -12,7 +12,6 @@ public:
     float damageShareRatio() const override { return supportValue; }
 
 protected:
-    Math::Vec2 desiredVelocity(const Context &ctx, float dt) override;
     bool showsAura() const override { return true; }
     void drawBody(QPainter &world, QPainter &glow, float facing) const override;
 };

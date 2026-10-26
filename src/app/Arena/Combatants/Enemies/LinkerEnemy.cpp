@@ -25,15 +25,6 @@ LinkerEnemy::LinkerEnemy(const Math::Vec2 &position, int wave)
     supportValue = stats.shareRatio;
 }
 
-Math::Vec2 LinkerEnemy::desiredVelocity(const Context &ctx, float dt)
-{
-    const Math::Vec2 cluster = allyClusterDirection(ctx);
-    if (cluster.lengthSquared() > 1.0f) {
-        return cluster.normalized() * speed;
-    }
-    return DefensiveEnemy::desiredVelocity(ctx, dt);
-}
-
 void LinkerEnemy::drawBody(QPainter &world, QPainter &glow, float facing) const
 {
     const Math::Vec2 forward(std::cos(facing), std::sin(facing));

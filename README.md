@@ -244,11 +244,13 @@ cpp/
 
 台本编辑器底部的敌人库也已包含这 6 种，拖拽或按 `1`–`9`、`0` 加入。
 
-敌人按寻路分成三类：
+敌人按类型形成阵型：
 
-- 近战（drone / tank / splitter / mini / rusher）：直冲玩家、以接触为目标；
-- 远程与召唤（spitter / boss / summoner）：保持中远距离，玩家弹幕逼近时短促侧闪（0.12s，冷却 1.6s）；
-- 增益（amplifier / linker / mender / necromancer）：朝“邻居最多”的友军位置靠拢，让光环覆盖更密集的队形。
+- 进攻型（drone / mini / rusher）与自毁型（splitter）：直冲玩家、以接触为目标；
+- 远程型（spitter / summoner）：保持射程，玩家弹幕逼近时短促侧闪（0.12s，冷却 1.6s）；有防御线时躲到防御者背后；
+- 防御型（tank / linker）：站在远程/辅助后排与玩家之间，不主动贴脸；
+- 辅助型（amplifier / mender / necromancer）：躲在防御者背后，朝“非自毁型”友军最密集的位置靠拢；
+- Boss：独立走位（中距离绕圈 + 定向/环形弹幕）。
 
 敌人实现按 `Enemy` → 进攻 / 远程 / 防御 / 辅助 / 自毁 / Boss 六个虚基类拆分（`Enemies/EnemyTypes.h`），每个 kind 一个 `*Enemy.cpp`。各文件用 `EnemyRegistrar<T>`（CRTP）在静态初始化时登记到 `Enemy.cpp` 的 kind→工厂表，运行时 `Enemy::create()` 查表构造；没有 Kind 枚举，具体类型由 vtable / `dynamic_cast` 判断，`Enemy.cpp` 里不再有按 kind 的 `switch`。
 

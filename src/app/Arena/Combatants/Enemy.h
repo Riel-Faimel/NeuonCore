@@ -129,7 +129,6 @@ protected:
     virtual void drawBody(QPainter &world, QPainter &glow, float facing) const = 0;
     virtual bool showsAura() const { return false; }
 
-    Math::Vec2 allyClusterDirection(const Context &ctx) const;
     Math::Vec2 avoidPlayerBullets(const Context &ctx) const;
 
     Role role_ = Role::Melee;

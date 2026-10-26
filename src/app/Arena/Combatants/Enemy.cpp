@@ -286,37 +286,6 @@ void Enemy::draw(QPainter &world, QPainter &glow, const Context &ctx) const
     }
 }
 
-Math::Vec2 Enemy::allyClusterDirection(const Context &ctx) const
-{
-    const auto &allies = ctx.combatants.enemies();
-    Math::Vec2 best;
-    int bestNeighbors = -1;
-    float bestDistance = 0.0f;
-    for (const auto &owned : allies) {
-        const Enemy *candidate = owned.get();
-        if (candidate == this || !candidate->alive) {
-            continue;
-        }
-        int neighbors = 0;
-        for (const auto &other : allies) {
-            if (other.get() == candidate || !other->alive) {
-                continue;
-            }
-            if (candidate->pos.distanceTo(other->pos) <= 150.0f) {
-                ++neighbors;
-            }
-        }
-        const float distance = pos.distanceTo(candidate->pos);
-        if (neighbors > bestNeighbors
-            || (neighbors == bestNeighbors && distance < bestDistance)) {
-            bestNeighbors = neighbors;
-            bestDistance = distance;
-            best = candidate->pos - pos;
-        }
-    }
-    return best;
-}
-
 Math::Vec2 Enemy::avoidPlayerBullets(const Context &ctx) const
 {
     Math::Vec2 steer;

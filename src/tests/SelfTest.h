@@ -416,6 +416,32 @@ public:
         success &= require(clusterSupport->pos.x < supportStartX - 8.0f,
                            QStringLiteral("support enemies drift toward the ally cluster"));
 
+        // 防御线：防御者站到后排与玩家之间，远程躲到防御者背后，辅助跟后排。
+        game->arena_.enemies().clear();
+        game->arena_.portals().clear();
+        game->arena_.playerBullets().clear();
+        game->arena_.clearEnemy();
+        menu.clearInput();
+        supportCtx.combatants.player().state.invuln = 99.0f;
+        const Math::Vec2 formationPlayer = supportCtx.combatants.player().state.pos;
+        arena::Enemy *frontTank = spawn(QStringLiteral("tank"), {700, 420});
+        arena::Enemy *backSpitter = spawn(QStringLiteral("spitter"), {900, 420});
+        arena::Enemy *backMender = spawn(QStringLiteral("mender"), {900, 520});
+        spawn(QStringLiteral("splitter"), {500, 420});
+        for (int i = 0; i < 60; ++i) {
+            game->arena_.update(1.0f / 60.0f);
+        }
+        success &= require(
+            frontTank->pos.x > formationPlayer.x && frontTank->pos.x < backSpitter->pos.x,
+            QStringLiteral("defensive enemies stand between backline and player"));
+        success &= require(
+            backSpitter->pos.x > frontTank->pos.x + 10.0f
+                && backSpitter->pos.distanceTo(formationPlayer)
+                       > frontTank->pos.distanceTo(formationPlayer),
+            QStringLiteral("ranged enemies hide behind the defensive line"));
+        success &= require(backMender->pos.x > 850.0f,
+                           QStringLiteral("support enemies stay with the backline"));
+
         log(QStringLiteral("Boss and victory"));
         menu.startLevel(0);
         game = menu.match_.game();

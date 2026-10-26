@@ -347,17 +347,20 @@ public:
 
 支援型敌人的光环半径画在 `Enemy::draw()`，被增伤的敌人有一圈琥珀色提示；伤害分担通过 `Damage.shared` 防止递归。
 
-### 寻路角色
+### 寻路与阵型
 
-`Enemy::Role` 字段决定基础走位；类别归属直接用虚基类（`dynamic_cast<SupportEnemy*>` 等）判断：
+类别归属直接用虚基类（`dynamic_cast<DefensiveEnemy*>` 等）判断；`Enemy::Role` 只决定是否需要弹幕闪避：
 
-| Role | 成员 | 走位 |
+| 类型 | 成员 | 走位 |
 | --- | --- | --- |
-| `Melee` | drone / tank / splitter / mini / rusher | 直冲玩家，以接触为目标（rusher 额外周期突进） |
-| `Ranged` | spitter / boss / summoner | 保持 205–340 的距离并绕圈；检测 140 距离内、横向 34 以内的玩家弹幕，触发 0.12s 侧闪，冷却 1.6s |
-| `Support` | amplifier / linker / mender / necromancer | 扫描友军，选 150 半径内邻居最多的目标点靠拢；没有友军时退回中距离走位 |
+| 进攻型 | drone / mini / rusher | 直冲玩家，以接触为目标（rusher 额外周期突进） |
+| 自毁型 | splitter | 直冲玩家，死亡时分裂（后续自毁敌人也在 `SelfDestructEnemy` 下直冲） |
+| 远程型 | spitter / summoner | 在没有防御线时保持射程；有防御者且防御者更靠前时，移动到防御者背后（玩家反方向 42px）；同时保留 0.12s 弹幕侧闪 |
+| 防御型 | tank / linker | 计算远程/辅助友军的质心，站到“质心与玩家之间”（45% 处），不主动贴玩家 |
+| 辅助型 | amplifier / mender / necromancer | 优先躲到最近防御者背后；朝“非自毁型”友军最密集点靠拢（150 半径邻居数），并只考虑防御线后方的友军；贴玩家过近时后退 |
+| Boss | boss | 独立走位：保持 185–265 距离、绕圈、定向弹幕 + 环形弹幕 |
 
-辅助函数都在 `Enemy` 保护区：`avoidPlayerBullets()` 只读 `Bullets::playerBullets()`，`allyClusterDirection()` 只读 `Combatants::enemies()`，不引入新的组件依赖。
+辅助函数：`avoidPlayerBullets()` 只读 `Bullets::playerBullets()`；`nearestDefender()` / `densestAlly()` / `behindDefender()` 在 `EnemyTypes.cpp` 内用 `dynamic_cast` 读 `Combatants::enemies()`，不引入新的组件依赖。
 
 ### 注册与新增敌人
 
