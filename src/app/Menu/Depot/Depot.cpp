@@ -34,10 +34,10 @@ QRectF Depot::backRect() const
     return QRectF(GameConfig::ScreenWidth / 2.0f - 90.0f, 600.0f, 180.0f, 42.0f);
 }
 
-Depot::Action Depot::keyPress(int key, Shop &shop, Base &base)
+Depot::Action Depot::keyPress(int key)
 {
     if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Space) {
-        if (shop.buyMine(base)) {
+        if (ShopService.buyMine()) {
             ++purchases_;
         }
         return Action::None;
@@ -48,21 +48,21 @@ Depot::Action Depot::keyPress(int key, Shop &shop, Base &base)
     return Action::None;
 }
 
-Depot::Action Depot::mousePress(const Math::Vec2 &position, Shop &shop, Base &base)
+Depot::Action Depot::mousePress(const Math::Vec2 &position)
 {
     const QPointF point(position.x, position.y);
     if (backRect().contains(point)) {
         return Action::Back;
     }
     if (buyRect().contains(point)) {
-        if (shop.buyMine(base)) {
+        if (ShopService.buyMine()) {
             ++purchases_;
         }
     }
     return Action::None;
 }
 
-void Depot::render(QPainter &painter, const Shop &shop) const
+void Depot::render(QPainter &painter) const
 {
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
@@ -96,7 +96,7 @@ void Depot::render(QPainter &painter, const Shop &shop) const
                 Base::Amber);
 
     Base::text(painter, Base::techSmallFont(),
-               QStringLiteral("积分  %1").arg(shop.score().total()), Base::Amber,
+               QStringLiteral("积分  %1").arg(ShopService.score().total()), Base::Amber,
                {GameConfig::ScreenWidth - 34.0f, 34.0f}, QStringLiteral("topright"),
                235);
 
@@ -139,11 +139,11 @@ void Depot::render(QPainter &painter, const Shop &shop) const
                      {float(card.right()) - 40.0f, float(card.bottom()) - 92.0f},
                      Base::shade(Base::Amber, 0.35f), 1.0f);
     Base::text(painter, Base::smallFont(),
-               QStringLiteral("持有  ×%1").arg(shop.inventory().mines()), Base::Text,
+               QStringLiteral("持有  ×%1").arg(ShopService.inventory().mines()), Base::Text,
                {float(card.left()) + 40.0f, float(card.bottom()) - 56.0f},
                QStringLiteral("midleft"), 220);
 
-    const bool affordable = shop.score().total() >= data::kMine.price;
+    const bool affordable = ShopService.score().total() >= data::kMine.price;
     Base::panel(painter, buyRect(), affordable ? Base::Amber : QColor(70, 84, 96),
                 affordable ? 230 : 170, 9,
                 affordable ? QColor(10, 24, 34) : QColor(8, 14, 22));

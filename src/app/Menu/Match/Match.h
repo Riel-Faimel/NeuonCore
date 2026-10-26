@@ -6,8 +6,6 @@
 
 #include <memory>
 
-class Base;
-class Shop;
 class SelfTest;
 
 namespace menu {
@@ -16,7 +14,7 @@ namespace menu {
 // 只活一局：Menu 开局时 start()，回主菜单时 stop()。
 class Match {
 public:
-    void start(const Games::Level &level, Base &base, Shop &shop);
+    void start(const Games::Level &level);
     void stop();
     bool active() const { return games_ != nullptr; }
 

@@ -2,7 +2,6 @@
 
 #include "Base/Base.h"
 #include "Games/Games.h"
-#include "Shop/Shop.h"
 
 #include "Menu/Depot/Depot.h"
 #include "Menu/Editor/Editor.h"
@@ -17,9 +16,10 @@
 
 class SelfTest;
 
-// Menu 模块：只组合 6 个界面组件和进程级资源（Base、Shop、关卡表），
+// Menu 模块：只组合 6 个界面组件和进程级资源（Shop、关卡表），
 // 负责屏幕状态机、输入路由和组件之间的数据传递。
 // 和 Arena 一样，组件在 namespace menu 里，Menu 是唯一的模块入口。
+// Base 不再由 Menu 拥有：它是进程级单例 BaseService（见 Base/Base.h）。
 class Menu {
 public:
     enum class Screen {
@@ -49,8 +49,8 @@ public:
     void mouseReleaseLeft();
     void clearInput();
     void toggleMute();
-    bool muted() const { return base_.muted(); }
-    bool audioEnabled() const { return base_.audioEnabled(); }
+    bool muted() const { return BaseService.muted(); }
+    bool audioEnabled() const { return BaseService.audioEnabled(); }
     Screen screen() const { return screen_; }
 
 private:
@@ -67,8 +67,6 @@ private:
     void returnToMenu();
     void openEditor();
 
-    Base base_;
-    Shop shop_;
     std::vector<Games::Level> levels_;
 
     menu::Main main_;

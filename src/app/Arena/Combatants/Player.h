@@ -2,11 +2,11 @@
 
 #include "Fighter.h"
 
-class Arena;
-
 namespace arena {
 
-// 玩家战斗者的可变状态。Arena 只通过 const 视图暴露给其他模块。
+struct Context;
+
+// 玩家战斗者的可变状态。Arena 对外只暴露 playerState()（Upgrades 需要写权限）。
 struct PlayerState {
     Math::Vec2 pos;
     Math::Vec2 vel;
@@ -42,11 +42,11 @@ public:
     void reset();
     void beginWave();
 
-    void update(Arena &arena, float dt) override;
-    void shoot(Arena &arena) override;
-    void takeDamage(Arena &arena, const Damage &damage) override;
-    void die(Arena &arena) override;
-    void draw(QPainter &world, QPainter &glow, const Arena &arena) const override;
+    void update(const Context &ctx, float dt) override;
+    void shoot(const Context &ctx) override;
+    void takeDamage(const Context &ctx, const Damage &damage) override;
+    void die(const Context &ctx) override;
+    void draw(QPainter &world, QPainter &glow, const Context &ctx) const override;
 
     bool isAlive() const override { return state.alive; }
     const Math::Vec2 &position() const override { return state.pos; }

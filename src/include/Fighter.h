@@ -4,9 +4,10 @@
 
 #include <QPainter>
 
-class Arena;
-
 namespace arena {
+
+// 组件之间共享的运行上下文（定义在 Arena/Context.h）。
+struct Context;
 
 enum class DamageSource {
     Bullet,
@@ -26,11 +27,11 @@ class Fighter {
 public:
     virtual ~Fighter() = default;
 
-    virtual void update(Arena &arena, float dt) = 0;
-    virtual void shoot(Arena &arena) = 0;
-    virtual void takeDamage(Arena &arena, const Damage &damage) = 0;
-    virtual void die(Arena &arena) = 0;
-    virtual void draw(QPainter &world, QPainter &glow, const Arena &arena) const = 0;
+    virtual void update(const Context &ctx, float dt) = 0;
+    virtual void shoot(const Context &ctx) = 0;
+    virtual void takeDamage(const Context &ctx, const Damage &damage) = 0;
+    virtual void die(const Context &ctx) = 0;
+    virtual void draw(QPainter &world, QPainter &glow, const Context &ctx) const = 0;
 
     virtual bool isAlive() const = 0;
     virtual const Math::Vec2 &position() const = 0;

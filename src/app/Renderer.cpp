@@ -17,7 +17,7 @@
 #include <array>
 #include <cmath>
 
-Renderer::Renderer(Random &random, Base &base) : random_(random), base_(base) {}
+Renderer::Renderer() = default;
 
 void Renderer::initialize()
 {
@@ -39,15 +39,15 @@ void Renderer::initialize()
     stars_.reserve(130);
     for (int i = 0; i < 130; ++i) {
         Star star;
-        const float depth = random_.real(0.0f, 1.0f);
-        star.pos = {random_.real(10.0f, GameConfig::ScreenWidth - 10.0f),
-                    random_.real(10.0f, GameConfig::ScreenHeight - 10.0f)};
+        const float depth = RandomService.real(0.0f, 1.0f);
+        star.pos = {RandomService.real(10.0f, GameConfig::ScreenWidth - 10.0f),
+                    RandomService.real(10.0f, GameConfig::ScreenHeight - 10.0f)};
         star.speed = 2.0f + depth * 9.0f;
-        star.phase = random_.real(0.0f, Math::Tau);
+        star.phase = RandomService.real(0.0f, Math::Tau);
         star.radius = depth < 0.72f ? 1 : 2;
         const std::array<QColor, 3> tints = {
             QColor(110, 170, 210), QColor(160, 130, 210), QColor(110, 210, 200)};
-        star.tint = tints[size_t(random_.integer(0, 2))];
+        star.tint = tints[size_t(RandomService.integer(0, 2))];
         stars_.push_back(star);
     }
 }
@@ -79,14 +79,14 @@ void Renderer::burstConfetti()
     const std::array<QColor, 4> colors = {
         Base::Cyan, Base::CyanSoft, Base::Green, Base::White};
     for (int i = 0; i < 80; ++i) {
-        const float angle = random_.real(0.0f, Math::Tau);
-        const float speed = random_.real(40.0f, 230.0f);
+        const float angle = RandomService.real(0.0f, Math::Tau);
+        const float speed = RandomService.real(40.0f, 230.0f);
         sparks_.push_back(Spark{
-            {GameConfig::ScreenWidth / 2.0f + random_.real(-160.0f, 160.0f),
-             GameConfig::ScreenHeight / 2.0f + random_.real(-110.0f, 110.0f)},
+            {GameConfig::ScreenWidth / 2.0f + RandomService.real(-160.0f, 160.0f),
+             GameConfig::ScreenHeight / 2.0f + RandomService.real(-110.0f, 110.0f)},
             Math::Vec2(std::cos(angle), std::sin(angle)) * speed,
-            random_.real(0.8f, 2.0f), 2.0f, random_.real(1.0f, 3.5f), 1.0f, 25.0f,
-            colors[size_t(random_.integer(0, 3))]});
+            RandomService.real(0.8f, 2.0f), 2.0f, RandomService.real(1.0f, 3.5f), 1.0f, 25.0f,
+            colors[size_t(RandomService.integer(0, 3))]});
     }
 }
 
@@ -116,7 +116,7 @@ void Renderer::updateStars(float dt)
         star.pos.x += star.speed * 0.16f * dt;
         if (star.pos.y > GameConfig::ScreenHeight + 4.0f) {
             star.pos.y = -4.0f;
-            star.pos.x = random_.real(0.0f, GameConfig::ScreenWidth);
+            star.pos.x = RandomService.real(0.0f, GameConfig::ScreenWidth);
         }
         if (star.pos.x > GameConfig::ScreenWidth + 4.0f) {
             star.pos.x = -4.0f;
@@ -260,8 +260,8 @@ void Renderer::render(const Games &game, const Arena &arena, const games::Waves 
     int offsetX = 0;
     int offsetY = 0;
     if (shake_ > 0.25f) {
-        offsetX = int(std::lround(random_.real(-shake_, shake_)));
-        offsetY = int(std::lround(random_.real(-shake_, shake_)));
+        offsetX = int(std::lround(RandomService.real(-shake_, shake_)));
+        offsetY = int(std::lround(RandomService.real(-shake_, shake_)));
     }
     painter.drawImage(QPoint(offsetX, offsetY), world_);
     painter.setCompositionMode(QPainter::CompositionMode_Plus);
@@ -298,7 +298,7 @@ void Renderer::render(const Games &game, const Arena &arena, const games::Waves 
 
 void Renderer::drawHUD(QPainter &painter, const Arena &arena, const games::Waves &waves)
 {
-    const Arena::PlayerState &player = arena.player();
+    const Arena::PlayerState &player = arena.playerState();
     painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, 100), QColor(3, 8, 17, 208));
     Base::strokeLine(painter, {0, 99}, {GameConfig::ScreenWidth, 99},
                       QColor(23, 50, 66), 1.0f);
@@ -435,7 +435,7 @@ void Renderer::drawPlayHints(QPainter &painter)
                 QStringLiteral("WASD 移动    LMB / J 射击    SPACE 冲刺"),
                 QColor(113, 146, 168),
                 {32, GameConfig::ScreenHeight - 26.0f}, QStringLiteral("midleft"), alpha);
-    const QString right = base_.muted() ? QStringLiteral("M 已静音    ESC 暂停")
+    const QString right = BaseService.muted() ? QStringLiteral("M 已静音    ESC 暂停")
                                         : QStringLiteral("M 静音    ESC 暂停");
     Base::text(painter, Base::tinyFont(), right, QColor(113, 146, 168),
                 {GameConfig::ScreenWidth - 32.0f, GameConfig::ScreenHeight - 26.0f},
@@ -479,7 +479,7 @@ void Renderer::drawUpgradeOverlay(QPainter &painter, const games::Upgrades &upgr
                 Base::Muted,
                 {GameConfig::ScreenWidth / 2.0f, 184}, QStringLiteral("center"), 225);
 
-    const Math::Vec2 mouse = base_.mousePosition();
+    const Math::Vec2 mouse = BaseService.mousePosition();
     for (int i = 0; i < 3 && i < int(upgrades.offers().size()); ++i) {
         const QRectF rect = cardRect(i);
         const bool hovered = rect.contains(QPointF(mouse.x, mouse.y));

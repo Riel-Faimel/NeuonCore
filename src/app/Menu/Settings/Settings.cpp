@@ -45,7 +45,7 @@ QString Settings::path()
     return QCoreApplication::applicationDirPath() + QStringLiteral("/settings.ini");
 }
 
-void Settings::load(Base &base)
+void Settings::load()
 {
     if (!persistent_) {
         return;
@@ -53,34 +53,34 @@ void Settings::load(Base &base)
     QSettings settings(path(), QSettings::IniFormat);
     const int sound = settings.value(QStringLiteral("audio/sound"), 68).toInt();
     const int music = settings.value(QStringLiteral("audio/music"), 45).toInt();
-    base.setSoundVolume(float(std::clamp(sound, 0, 100)) / 100.0f);
-    base.setMusicVolume(float(std::clamp(music, 0, 100)) / 100.0f);
+    BaseService.setSoundVolume(float(std::clamp(sound, 0, 100)) / 100.0f);
+    BaseService.setMusicVolume(float(std::clamp(music, 0, 100)) / 100.0f);
 }
 
-void Settings::save(const Base &base) const
+void Settings::save() const
 {
     if (!persistent_) {
         return;
     }
     QSettings settings(path(), QSettings::IniFormat);
     settings.setValue(QStringLiteral("audio/sound"),
-                      int(std::lround(base.soundVolume() * 100.0f)));
+                      int(std::lround(BaseService.soundVolume() * 100.0f)));
     settings.setValue(QStringLiteral("audio/music"),
-                      int(std::lround(base.musicVolume() * 100.0f)));
+                      int(std::lround(BaseService.musicVolume() * 100.0f)));
 }
 
-void Settings::adjust(int row, float delta, Base &base)
+void Settings::adjust(int row, float delta)
 {
     if (row == 0) {
-        base.setSoundVolume(std::clamp(base.soundVolume() + delta, 0.0f, 1.0f));
-        base.playSound(QStringLiteral("ui"));
+        BaseService.setSoundVolume(std::clamp(BaseService.soundVolume() + delta, 0.0f, 1.0f));
+        BaseService.playSound(QStringLiteral("ui"));
     } else {
-        base.setMusicVolume(std::clamp(base.musicVolume() + delta, 0.0f, 1.0f));
+        BaseService.setMusicVolume(std::clamp(BaseService.musicVolume() + delta, 0.0f, 1.0f));
     }
-    save(base);
+    save();
 }
 
-void Settings::setFromPointer(const Math::Vec2 &position, Base &base)
+void Settings::setFromPointer(const Math::Vec2 &position)
 {
     const QRectF track = trackRect(row_);
     if (track.width() <= 0.0f) {
@@ -89,23 +89,23 @@ void Settings::setFromPointer(const Math::Vec2 &position, Base &base)
     const float ratio = std::clamp(
         (position.x - float(track.left())) / float(track.width()), 0.0f, 1.0f);
     if (row_ == 0) {
-        base.setSoundVolume(ratio);
+        BaseService.setSoundVolume(ratio);
     } else {
-        base.setMusicVolume(ratio);
+        BaseService.setMusicVolume(ratio);
     }
-    save(base);
+    save();
 }
 
-Settings::Action Settings::keyPress(int key, Base &base)
+Settings::Action Settings::keyPress(int key)
 {
     if (key == Qt::Key_Up || key == Qt::Key_W) {
         row_ = std::max(0, row_ - 1);
     } else if (key == Qt::Key_Down || key == Qt::Key_S) {
         row_ = std::min(1, row_ + 1);
     } else if (key == Qt::Key_Left || key == Qt::Key_A) {
-        adjust(row_, -0.05f, base);
+        adjust(row_, -0.05f);
     } else if (key == Qt::Key_Right || key == Qt::Key_D) {
-        adjust(row_, 0.05f, base);
+        adjust(row_, 0.05f);
     } else if (key == Qt::Key_Escape || key == Qt::Key_Q
                || key == Qt::Key_Return || key == Qt::Key_Enter) {
         return Action::Back;
@@ -113,7 +113,7 @@ Settings::Action Settings::keyPress(int key, Base &base)
     return Action::None;
 }
 
-Settings::Action Settings::mousePress(const Math::Vec2 &position, Base &base)
+Settings::Action Settings::mousePress(const Math::Vec2 &position)
 {
     const QPointF point(position.x, position.y);
     if (backRect().contains(point)) {
@@ -125,10 +125,10 @@ Settings::Action Settings::mousePress(const Math::Vec2 &position, Base &base)
         }
         row_ = row;
         if (trackRect(row).adjusted(-8.0f, -14.0f, 8.0f, 14.0f).contains(point)) {
-            setFromPointer(position, base);
+            setFromPointer(position);
             dragging_ = true;
             if (row == 0) {
-                base.playSound(QStringLiteral("ui"));
+                BaseService.playSound(QStringLiteral("ui"));
             }
         }
         return Action::None;
@@ -136,10 +136,10 @@ Settings::Action Settings::mousePress(const Math::Vec2 &position, Base &base)
     return Action::None;
 }
 
-void Settings::mouseMove(const Math::Vec2 &position, Base &base)
+void Settings::mouseMove(const Math::Vec2 &position)
 {
     if (dragging_) {
-        setFromPointer(position, base);
+        setFromPointer(position);
     }
 }
 
@@ -148,7 +148,7 @@ void Settings::mouseRelease()
     dragging_ = false;
 }
 
-void Settings::render(QPainter &painter, const Base &base) const
+void Settings::render(QPainter &painter) const
 {
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
@@ -204,7 +204,7 @@ void Settings::render(QPainter &painter, const Base &base) const
                    {float(rect.left()) + 28.0f, float(rect.center().y()) + 16.0f},
                    QStringLiteral("midleft"), 190);
 
-        const float value = row == 0 ? base.soundVolume() : base.musicVolume();
+        const float value = row == 0 ? BaseService.soundVolume() : BaseService.musicVolume();
         const QRectF track = trackRect(row);
         Base::bar(painter, track, value, active ? Base::Cyan : Base::CyanSoft,
                   -1.0f, QColor(16, 30, 44));

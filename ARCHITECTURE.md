@@ -10,16 +10,17 @@
    - 敌人 AI、碰撞、Boss 阶段、分数由 `Arena` 及其组件决定。
    - 画面布局和局内表现反馈由 `Renderer` 决定。
    - 主菜单、关卡选择和对局结算由 `Menu` 决定。
-   - 输入、音频、字体和绘制原语由 `Base` 及其组件提供。
+   - 输入、音频、字体和绘制原语由 `Base` 及其组件提供；`Base` 是进程级单例 `BaseService`，任何模块直接使用，不通过构造参数传递。
    - `Games` 只负责一局游戏的局内状态机、组件组合和调用顺序。
 
 2. **模块是全局类，组件是 namespace 中的类**
    - 除 `main` / `WinMain` 外，没有自由函数。
    - 全局模块类：`GameConfig / Math / Random / Base / Arena / Games / Shop / Menu / Renderer / Pointer / GameWindow / SelfTest`。
-   - `Base` 的组件在 `namespace base`：`Input / Audio / Paint`。
+   - 进程级单例服务（`extern` 全局对象，不挂在任何模块上）：`BaseService`（输入/音频/字体）、`RandomService`（随机引擎）、`ShopService`（钱包/库存）。业务模块直接引用它们，不通过构造参数传递。
+   - `Base` 的组件在 `namespace base`：`Input / Audio / Music / Paint`。
    - `Games` 的组件在 `namespace games`：`Waves / Upgrades`。
-   - `Arena` 的组件在 `namespace arena`：`Combatants / Entities / Events / State`。
-   - 组件由模块组合；外部模块只依赖模块的公共接口。
+   - `Arena` 的组件在 `namespace arena`：`Bullets / Combatants / Entities / Events / State`；它们是 `Arena` 的**私有基类**，不是成员，也不对外暴露。
+   - 组件由模块组合（`Arena` 用私有继承 + `arena::Context` 注入，其余用成员）；外部模块只依赖模块的公共接口。
 
 3. **每个模块回答三个问题**
    - 它从哪里获得工具？
@@ -38,7 +39,9 @@ cpp/src/
 │  │  ├─ Audio/Music.h/.cpp
 │  │  └─ Paint/Paint.h/.cpp
 │  ├─ Arena/
-│  │  ├─ Arena.h / Arena.cpp
+│  │  ├─ Arena.h / Arena.cpp      私有继承组件 + 编排
+│  │  ├─ Context.h                组件之间共享的引用（Arena 注入，模块内部）
+│  │  ├─ Host.h                   组件 → 模块的虚函数回调接口
 │  │  ├─ Events.h / Events.cpp
 │  │  ├─ State.h / State.cpp
 │  │  ├─ Bullets/
@@ -100,7 +103,7 @@ cpp/src/
 
 ### Base
 
-`Base` 是全局模块类，组合 3 个 `namespace base` 组件：
+`Base` 是全局模块类，组合 4 个 `namespace base` 组件（`Input / Audio / Music` 由 `Impl` 持有，`Paint` 是全静态）：
 
 | 组件 | 职责 |
 | --- | --- |
@@ -109,7 +112,9 @@ cpp/src/
 | `Music` | 背景音乐管理：固定目录轮转、设备等待、静音；播放器常驻，不随界面重建 |
 | `Paint` | 颜色、字体、文字排版、发光、条形/面板等绘制原语，鼠标准星、齿轮与应用图标 |
 
-`Base::Impl` 持有 `base::Input` 和 `base::Audio`；静态绘制/颜色/字体/准星接口转发给 `base::Paint`。`Base.h` 不暴露组件头。
+`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），所有模块直接调用 `BaseService.playSound(...)` / `BaseService.movementAxis()`，不再通过构造函数把 `Base&` 一层层传下去。`Base::Impl` 持有 `base::Input`、`base::Audio`、`base::Music`；静态绘制/颜色/字体/准星接口转发给 `base::Paint`。`Base.h` 不暴露组件头。
+
+单例的构造只分配组件对象（不创建 `QSoundEffect` / `QMediaPlayer`，也不要求 `QApplication` 已存在）；字体在 `main()` 里 `QApplication` 之后用 `Base::initialize()` 初始化；音频仍由 `BaseService.initAudio()` 按需初始化，`main()` 在退出前调用 `BaseService.shutdown()`，保证 Qt 音频对象在 `QApplication` 还活着时释放。
 
 音频是进程级服务，拆成两个组件：`Audio` 在 `%TEMP%\neon_core_cpp_audio\<pid>` 下生成自己的 WAV（同时开两个实例不会互相覆盖），启动时设备还没就绪的话会在 `play()` 里节流重试初始化；`Music` 是独立的背景音乐管理器，只初始化一次、由主线程的定时器推进曲目，任何音频重试、界面切换、开局/结算都不会重建播放器。`QMediaPlayer` 自带解码线程，`Music` 只负责在主线程上做状态管理。
 
@@ -124,22 +129,22 @@ cpp/src/
 | `Waves` | 按运行时提交的台本生成出生队列、Boss 波判定、出生间隔 |
 | `Upgrades` | 强化定义、可选性、三选一、叠加、效果应用 |
 
-`Games` 还拥有 `Random`、`Arena`、`Renderer`、`Score`（`Base` 由 `Menu` 持有，以引用传入），负责：
+`Games` 还拥有 `Arena`、`Renderer`，构造时只接收 `Level`（台本在里面）。`BaseService` / `RandomService` / `ShopService` 都是全局单例，不在构造参数里，负责：
 
 - 一局内的 `Playing / Upgrade / Paused / Victory / Defeat` 状态；
-- 将输入转发给 `Base` / `Arena`；
+- 将输入转发给 `BaseService` / `Arena`；
 - 推进 `Arena` 和 `games::Waves`；
 - 波次清空后打开 `games::Upgrades`；
 - 把 `Arena::Feedback` 转发给 `Renderer`；
 - 把胜负结果交给 `Menu`，自己不再画标题或结算。
 
-积分由全局模块 `Score`（`src/app/Score.h/.cpp`）统一持有：`Menu` 进程级持有它，`Games` 构造时拿到引用并调用 `beginRun()`（只重置本局统计），`Arena` / `arena::Events::handleKill()` 击杀时调用 `addKill(enemy.score)`。全局余额跨局累计并写入 exe 同级的 `settings.ini`（`[score] total`），HUD 显示钱包，结算显示本局获得（`Games::runScore()`）；`Score::spend()` 已预留给商店系统。
+积分由全局 `ShopService.score()`（`shop::Score`，`src/app/Shop/Score/`）统一持有：`Games` 构造时调用 `beginRun()`（只重置本局统计），`arena::Events::handleKill()` 击杀时调用 `addKill(enemy.score)`。全局余额跨局累计并写入 exe 同级的 `settings.ini`（`[score] total`），HUD 显示钱包，结算显示本局获得（`Games::runScore()`）；`Score::spend()` 供商店使用。
 
 一局的结束条件只由台本决定：清空最后一波即胜利。`Boss` 只是一个带阶段的强敌，击杀它不会结束对局，只触发表现反馈（目标摧毁横幅、震屏、音效），所以它可以被放在任意一波。
 
 ### Menu
 
-`Menu` 是顶层界面模块入口，结构和 `Arena` 一样：自己只持有进程级的 `Base`、`Shop`、关卡表、当前屏幕和输入路由，把六个界面拆成 `namespace menu` 组件：
+`Menu` 是顶层界面模块入口，结构和 `Arena` 一样：自己只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop` 都是全局单例，不在 `Menu` 里），把六个界面拆成 `namespace menu` 组件：
 
 | 组件 | 职责 |
 | --- | --- |
@@ -157,24 +162,24 @@ cpp/src/
 - 开局时把 `Games::Level`（展示信息 + 台本 + 起始波）交给 `Match`；回主菜单时让 `Match` 销毁这一局；
 - 给 `Result` 组装 `Summary`（胜负、得分、击杀、波次、时间）；
 - 管理关卡表 `levels_`：标准协议与自定义协议的展示信息，自定义协议部署时用 `Editor::script()` 覆盖台本、固定从第 1 波开始；
-- 启动时初始化 `Base`（音频/输入/字体）、加载 `Shop`（钱包与库存），并按 `settings.ini` 恢复音量。
+- 启动时按需初始化音频（`BaseService.initAudio()`），并按 `settings.ini` 恢复音量（`Shop` 的加载/保存在 `main()`）；
 
 `Games` 一旦构造就由 `Match` 持有，`Menu` 不再直接访问；`Menu` 不参与战斗、波次或强化计算，也不直接画任何屏幕（组件的 `render()` 才画）。
 
 ### Shop
 
-`Shop` 是全局模块类，组合 2 个 `namespace shop` 组件：
+`Shop` 是进程级单例 `ShopService`（`extern Shop ShopService;`，定义在 `Shop.cpp`），组合 2 个 `namespace shop` 组件：
 
 | 组件 | 职责 |
 | --- | --- |
 | `Score` | 全局积分钱包、本局获得/击杀、`spend()` |
 | `Inventory` | 地雷库存、`takeMine()` |
 
-`Shop` 只做组合与持久化：`load()/save()` 读写 `settings.ini` 的 `[score] total` 和 `[inventory] mines`，`buyMine()` 负责扣款 + 入库。界面（`menu::Depot`）只调用这些接口；`Games` 拿到 `Shop&` 后把 `shop.score()` 交给 `Arena`、把 `shop.inventory()` 用于右键扣库存。
+`Shop` 只做组合与持久化：`load()/save()` 读写 `settings.ini` 的 `[score] total` 和 `[inventory] mines`，`buyMine()` 负责扣款 + 入库。持久化生命周期由 `main()` 管：启动时 `ShopService.load()`，退出前 `ShopService.save()`；`Menu` / `Games` / `Arena` / `menu::Depot` 都直接使用 `ShopService`，不再由某个模块持有并向下传递引用。
 
 ### Arena
 
-`Arena` 是全局模块类，组合 5 个 `namespace arena` 组件：
+`Arena` 是全局模块类，以**私有继承**拥有 5 个 `namespace arena` 组件（组件是它的实现细节，不是公共 API）：
 
 | 组件 | 职责 |
 | --- | --- |
@@ -184,7 +189,15 @@ cpp/src/
 | `Events` | 碰撞、接触伤害、敌人分离、击杀 |
 | `State` | Boss 阶段、Boss 击败、玩家失败 |
 
-`Arena` 只编排顺序并汇总 `Feedback`。
+**封装**：私有继承让外部看不到任何组件接口（`arena.enemies()`、`arena.submit()`、`arena.player()` 都不可见），`Arena` 只暴露自己声明的模块接口（`beginWave / update / draw / placeMine / playerState / bossInfo / score / kills / clear* / celebrate* / takeFeedback` 等）。
+
+**组件之间**不再用 `friend`，也不通过 `Arena&`：`Arena` 调用组件时构造 `arena::Context`（`Host&` + 5 个组件引用），把兄弟组件的引用显式注入进去；组件只依赖 `Context`，头文件里连 `Arena` 的前置声明都不需要。`Context` 是模块内部的类型，外部拿不到。
+
+**组件 → 模块的反馈**走 `arena::Host` 的虚函数：`Arena` 实现 `addFeedback()`，组件通过 `ctx.host` 回调，既不持有回指指针也不用 `std::function`。
+
+测试（`-DDEBUG` 的 `SelfTest`）是 `Arena` 的 friend，可以直接摆弄内部组件；这是唯一保留的 friend。
+
+`Arena` 自己只负责编排调用顺序、把 `Feedback` 汇总成一个快照，并提供少量跨组件的门面（`beginWave / update / draw / spawnPortal / placeMine / clearForVictory / celebrate*`）。
 
 地雷是 `Entities` 里的实体：局内右键 → `Games::mousePressRight()` 扣 `Inventory` → `Arena::placeMine()`（位置夹到战场内）；`Events::resolveMines()` 在敌人进入感应半径后引爆，对爆炸半径内的敌人结算 `DamageSource::Shock`，并播放爆炸音效/冲击波。
 
@@ -208,14 +221,14 @@ public:
 };
 ```
 
-- 发射方只做 `arena.bullets_.submit(std::make_unique<StandardBullet>(...))`，不自持子弹；
+- 发射方只做 `arena.submit(std::make_unique<StandardBullet>(...))`（`Arena` 继承了 `arena::Bullets`；组件接口不对外，见下面的封装说明），不自持子弹；
 - `arena::Bullets` 按 `standpoint()` 分流到玩家/敌方两组，用 `reserve` + 交换删除（swap-pop）回收，稳态不搬移整段数组；
 - 碰撞仍由 `arena::Events` 做几何判定（`segmentCircle(bullet.prev(), bullet.position(), target, targetR + bullet.radius)`），命中后调 `bullet.hit(...)`，伤害、暴击、穿透全部由弹种自己结算；
 - 新弹种 = 在 `Arena/Bullets/` 加一个 `Bullet` 实现，提交即可，`Events`/`Renderer` 不用改。
 
 ### Renderer
 
-只读 `Games` / `Arena` / `games::Waves` / `games::Upgrades` / `Base` / `Random`，负责：
+只读 `Games` / `Arena` / `games::Waves` / `games::Upgrades`，随机抖动取自全局 `RandomService`，负责：
 
 - 局内背景、星空、发光合成；
 - 局内 HUD、Boss 血条、波次横幅；
@@ -228,7 +241,7 @@ public:
 ### lib / include / tests
 
 - `src/lib/Math.h/.cpp`：向量、clamp、ease、线段圆碰撞。
-- `src/lib/Random.h/.cpp`：可注入随机引擎。
+- `src/lib/Random.h/.cpp`：可注入随机引擎，并提供全局单例 `RandomService`。
 - `src/include/Fighter.h`：Player / Enemy 的共同虚接口。
 - `src/include/Bullet.h`：子弹的全局纯虚接口（`advance / draw / hit / alive / prev / position / radius / standpoint`）。
 - `src/tests/SelfTest.h`：只在 `-DDEBUG` 构建中由 `main.cpp` 包含。
@@ -289,32 +302,32 @@ public:
 ## 依赖方向
 
 ```text
+main() ──► Base::initialize()（字体） + ShopService.load()
 GameWindow
-├─ Pointer ────────────► Base（准星画法）
-└─ Menu（持有 Base、Shop、关卡表，组合 6 个界面组件）
+├─ Pointer ────────────► Base（准星画法，静态）
+├─ BaseService ────────► base::Input / Audio / Music / Paint（全局单例）
+├─ RandomService ──────► 随机引擎（全局单例）
+├─ ShopService ────────► shop::Score / Inventory（全局单例，settings.ini）
+└─ Menu（持有商店外的关卡表，组合 6 个界面组件）
    ├─ menu::Main ─────────► 关卡卡 / 商店与设置入口（数据由 Menu 提供）
-   ├─ menu::Match ────────► Games(Level, Base&, Shop&)   ← 一局一个实例
+   ├─ menu::Match ────────► Games(Level)   ← 一局一个实例
    │  └─ Games
-   │     ├─ Base ─────► base::Input / Audio / Music / Paint（引用，由 Menu 持有）
-   │     ├─ Arena ────► arena::Bullets / Combatants / Entities / Events / State
-   │     ├─ Shop ─────► shop::Score（Arena 以引用上报）+ shop::Inventory（右键扣减）
-   │     ├─ games::Waves ─────► Arena, Random
-   │     ├─ games::Upgrades ──► Arena, Base, Random
-   │     ├─ Renderer ─────────► Games/Arena/Waves/Upgrades(只读), Base, Random
-   │     └─ Random
+   │     ├─ Arena ────► 继承 arena::Bullets / Combatants / Entities / Events / State
+   │     │              （组件回调模块反馈走 arena::Host 虚接口）
+   │     ├─ games::Waves ─────► Arena, RandomService
+   │     ├─ games::Upgrades ──► Arena, RandomService（音效走 BaseService）
+   │     └─ Renderer ─────────► Games/Arena/Waves/Upgrades(只读), RandomService
    ├─ menu::Result ───────► 只读 Summary
    ├─ menu::Editor ───────► games::Script（自己持有）
-   ├─ menu::Depot ────────► Shop（buyMine）+ 只读钱包/库存
-   └─ menu::Settings ─────► Base 音量接口 + settings.ini
-
-Menu
-└─ Shop ──► shop::Score / Inventory（settings.ini: [score] / [inventory]）
+   ├─ menu::Depot ────────► ShopService（buyMine）+ 只读钱包/库存
+   └─ menu::Settings ─────► BaseService 音量接口 + settings.ini
 ```
 
 依赖是单向的：
 
 - `GameWindow` 持有 `Menu` 和 `Pointer`，负责把两者的结果合成到窗口上。
-- `Pointer` 只依赖 `Base` 的准星画法，不知道游戏业务。
+- `BaseService` / `RandomService` / `ShopService` 是叶子服务：只被调用，不反向依赖任何业务模块；需要它们的模块直接引用全局符号。
+- `Pointer` 只依赖 `Base` 的准星画法（静态接口），不知道游戏业务。
 - `Menu` 只做状态机、输入路由和关卡表；界面在 `menu::*` 组件里，`Games` 由 `menu::Match` 持有。
 - `Games` 只负责一局内的逻辑，不知道 `Menu`；一局的安排由构造参数进入，之后不再外泄。
 - `Games` 只通过 `Arena` 公共接口访问战斗世界。
@@ -426,7 +439,7 @@ GameWindow::paintEvent()
 
 1. 在 `src/include/Bullet.h` 之外、`src/app/Arena/Bullets/` 里新建实现（参考 `StandardBullet`）；
 2. 实现 `advance`（推进/寿命/出屏）、`draw`（样式）、`hit`（命中结算并返回是否继续存活）；
-3. 发射处调用 `arena.bullets_.submit(std::make_unique<YourBullet>(...))`，池会按 `standpoint()` 分流；
+3. 发射处调用 `arena.submit(std::make_unique<YourBullet>(...))`，池会按 `standpoint()` 分流；
 4. `Events` 的几何判定、`Arena` 的批量清理和绘制都不需要改。
 
 ### 加 IO / 音频 / 绘制原语
@@ -457,9 +470,10 @@ GameWindow::paintEvent()
 - 台本是运行时提交的 `games::Script` 数据，但默认战役仍在 `Menu` 里用 C++ 写（还没有外部 JSON/文件格式）。
 - 自定义台本编辑器只改内存里的 `customScript_`，没有存档；重启回到默认战役台本。
 - 敌人/强化/音效仍用字符串 ID。
-- 一局一个 `Games`：`Base`（输入/音频/字体）是进程级服务，由 `Menu` 持有，否则切局会重复初始化音频。
+- 一局一个 `Games`：`Base`（输入/音频/字体）、`Random`、`Shop` 都是进程级单例，否则切局会重复初始化音频/随机源/钱包。
 - 一局的安排只经构造参数进入 `Games`；`Games` 不提供任何读回安排的接口，`Menu` 只保留展示用的关卡表。
-- `Arena` 对 `games::Upgrades` 开放玩家状态编辑权限；这是必要的模块间 friend。
-- 组件之间的 private 访问通过 friend 完成；它们属于同一个模块。
-- 没有 ECS。当前 4 个 Arena 组件 + 2 个 Games 组件的粒度更适合这个规模。
+- `Arena` 的玩家状态对 `games::Upgrades` 开放写权限（`Arena::playerState()`），不再需要模块间 friend。
+- `Arena` 的 5 个组件是它的私有基类：外部只看到 `Arena` 的公共接口；组件之间通过 `arena::Context` 注入的兄弟引用协作，组件 → 模块的反馈走 `arena::Host` 虚函数。
+- `Arena` 只保留 `friend class SelfTest`（`-DDEBUG` 测试用来直接摆局面），没有业务 friend。
+- 没有 ECS。当前 5 个 Arena 组件 + 2 个 Games 组件的粒度更适合这个规模。
 - `Menu` 只做界面/关卡创建，不读取 `Arena` 内部实体；它通过 `Games` 的 getter 获取对局信息。

@@ -5,7 +5,6 @@
 #include <vector>
 
 class Arena;
-class Random;
 class SelfTest;
 
 namespace games {
@@ -29,7 +28,7 @@ using Script = std::vector<Wave>;
 // 暴露：开始/推进波次、当前波、总波数、剩余威胁、是否清空。
 class Waves {
 public:
-    Waves(Random &random, Arena &arena, const Script &script);
+    Waves(Arena &arena, const Script &script);
 
     void start(int wave);
     void update(float dt);
@@ -48,7 +47,6 @@ private:
     std::vector<QString> buildQueue(int wave) const;
     bool waveHasBoss(int wave) const;
 
-    Random &random_;
     Arena &arena_;
     const Script &script_;
     std::vector<QString> queue_;

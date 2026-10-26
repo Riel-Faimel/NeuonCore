@@ -24,3 +24,7 @@ private:
     std::mt19937 engine_;
     unsigned int seed_ = 0;
 };
+
+// 进程内唯一的随机引擎：开局、掉落、强化、画面抖动都从它取数。
+// 定义在 Random.cpp；需要随机数的模块直接使用 RandomService。
+extern Random RandomService;

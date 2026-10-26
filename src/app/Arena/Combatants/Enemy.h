@@ -5,10 +5,9 @@
 #include <QColor>
 #include <QString>
 
-class Arena;
-class Random;
-
 namespace arena {
+
+struct Context;
 
 struct EnemyStats {
     float hp = 10.0f;
@@ -45,14 +44,13 @@ public:
     float spawnAnim = 0.28f;
     bool boss = false;
 
-    Enemy(const QString &enemyKind, const Math::Vec2 &position, int waveNumber,
-          Random &random);
+    Enemy(const QString &enemyKind, const Math::Vec2 &position, int waveNumber);
 
-    void update(Arena &arena, float dt) override;
-    void shoot(Arena &arena) override;
-    void takeDamage(Arena &arena, const Damage &damage) override;
-    void die(Arena &arena) override;
-    void draw(QPainter &world, QPainter &glow, const Arena &arena) const override;
+    void update(const Context &ctx, float dt) override;
+    void shoot(const Context &ctx) override;
+    void takeDamage(const Context &ctx, const Damage &damage) override;
+    void die(const Context &ctx) override;
+    void draw(QPainter &world, QPainter &glow, const Context &ctx) const override;
 
     bool isAlive() const override { return alive; }
     const Math::Vec2 &position() const override { return pos; }
@@ -63,7 +61,7 @@ public:
     static const EnemyStats &statsFor(const QString &kind);
 
 private:
-    void fireAimed(Arena &arena, int count, float spread);
+    void fireAimed(const Context &ctx, int count, float spread);
     void drawBody(QPainter &world, QPainter &glow, float facing) const;
     void drawBoss(QPainter &world, QPainter &glow, float facing) const;
 

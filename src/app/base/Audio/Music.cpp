@@ -128,6 +128,12 @@ Music::Music() : impl_(std::make_unique<Impl>()) {}
 
 Music::~Music()
 {
+    shutdown();
+}
+
+// 可在进程退出前显式调用；重复调用安全（指针置空）。
+void Music::shutdown()
+{
     impl_->timer.stop();
     delete impl_->player;
     impl_->player = nullptr;

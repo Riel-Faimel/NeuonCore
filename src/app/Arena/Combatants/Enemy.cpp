@@ -1,6 +1,11 @@
 #include "Enemy.h"
 
-#include "Arena/Arena.h"
+#include "Arena/Bullets/Bullets.h"
+#include "Arena/Combatants/Combatants.h"
+#include "Arena/Context.h"
+#include "Arena/Entities/Entities.h"
+#include "Arena/Events.h"
+#include "Arena/State.h"
 #include "Arena/Bullets/StandardBullet.h"
 #include "Arena/Entities/FloatingText.h"
 #include "Data/GameData.h"
@@ -74,8 +79,7 @@ const EnemyStats &Enemy::statsFor(const QString &kind)
     return table.constFind(QStringLiteral("drone")).value();
 }
 
-Enemy::Enemy(const QString &enemyKind, const Math::Vec2 &position, int waveNumber,
-             Random &random)
+Enemy::Enemy(const QString &enemyKind, const Math::Vec2 &position, int waveNumber)
     : kind(enemyKind), eid(sNextId++), pos(position), wave(waveNumber)
 {
     const EnemyStats &stats = statsFor(kind);
@@ -94,13 +98,13 @@ Enemy::Enemy(const QString &enemyKind, const Math::Vec2 &position, int waveNumbe
     }
     hp = maxHp;
     hpDisplay = maxHp;
-    attackTimer = random.real(1.2f, 2.0f);
-    radialTimer = random.real(1.3f, 2.2f);
-    strafe = random.integer(0, 1) == 0 ? -1 : 1;
-    phase = random.real(0.0f, Math::Tau);
+    attackTimer = RandomService.real(1.2f, 2.0f);
+    radialTimer = RandomService.real(1.3f, 2.2f);
+    strafe = RandomService.integer(0, 1) == 0 ? -1 : 1;
+    phase = RandomService.real(0.0f, Math::Tau);
 }
 
-void Enemy::update(Arena &arena, float dt)
+void Enemy::update(const Context &ctx, float dt)
 {
     if (!alive) {
         return;
@@ -113,7 +117,7 @@ void Enemy::update(Arena &arena, float dt)
     radialTimer -= dt;
     hpDisplay += (hp - hpDisplay) * std::min(1.0f, dt * 5.0f);
 
-    const Math::Vec2 toPlayer = arena.combatants_.player().state.pos - pos;
+    const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
     const float distance = std::max(1.0f, toPlayer.length());
     const Math::Vec2 direction = toPlayer / distance;
     const Math::Vec2 perpendicular(-direction.y, direction.x);
@@ -131,7 +135,7 @@ void Enemy::update(Arena &arena, float dt)
         if (age > 1.45f) {
             if (attackTimer <= 0.0f) {
                 attackTimer = enraged ? 0.95f : 1.25f;
-                shoot(arena);
+                shoot(ctx);
             }
             if (radialTimer <= 0.0f) {
                 radialTimer = enraged ? 2.15f : 2.65f;
@@ -140,13 +144,13 @@ void Enemy::update(Arena &arena, float dt)
                 for (int i = 0; i < count; ++i) {
                     const float angle = offset + Math::Tau * float(i) / float(count);
                     const Math::Vec2 bulletDirection(std::cos(angle), std::sin(angle));
-                    arena.bullets_.submit(std::make_unique<StandardBullet>(
+                    ctx.bullets.submit(std::make_unique<StandardBullet>(
                         pos + bulletDirection * 42.0f,
                         bulletDirection * data::kBossRadialBullet.speed,
                         data::kBossRadialBullet.damage, Base::Magenta,
                         Bullet::Standpoint::Enemy, data::kBossRadialBullet.radius));
                 }
-                arena.entities_.addShockwave(pos, 92.0f, Base::Magenta, 0.36f, 2);
+                ctx.entities.addShockwave(pos, 92.0f, Base::Magenta, 0.36f, 2);
             }
         }
     } else if (kind == QStringLiteral("spitter")) {
@@ -158,8 +162,8 @@ void Enemy::update(Arena &arena, float dt)
             desired = perpendicular * speed * 0.62f * float(strafe);
         }
         if (age > 0.9f && attackTimer <= 0.0f && distance < 540.0f) {
-            attackTimer = arena.random_.real(1.8f, 2.5f);
-            shoot(arena);
+            attackTimer = RandomService.real(1.8f, 2.5f);
+            shoot(ctx);
         }
     } else {
         float weave = 0.0f;
@@ -177,44 +181,44 @@ void Enemy::update(Arena &arena, float dt)
                         GameConfig::FieldBottom - radius - 4.0f);
 }
 
-void Enemy::shoot(Arena &arena)
+void Enemy::shoot(const Context &ctx)
 {
     if (kind == QStringLiteral("boss")) {
         const bool enraged = hp < maxHp * 0.48f;
-        fireAimed(arena, enraged ? 3 : 2, 0.11f);
-        arena.base_.playSound(QStringLiteral("shoot_enemy"));
+        fireAimed(ctx, enraged ? 3 : 2, 0.11f);
+        BaseService.playSound(QStringLiteral("shoot_enemy"));
         return;
     }
     if (kind == QStringLiteral("spitter")) {
-        const Math::Vec2 toPlayer = arena.combatants_.player().state.pos - pos;
+        const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
         const float base = std::atan2(toPlayer.y, toPlayer.x);
         const Math::Vec2 aim = Math::Vec2(std::cos(base), std::sin(base))
-            .rotated(arena.random_.real(-0.055f, 0.055f));
-        arena.bullets_.submit(std::make_unique<StandardBullet>(
+            .rotated(RandomService.real(-0.055f, 0.055f));
+        ctx.bullets.submit(std::make_unique<StandardBullet>(
             pos + aim * 18.0f, aim * data::kSpitterBullet.speed,
             data::kSpitterBullet.damage, Base::Magenta, Bullet::Standpoint::Enemy,
             data::kSpitterBullet.radius));
-        arena.entities_.spawnBurst(arena, pos, Base::Magenta, 5, 70.0f, 0.26f);
-        arena.base_.playSound(QStringLiteral("shoot_enemy"));
+        ctx.entities.spawnBurst(ctx, pos, Base::Magenta, 5, 70.0f, 0.26f);
+        BaseService.playSound(QStringLiteral("shoot_enemy"));
     }
 }
 
-void Enemy::fireAimed(Arena &arena, int count, float spread)
+void Enemy::fireAimed(const Context &ctx, int count, float spread)
 {
-    const Math::Vec2 toPlayer = arena.combatants_.player().state.pos - pos;
+    const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
     const float base = std::atan2(toPlayer.y, toPlayer.x);
     for (int i = 0; i < count; ++i) {
         const float offset = (float(i) - (count - 1) / 2.0f) * spread;
         const Math::Vec2 direction(std::cos(base + offset), std::sin(base + offset));
-        arena.bullets_.submit(std::make_unique<StandardBullet>(
+        ctx.bullets.submit(std::make_unique<StandardBullet>(
             pos + direction * 46.0f, direction * data::kBossAimedBullet.speed,
             data::kBossAimedBullet.damage, QColor(255, 112, 190),
             Bullet::Standpoint::Enemy, data::kBossAimedBullet.radius));
     }
-    arena.entities_.spawnBurst(arena, pos, Base::Magenta, 8, 100.0f, 0.35f);
+    ctx.entities.spawnBurst(ctx, pos, Base::Magenta, 8, 100.0f, 0.35f);
 }
 
-void Enemy::takeDamage(Arena &arena, const Damage &damage)
+void Enemy::takeDamage(const Context &ctx, const Damage &damage)
 {
     if (!alive) {
         return;
@@ -222,40 +226,40 @@ void Enemy::takeDamage(Arena &arena, const Damage &damage)
     hp -= damage.amount;
     hitFlash = 0.09f;
     const QColor textColor = damage.critical ? Base::Amber : Base::White;
-    arena.entities_.floatingTexts().push_back(FloatingText{
-        pos + Math::Vec2(arena.random_.real(-7.0f, 7.0f), -radius - 7.0f),
+    ctx.entities.floatingTexts().push_back(FloatingText{
+        pos + Math::Vec2(RandomService.real(-7.0f, 7.0f), -radius - 7.0f),
         QString::number(int(damage.amount)), textColor, 0.62f, 0.62f,
         damage.critical ? 16 : 14, damage.critical});
-    arena.entities_.spawnBurst(arena, pos, color, damage.critical ? 6 : 3, 90.0f, 0.22f);
+    ctx.entities.spawnBurst(ctx, pos, color, damage.critical ? 6 : 3, 90.0f, 0.22f);
     if (damage.source == DamageSource::Bullet
-        && arena.random_.real(0.0f, 1.0f) < 0.35f) {
-        arena.base_.playSound(QStringLiteral("hit"));
+        && RandomService.real(0.0f, 1.0f) < 0.35f) {
+        BaseService.playSound(QStringLiteral("hit"));
     }
 
     // 致死伤害不再触发 Boss 的阶段召唤：垂死的 Boss 不该再拉一波小怪。
     if (boss && hp > 0.0f) {
-        arena.state_.onBossDamage(arena, *this);
+        ctx.state.onBossDamage(ctx, *this);
     }
 
     if (hp <= 0.0f) {
-        die(arena);
+        die(ctx);
     }
 }
 
-void Enemy::die(Arena &arena)
+void Enemy::die(const Context &ctx)
 {
     if (!alive) {
         return;
     }
-    arena.events_.handleKill(arena, *this);
+    ctx.events.handleKill(ctx, *this);
 }
 
-void Enemy::draw(QPainter &world, QPainter &glow, const Arena &arena) const
+void Enemy::draw(QPainter &world, QPainter &glow, const Context &ctx) const
 {
     if (!alive) {
         return;
     }
-    const Math::Vec2 toPlayer = arena.combatants_.player().state.pos - pos;
+    const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
     const float facing = std::atan2(toPlayer.y, toPlayer.x);
     drawBody(world, glow, facing);
 

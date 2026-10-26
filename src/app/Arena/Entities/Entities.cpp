@@ -1,6 +1,7 @@
 #include "Entities.h"
 
-#include "Arena/Arena.h"
+#include "Arena/Context.h"
+#include "Arena/Host.h"
 #include "Arena/Combatants/Combatants.h"
 #include "Arena/Combatants/Enemy.h"
 #include "Data/GameData.h"
@@ -24,30 +25,30 @@ void Entities::reset()
     effectsTimer_ = 0.0f;
 }
 
-void Entities::updatePortals(Arena &arena, float dt)
+void Entities::updatePortals(const Context &ctx, float dt)
 {
     for (Portal &portal : portals_) {
-        portal.update(arena, dt);
+        portal.update(ctx, dt);
     }
     std::erase_if(portals_, [](const Portal &portal) {
         return !portal.alive;
     });
 }
 
-void Entities::updatePickups(Arena &arena, float dt)
+void Entities::updatePickups(const Context &ctx, float dt)
 {
     for (Pickup &pickup : pickups_) {
-        pickup.update(arena, dt);
+        pickup.update(ctx, dt);
     }
     std::erase_if(pickups_, [](const Pickup &pickup) {
         return !pickup.alive;
     });
 }
 
-void Entities::updateEffects(Arena &arena, float dt)
+void Entities::updateEffects(const Context &ctx, float dt)
 {
     effectsTimer_ = std::max(0.0f, effectsTimer_ - dt);
-    Player &player = arena.combatants_.player();
+    Player &player = ctx.combatants.player();
     player.state.hpDisplay +=
         (player.state.hp - player.state.hpDisplay) * std::min(1.0f, dt * 3.0f);
 
@@ -135,26 +136,26 @@ void Entities::drawForeground(QPainter &world, QPainter &glow) const
     }
 }
 
-void Entities::spawnPortal(Arena &arena, const QString &kind, int wave)
+void Entities::spawnPortal(const Context &ctx, const QString &kind, int wave)
 {
     const Math::Vec2 position =
         kind == QStringLiteral("boss")
             ? Math::Vec2(GameConfig::ScreenWidth / 2.0f, 190.0f)
-            : randomSpawnPosition(arena);
+            : randomSpawnPosition(ctx);
     portals_.emplace_back(kind, position, wave);
-    spawnBurst(arena, position, Enemy::statsFor(kind).color, 5, 50.0f, 0.35f);
+    spawnBurst(ctx, position, Enemy::statsFor(kind).color, 5, 50.0f, 0.35f);
 }
 
-void Entities::spawnPickup(Arena &arena, const Math::Vec2 &pos, int amount)
+void Entities::spawnPickup(const Context &ctx, const Math::Vec2 &pos, int amount)
 {
     Pickup pickup(pos, amount);
-    pickup.vel = Math::Vec2(arena.random_.real(-25.0f, 25.0f),
-                            arena.random_.real(-25.0f, 25.0f));
-    pickup.phase = arena.random_.real(0.0f, Math::Tau);
+    pickup.vel = Math::Vec2(RandomService.real(-25.0f, 25.0f),
+                            RandomService.real(-25.0f, 25.0f));
+    pickup.phase = RandomService.real(0.0f, Math::Tau);
     pickups_.push_back(pickup);
 }
 
-void Entities::spawnMine(Arena &arena, const Math::Vec2 &pos)
+void Entities::spawnMine(const Context &ctx, const Math::Vec2 &pos)
 {
     Mine mine;
     mine.pos = pos;
@@ -164,25 +165,25 @@ void Entities::spawnMine(Arena &arena, const Math::Vec2 &pos)
     mine.armTime = data::kMine.armTime;
     mine.life = data::kMine.lifetime;
     mines_.push_back(mine);
-    spawnBurst(arena, pos, Base::Amber, 8, 55.0f, 0.3f);
-    arena.base_.playSound(QStringLiteral("ui"));
+    spawnBurst(ctx, pos, Base::Amber, 8, 55.0f, 0.3f);
+    BaseService.playSound(QStringLiteral("ui"));
 }
 
-void Entities::spawnBurst(Arena &arena, const Math::Vec2 &pos,
+void Entities::spawnBurst(const Context &ctx, const Math::Vec2 &pos,
                           const QColor &color, int count, float speed, float life)
 {
     for (int i = 0; i < count; ++i) {
-        const float angle = arena.random_.real(0.0f, Math::Tau);
+        const float angle = RandomService.real(0.0f, Math::Tau);
         const Math::Vec2 velocity = Math::Vec2(std::cos(angle), std::sin(angle))
-            * arena.random_.real(speed * 0.18f, speed);
+            * RandomService.real(speed * 0.18f, speed);
         Math::Vec2 origin = pos;
         if (velocity.lengthSquared() > 0.0f) {
-            origin += velocity.normalized() * arena.random_.real(0.0f, 10.0f);
+            origin += velocity.normalized() * RandomService.real(0.0f, 10.0f);
         }
         particles_.push_back(Particle{
-            origin, velocity, arena.random_.real(life * 0.45f, life), life,
-            arena.random_.real(1.0f, 4.2f), color, arena.random_.real(1.4f, 3.6f),
-            arena.random_.real(-8.0f, 8.0f), arena.random_.integer(0, 2) == 2 ? 1 : 0});
+            origin, velocity, RandomService.real(life * 0.45f, life), life,
+            RandomService.real(1.0f, 4.2f), color, RandomService.real(1.4f, 3.6f),
+            RandomService.real(-8.0f, 8.0f), RandomService.integer(0, 2) == 2 ? 1 : 0});
     }
 }
 
@@ -192,27 +193,27 @@ void Entities::addShockwave(const Math::Vec2 &pos, float radius, const QColor &c
     shockwaves_.emplace_back(pos, radius, color, duration, width);
 }
 
-Math::Vec2 Entities::randomSpawnPosition(const Arena &arena) const
+Math::Vec2 Entities::randomSpawnPosition(const Context &ctx) const
 {
-    const Math::Vec2 playerPos = arena.combatants_.player().position();
+    const Math::Vec2 playerPos = ctx.combatants.player().position();
     Math::Vec2 candidate(60.0f, 60.0f);
     for (int attempt = 0; attempt < 20; ++attempt) {
-        const int edge = arena.random_.integer(0, 3);
+        const int edge = RandomService.integer(0, 3);
         if (edge == 0) {
-            candidate = {arena.random_.real(GameConfig::FieldLeft + 40.0f,
+            candidate = {RandomService.real(GameConfig::FieldLeft + 40.0f,
                                              GameConfig::FieldRight - 40.0f),
                          GameConfig::FieldTop + 18.0f};
         } else if (edge == 1) {
             candidate = {GameConfig::FieldRight - 18.0f,
-                         arena.random_.real(GameConfig::FieldTop + 40.0f,
+                         RandomService.real(GameConfig::FieldTop + 40.0f,
                                             GameConfig::FieldBottom - 30.0f)};
         } else if (edge == 2) {
-            candidate = {arena.random_.real(GameConfig::FieldLeft + 40.0f,
+            candidate = {RandomService.real(GameConfig::FieldLeft + 40.0f,
                                              GameConfig::FieldRight - 40.0f),
                          GameConfig::FieldBottom - 18.0f};
         } else {
             candidate = {GameConfig::FieldLeft + 18.0f,
-                         arena.random_.real(GameConfig::FieldTop + 40.0f,
+                         RandomService.real(GameConfig::FieldTop + 40.0f,
                                             GameConfig::FieldBottom - 30.0f)};
         }
         if (candidate.distanceTo(playerPos) > 235.0f) {

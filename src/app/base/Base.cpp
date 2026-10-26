@@ -7,6 +7,10 @@
 
 #include <memory>
 
+// 进程内唯一的 Base 实例（声明见 Base.h）。构造只分配 Impl，
+// 不创建 QSoundEffect / QMediaPlayer，也不依赖 QApplication 是否已存在。
+Base BaseService;
+
 struct Base::Impl {
     base::Input input;
     base::Audio audio;
@@ -86,6 +90,12 @@ void Base::initAudio()
 {
     impl_->audio.init();
     impl_->music.initialize();
+}
+
+void Base::shutdown()
+{
+    impl_->audio.shutdown();
+    impl_->music.shutdown();
 }
 
 void Base::playSound(const QString &name)

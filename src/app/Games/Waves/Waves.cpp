@@ -8,8 +8,8 @@
 
 namespace games {
 
-Waves::Waves(Random &random, Arena &arena, const Script &script)
-    : random_(random), arena_(arena), script_(script)
+Waves::Waves(Arena &arena, const Script &script)
+    : arena_(arena), script_(script)
 {
 }
 
@@ -34,7 +34,7 @@ void Waves::update(float dt)
     queue_.erase(queue_.begin());
     arena_.spawnPortal(kind, currentWave_);
     if (!queue_.empty()) {
-        spawnTimer_ = random_.real(data::kWaveTiming.gapMin, data::kWaveTiming.gapMax);
+        spawnTimer_ = RandomService.real(data::kWaveTiming.gapMin, data::kWaveTiming.gapMax);
     }
 }
 
@@ -82,7 +82,7 @@ std::vector<QString> Waves::buildQueue(int wave) const
             plan.push_back(spawn.kind);
         }
     }
-    random_.shuffle(plan);
+    RandomService.shuffle(plan);
     // Boss 台本里如果有 Boss，永远让它第一个出场。
     if (waveHasBoss(wave)) {
         const auto it = std::find(plan.begin(), plan.end(), QStringLiteral("boss"));

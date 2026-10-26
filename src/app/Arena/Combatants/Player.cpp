@@ -1,6 +1,11 @@
 #include "Player.h"
 
-#include "Arena/Arena.h"
+#include "Arena/Bullets/Bullets.h"
+#include "Arena/Combatants/Combatants.h"
+#include "Arena/Context.h"
+#include "Arena/Entities/Entities.h"
+#include "Arena/Host.h"
+#include "Arena/State.h"
 #include "Arena/Bullets/StandardBullet.h"
 #include "Arena/Entities/FloatingText.h"
 #include "Arena/Entities/Particle.h"
@@ -39,11 +44,11 @@ void Player::beginWave()
     state.spawnPulse = 0.9f;
 }
 
-void Player::update(Arena &arena, float dt)
+void Player::update(const Context &ctx, float dt)
 {
-    const Math::Vec2 move = arena.base_.movementAxis();
-    if (arena.base_.mouseActive()) {
-        const Math::Vec2 aimDelta = arena.base_.mousePosition() - state.pos;
+    const Math::Vec2 move = BaseService.movementAxis();
+    if (BaseService.mouseActive()) {
+        const Math::Vec2 aimDelta = BaseService.mousePosition() - state.pos;
         if (aimDelta.lengthSquared() > 1.0f) {
             state.aim = std::atan2(aimDelta.y, aimDelta.x);
         }
@@ -64,16 +69,16 @@ void Player::update(Arena &arena, float dt)
         state.dashCd = state.dashCdMax;
         state.invuln = std::max(state.invuln, 0.30f);
         state.dashBuffer = 0.0f;
-        arena.base_.playSound(QStringLiteral("dash"));
-        arena.addFeedback(Base::Cyan, 0, 5.0f);
-        arena.entities_.spawnBurst(arena, state.pos, Base::Cyan, 18, 185.0f, 0.45f);
-        arena.entities_.addShockwave(state.pos, 80.0f, Base::Cyan, 0.28f, 2);
+        BaseService.playSound(QStringLiteral("dash"));
+        ctx.host.addFeedback(Base::Cyan, 0, 5.0f);
+        ctx.entities.spawnBurst(ctx, state.pos, Base::Cyan, 18, 185.0f, 0.45f);
+        ctx.entities.addShockwave(state.pos, 80.0f, Base::Cyan, 0.28f, 2);
         if (state.shockLevel > 0) {
             const float radius = 95.0f + 14.0f * state.shockLevel;
             const float damage = 20.0f + 14.0f * state.shockLevel;
-            arena.entities_.addShockwave(state.pos, radius, Base::Magenta, 0.40f, 3);
-            arena.combatants_.damageEnemiesInRadius(arena, state.pos, radius, damage,
-                                        DamageSource::Shock);
+            ctx.entities.addShockwave(state.pos, radius, Base::Magenta, 0.40f, 3);
+            ctx.combatants.damageEnemiesInRadius(ctx, state.pos, radius, damage,
+                                                  DamageSource::Shock);
         }
     }
 
@@ -81,17 +86,17 @@ void Player::update(Arena &arena, float dt)
         state.dashTime -= dt;
         state.pos += state.dashDir * 930.0f * dt;
         state.vel = state.dashDir * state.speed;
-        if (arena.entities_.effectsTimer() <= 0.0f) {
-            arena.entities_.effectsTimer() = 0.018f;
+        if (ctx.entities.effectsTimer() <= 0.0f) {
+            ctx.entities.effectsTimer() = 0.018f;
             for (int i = 0; i < 2; ++i) {
-                arena.entities_.particles().push_back(Particle{
-                    state.pos + Math::Vec2(arena.random_.real(-6.0f, 6.0f),
-                                           arena.random_.real(-6.0f, 6.0f)),
-                    -state.dashDir * arena.random_.real(20.0f, 90.0f)
-                        + Math::Vec2(arena.random_.real(-25.0f, 25.0f),
-                                     arena.random_.real(-25.0f, 25.0f)),
-                    arena.random_.real(0.15f, 0.25f), 0.25f,
-                    arena.random_.real(3.0f, 7.0f), Base::Cyan, 2.8f, 0.0f, 0});
+                ctx.entities.particles().push_back(Particle{
+                    state.pos + Math::Vec2(RandomService.real(-6.0f, 6.0f),
+                                           RandomService.real(-6.0f, 6.0f)),
+                    -state.dashDir * RandomService.real(20.0f, 90.0f)
+                        + Math::Vec2(RandomService.real(-25.0f, 25.0f),
+                                     RandomService.real(-25.0f, 25.0f)),
+                    RandomService.real(0.15f, 0.25f), 0.25f,
+                    RandomService.real(3.0f, 7.0f), Base::Cyan, 2.8f, 0.0f, 0});
             }
         }
     } else {
@@ -105,24 +110,24 @@ void Player::update(Arena &arena, float dt)
     state.pos.y = Math::clamp(state.pos.y, GameConfig::FieldTop + 2.0f,
                               GameConfig::FieldBottom - 2.0f);
 
-    if (state.vel.lengthSquared() > 1600.0f && arena.entities_.effectsTimer() <= 0.0f) {
-        arena.entities_.effectsTimer() = 0.035f;
+    if (state.vel.lengthSquared() > 1600.0f && ctx.entities.effectsTimer() <= 0.0f) {
+        ctx.entities.effectsTimer() = 0.035f;
         const Math::Vec2 back = -state.vel.normalized() * 10.0f;
-        arena.entities_.particles().push_back(Particle{
-            state.pos + back + Math::Vec2(arena.random_.real(-3.0f, 3.0f),
-                                          arena.random_.real(-3.0f, 3.0f)),
-            -state.vel.normalized() * arena.random_.real(30.0f, 70.0f),
-            arena.random_.real(0.18f, 0.32f), 0.32f,
-            arena.random_.real(2.0f, 4.5f), Base::CyanSoft, 3.0f, 0.0f, 0});
+        ctx.entities.particles().push_back(Particle{
+            state.pos + back + Math::Vec2(RandomService.real(-3.0f, 3.0f),
+                                          RandomService.real(-3.0f, 3.0f)),
+            -state.vel.normalized() * RandomService.real(30.0f, 70.0f),
+            RandomService.real(0.18f, 0.32f), 0.32f,
+            RandomService.real(2.0f, 4.5f), Base::CyanSoft, 3.0f, 0.0f, 0});
     }
 
-    if (arena.base_.shootingHeld() && state.shotTimer <= 0.0f) {
-        shoot(arena);
+    if (BaseService.shootingHeld() && state.shotTimer <= 0.0f) {
+        shoot(ctx);
         state.shotTimer = state.fireCd;
     }
 }
 
-void Player::shoot(Arena &arena)
+void Player::shoot(const Context &ctx)
 {
     const Math::Vec2 forward(std::cos(state.aim), std::sin(state.aim));
     const Math::Vec2 side(-forward.y, forward.x);
@@ -133,60 +138,60 @@ void Player::shoot(Arena &arena)
         const Math::Vec2 direction = forward.rotated(offset);
         const Math::Vec2 origin = state.pos + forward * 20.0f
                                   + side * ((float(index) - (count - 1) / 2.0f) * 4.0f);
-        arena.bullets_.submit(std::make_unique<StandardBullet>(
+        ctx.bullets.submit(std::make_unique<StandardBullet>(
             origin, direction * state.bulletSpeed, state.damage, Base::Cyan,
             Bullet::Standpoint::Player, data::kPlayer.bulletRadius, state.pierce,
             state.critChance));
     }
     state.muzzlePos = state.pos + forward * 22.0f;
     state.fireFlash = 0.07f;
-    arena.base_.playSound(QStringLiteral("shoot"));
-    arena.addFeedback(Base::Cyan, 0, 0.55f);
+    BaseService.playSound(QStringLiteral("shoot"));
+    ctx.host.addFeedback(Base::Cyan, 0, 0.55f);
     for (int i = 0; i < 3; ++i) {
-        arena.entities_.particles().push_back(Particle{
-            state.muzzlePos + forward * arena.random_.real(0.0f, 8.0f),
-            forward * arena.random_.real(70.0f, 180.0f)
-                + side * arena.random_.real(-65.0f, 65.0f),
-            arena.random_.real(0.12f, 0.22f), 0.22f,
-            arena.random_.real(1.6f, 3.5f), QColor(180, 250, 255), 4.0f, 0.0f, 1});
+        ctx.entities.particles().push_back(Particle{
+            state.muzzlePos + forward * RandomService.real(0.0f, 8.0f),
+            forward * RandomService.real(70.0f, 180.0f)
+                + side * RandomService.real(-65.0f, 65.0f),
+            RandomService.real(0.12f, 0.22f), 0.22f,
+            RandomService.real(1.6f, 3.5f), QColor(180, 250, 255), 4.0f, 0.0f, 1});
     }
 }
 
-void Player::takeDamage(Arena &arena, const Damage &damage)
+void Player::takeDamage(const Context &ctx, const Damage &damage)
 {
     if (!state.alive || state.invuln > 0.0f) {
         return;
     }
     state.hp -= damage.amount;
     state.invuln = 0.88f;
-    arena.addFeedback(Base::Red, 58, 9.0f);
-    arena.base_.playSound(QStringLiteral("hurt"));
-    arena.entities_.floatingTexts().push_back(FloatingText{
+    ctx.host.addFeedback(Base::Red, 58, 9.0f);
+    BaseService.playSound(QStringLiteral("hurt"));
+    ctx.entities.floatingTexts().push_back(FloatingText{
         state.pos + Math::Vec2(0.0f, -30.0f),
         QStringLiteral("-%1").arg(int(damage.amount)), Base::Red,
         0.9f, 0.9f, 17, false});
-    arena.entities_.spawnBurst(arena, state.pos, Base::Coral, 18, 150.0f, 0.5f);
+    ctx.entities.spawnBurst(ctx, state.pos, Base::Coral, 18, 150.0f, 0.5f);
     if (state.hp <= 0.0f) {
-        die(arena);
+        die(ctx);
     }
 }
 
-void Player::die(Arena &arena)
+void Player::die(const Context &ctx)
 {
     if (!state.alive) {
         return;
     }
     state.hp = 0.0f;
     state.alive = false;
-    arena.state_.markPlayerDefeated();
-    arena.entities_.spawnBurst(arena, state.pos, Base::Cyan, 55, 280.0f, 1.0f);
-    arena.entities_.spawnBurst(arena, state.pos, Base::Coral, 35, 210.0f, 0.85f);
-    arena.entities_.addShockwave(state.pos, 190.0f, Base::Red, 0.9f, 3);
+    ctx.state.markPlayerDefeated();
+    ctx.entities.spawnBurst(ctx, state.pos, Base::Cyan, 55, 280.0f, 1.0f);
+    ctx.entities.spawnBurst(ctx, state.pos, Base::Coral, 35, 210.0f, 0.85f);
+    ctx.entities.addShockwave(state.pos, 190.0f, Base::Red, 0.9f, 3);
 }
 
-void Player::draw(QPainter &world, QPainter &glow, const Arena &arena) const
+void Player::draw(QPainter &world, QPainter &glow, const Context &ctx) const
 {
-    Q_UNUSED(arena);
+    Q_UNUSED(ctx);
     if (!state.alive) {
         return;
     }

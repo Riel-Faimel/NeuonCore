@@ -72,6 +72,10 @@ DEPS := $(RELEASE_OBJS:.o=.d) $(TEST_OBJS:.o=.d)
 # 所有编译单元在生成头就绪后再编译（增量重编译由 .d 依赖负责）。
 $(SHARED_OBJS) $(MAIN_RELEASE_OBJ) $(MAIN_TEST_OBJ): | $(GENERATED_JSON)
 
+# 默认目标：第一条规则是上面的 order-only 依赖（空规则），
+# 不显式指定的话 `make` 只会构建 build/app/Base/Base.o。
+.DEFAULT_GOAL := all
+
 .PHONY: all release test deploy clean
 
 all: $(BUILD)/NeonCore.exe

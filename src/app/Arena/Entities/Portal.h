@@ -6,9 +6,9 @@
 #include <QPainter>
 #include <QString>
 
-class Arena;
-
 namespace arena {
+
+struct Context;
 
 // 传送门实体：倒计时结束后生成敌人。
 class Portal {
@@ -23,7 +23,7 @@ public:
     float radius = 23.0f;
 
     Portal(const QString &portalKind, const Math::Vec2 &position, int waveNumber);
-    void update(Arena &arena, float dt);
+    void update(const Context &ctx, float dt);
     void draw(QPainter &world, QPainter &glow) const;
 };
 

@@ -3,6 +3,9 @@
 #include "Base/Base.h"
 #include "Data/GameData.h"
 
+// 进程内唯一的 Shop（声明见 Shop.h）。
+Shop ShopService;
+
 void Shop::load()
 {
     score_.load();
@@ -15,15 +18,15 @@ void Shop::save()
     inventory_.save();
 }
 
-bool Shop::buyMine(Base &base)
+bool Shop::buyMine()
 {
     if (!score_.spend(data::kMine.price)) {
-        base.playSound(QStringLiteral("ui"));
+        BaseService.playSound(QStringLiteral("ui"));
         return false;
     }
     inventory_.addMine(1);
     inventory_.save();
     score_.save();
-    base.playSound(QStringLiteral("upgrade"));
+    BaseService.playSound(QStringLiteral("upgrade"));
     return true;
 }

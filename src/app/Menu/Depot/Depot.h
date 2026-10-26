@@ -4,9 +4,7 @@
 
 #include <QRectF>
 
-class Base;
 class QPainter;
-class Shop;
 
 namespace menu {
 
@@ -20,9 +18,9 @@ public:
     };
 
     void reset();
-    Action keyPress(int key, Shop &shop, Base &base);
-    Action mousePress(const Math::Vec2 &position, Shop &shop, Base &base);
-    void render(QPainter &painter, const Shop &shop) const;
+    Action keyPress(int key);
+    Action mousePress(const Math::Vec2 &position);
+    void render(QPainter &painter) const;
 
     QRectF itemRect() const;
     QRectF buyRect() const;

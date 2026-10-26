@@ -1,5 +1,6 @@
 #include "Games/Games.h"
 
+#include "Base/Base.h"
 #include "GameConfig.h"
 #include "Shop/Shop.h"
 
@@ -9,15 +10,16 @@
 
 // 构造即开局：一局的安排（含台本）在这里被接收，之后只对内使用。
 // 新的一局就是一个新对象，因此不存在需要手工清空的跨局状态。
-Games::Games(const Level &level, Base &base, Shop &shop)
-    : level_(level), base_(base), shop_(shop), arena_(random_, base_, shop.score()),
-      waves_(random_, arena_, level_.script), upgrades_(random_, arena_, base_),
-      renderer_(random_, base_)
+// Base / Random / Shop 都是进程级单例（BaseService / RandomService / ShopService），
+// 不再作为构造参数传入；Games 只剩"这一局的安排"这一个输入。
+Games::Games(const Level &level)
+    : level_(level), arena_(), waves_(arena_, level_.script), upgrades_(arena_),
+      renderer_()
 {
-    shop_.score().beginRun();
+    ShopService.score().beginRun();
     renderer_.initialize();
-    base_.setMouseActive(true);
-    base_.playSound(QStringLiteral("ui"));
+    BaseService.setMouseActive(true);
+    BaseService.playSound(QStringLiteral("ui"));
     renderer_.flash(Base::Cyan, 35);
     startWave(std::clamp(level_.startWave, 1, std::max(1, waves_.totalWaves())));
 }
@@ -41,7 +43,7 @@ void Games::startWave(int wave)
                              2.8f, Base::Magenta,
                              finalWave ? QStringLiteral("FINAL WAVE")
                                        : QStringLiteral("BOSS SIGNAL"));
-        base_.playSound(QStringLiteral("boss"));
+        BaseService.playSound(QStringLiteral("boss"));
     } else {
         renderer_.showBanner(title, QStringLiteral("敌方信号正在接近"),
                              2.15f, Base::Cyan);
@@ -182,7 +184,7 @@ void Games::triggerVictory()
     renderer_.showBanner(QStringLiteral("区域已肃清"),
                          QStringLiteral("台本中的敌方信号全部消失"),
                          1.6f, Base::Cyan, QStringLiteral("SECTOR CLEAR"));
-    base_.playSound(QStringLiteral("victory"));
+    BaseService.playSound(QStringLiteral("victory"));
 }
 
 void Games::finishVictory()
@@ -204,12 +206,12 @@ void Games::triggerDefeat()
     victoryPending_ = false;
     renderer_.shake(20.0f);
     renderer_.flash(Base::Red, 120);
-    base_.playSound(QStringLiteral("defeat"));
+    BaseService.playSound(QStringLiteral("defeat"));
 }
 
 void Games::keyPress(int key, bool autoRepeat)
 {
-    base_.keyPress(key);
+    BaseService.keyPress(key);
     if (autoRepeat) {
         return;
     }
@@ -218,12 +220,12 @@ void Games::keyPress(int key, bool autoRepeat)
 
 void Games::keyRelease(int key)
 {
-    base_.keyRelease(key);
+    BaseService.keyRelease(key);
 }
 
 void Games::mouseMove(const Math::Vec2 &position)
 {
-    base_.mouseMove(position);
+    BaseService.mouseMove(position);
 }
 
 void Games::mousePressRight(const Math::Vec2 &position)
@@ -235,17 +237,17 @@ void Games::mousePressRight(const Math::Vec2 &position)
         || position.y < GameConfig::FieldTop || position.y > GameConfig::FieldBottom) {
         return;
     }
-    if (!shop_.inventory().takeMine()) {
-        base_.playSound(QStringLiteral("ui"));
+    if (!ShopService.inventory().takeMine()) {
+        BaseService.playSound(QStringLiteral("ui"));
         return;
     }
-    shop_.inventory().save();
+    ShopService.inventory().save();
     arena_.placeMine(position);
 }
 
 void Games::mousePressLeft(const Math::Vec2 &position)
 {
-    base_.mousePressLeft(position);
+    BaseService.mousePressLeft(position);
     if (state_ == State::Upgrade) {
         const int index = renderer_.upgradeIndexAt(position);
         if (index >= 0) {
@@ -256,7 +258,7 @@ void Games::mousePressLeft(const Math::Vec2 &position)
 
 void Games::mouseReleaseLeft()
 {
-    base_.mouseReleaseLeft();
+    BaseService.mouseReleaseLeft();
 }
 
 void Games::handleKeydown(int key)
@@ -264,14 +266,14 @@ void Games::handleKeydown(int key)
     if (state_ == State::Playing) {
         if (key == Qt::Key_Escape || key == Qt::Key_P) {
             state_ = State::Paused;
-            base_.playSound(QStringLiteral("ui"));
+            BaseService.playSound(QStringLiteral("ui"));
         } else if (key == Qt::Key_Space) {
             arena_.requestDash();
         }
     } else if (state_ == State::Paused) {
         if (key == Qt::Key_Escape || key == Qt::Key_P) {
             state_ = State::Playing;
-            base_.playSound(QStringLiteral("ui"));
+            BaseService.playSound(QStringLiteral("ui"));
         }
     } else if (state_ == State::Upgrade) {
         if (key == Qt::Key_1) {

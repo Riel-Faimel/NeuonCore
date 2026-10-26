@@ -26,25 +26,25 @@ public:
         const int steps = int(seconds * 60.0f);
         for (int i = 0; i < steps; ++i) {
             if (game.state() == Games::State::Playing && shoot
-                && game.arena_.player().alive) {
-                game.arena_.combatants_.player().state.invuln =
-                    std::max(game.arena_.combatants_.player().state.invuln, 2.0f);
+                && game.arena_.playerState().alive) {
+                game.arena_.player().state.invuln =
+                    std::max(game.arena_.player().state.invuln, 2.0f);
                 arena::Enemy *target = nullptr;
                 float best = 1e9f;
-                for (const auto &enemy : game.arena_.combatants_.enemies()) {
+                for (const auto &enemy : game.arena_.enemies()) {
                     if (!enemy->alive) {
                         continue;
                     }
                     const float distance = enemy->pos.distanceSquaredTo(
-                        game.arena_.player().pos);
+                        game.arena_.playerState().pos);
                     if (distance < best) {
                         best = distance;
                         target = enemy.get();
                     }
                 }
                 if (target != nullptr) {
-                    game.base_.mouseMove(target->pos);
-                    game.base_.mousePressLeft(target->pos);
+                    BaseService.mouseMove(target->pos);
+                    BaseService.mousePressLeft(target->pos);
                 }
             }
             game.update(1.0f / 60.0f);
@@ -66,16 +66,16 @@ public:
                 continue;
             }
             if (game.state() == Games::State::Playing) {
-                game.arena_.combatants_.player().state.invuln = 999.0f;
+                game.arena_.player().state.invuln = 999.0f;
                 arena::Enemy *target = nullptr;
                 float best = 1e9f;
                 Math::Vec2 dodge;
-                for (const auto &enemy : game.arena_.combatants_.enemies()) {
+                for (const auto &enemy : game.arena_.enemies()) {
                     if (!enemy->alive) {
                         continue;
                     }
                     const float distance = enemy->pos.distanceSquaredTo(
-                        game.arena_.player().pos);
+                        game.arena_.playerState().pos);
                     if (distance < best) {
                         best = distance;
                         target = enemy.get();
@@ -83,35 +83,35 @@ public:
                     const float realDistance = std::sqrt(distance);
                     if (realDistance > 1.0f && realDistance < 330.0f) {
                         const Math::Vec2 away =
-                            (game.arena_.player().pos - enemy->pos).normalized();
+                            (game.arena_.playerState().pos - enemy->pos).normalized();
                         dodge += away * ((330.0f - realDistance) / 330.0f);
                     }
                 }
                 if (target != nullptr) {
-                    game.base_.mouseMove(target->pos);
-                    game.base_.mousePressLeft(target->pos);
+                    BaseService.mouseMove(target->pos);
+                    BaseService.mousePressLeft(target->pos);
                 }
                 const Math::Vec2 center(GameConfig::ScreenWidth / 2.0f,
                                         GameConfig::ScreenHeight / 2.0f);
-                dodge += (center - game.arena_.player().pos) * 0.0025f;
+                dodge += (center - game.arena_.playerState().pos) * 0.0025f;
                 if (dodge.lengthSquared() < 0.01f) {
                     dodge = Math::Vec2(1.0f, 0.0f).rotated(game.runTime());
                 }
-                game.base_.keyRelease(Qt::Key_A);
-                game.base_.keyRelease(Qt::Key_D);
-                game.base_.keyRelease(Qt::Key_W);
-                game.base_.keyRelease(Qt::Key_S);
+                BaseService.keyRelease(Qt::Key_A);
+                BaseService.keyRelease(Qt::Key_D);
+                BaseService.keyRelease(Qt::Key_W);
+                BaseService.keyRelease(Qt::Key_S);
                 if (dodge.x < -0.12f) {
-                    game.base_.keyPress(Qt::Key_A);
+                    BaseService.keyPress(Qt::Key_A);
                 } else if (dodge.x > 0.12f) {
-                    game.base_.keyPress(Qt::Key_D);
+                    BaseService.keyPress(Qt::Key_D);
                 }
                 if (dodge.y < -0.12f) {
-                    game.base_.keyPress(Qt::Key_W);
+                    BaseService.keyPress(Qt::Key_W);
                 } else if (dodge.y > 0.12f) {
-                    game.base_.keyPress(Qt::Key_S);
+                    BaseService.keyPress(Qt::Key_S);
                 }
-                if (std::sqrt(best) < 95.0f && game.arena_.player().dashCd <= 0.0f) {
+                if (std::sqrt(best) < 95.0f && game.arena_.playerState().dashCd <= 0.0f) {
                     game.arena_.requestDash();
                 }
             }
@@ -195,9 +195,9 @@ public:
         game->render();
 
         game->waves_.queue_.clear();
-        game->arena_.entities_.portals().clear();
-        game->arena_.combatants_.enemies().clear();
-        game->arena_.bullets_.clearEnemy();
+        game->arena_.portals().clear();
+        game->arena_.enemies().clear();
+        game->arena_.clearEnemy();
         for (int i = 0; i < 70; ++i) {
             game->update(1.0f / 60.0f);
             if (game->state() == Games::State::Upgrade) {
@@ -224,21 +224,21 @@ public:
                            QStringLiteral("upgrade values roll inside their ranges"));
         game->render();
 
-        const Arena::PlayerState before = game->arena_.player();
+        const Arena::PlayerState before = game->arena_.playerState();
         game->selectUpgrade(0);
         success &= require(game->state() == Games::State::Playing,
                            QStringLiteral("upgrade resumes play"));
         success &= require(game->waves_.currentWave() == 2,
                            QStringLiteral("advances to wave 2"));
-        success &= require(before.damage != game->arena_.player().damage
-                               || before.fireCd != game->arena_.player().fireCd
-                               || before.maxHp != game->arena_.player().maxHp
-                               || before.hp != game->arena_.player().hp
-                               || before.speed != game->arena_.player().speed
-                               || before.multishot != game->arena_.player().multishot
-                               || before.pierce != game->arena_.player().pierce
-                               || before.critChance != game->arena_.player().critChance
-                               || before.shockLevel != game->arena_.player().shockLevel,
+        success &= require(before.damage != game->arena_.playerState().damage
+                               || before.fireCd != game->arena_.playerState().fireCd
+                               || before.maxHp != game->arena_.playerState().maxHp
+                               || before.hp != game->arena_.playerState().hp
+                               || before.speed != game->arena_.playerState().speed
+                               || before.multishot != game->arena_.playerState().multishot
+                               || before.pierce != game->arena_.playerState().pierce
+                               || before.critChance != game->arena_.playerState().critChance
+                               || before.shockLevel != game->arena_.playerState().shockLevel,
                            QStringLiteral("upgrade changes a stat"));
 
         log(QStringLiteral("Boss and victory"));
@@ -247,11 +247,11 @@ public:
         game->waves_.start(8);
         game->waves_.queue_.clear();
         game->arena_.beginWave();
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("boss"),
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("boss"),
                                Math::Vec2(GameConfig::ScreenWidth / 2.0f, 220.0f), 8);
-        success &= require(game->arena_.combatants_.boss() != nullptr, QStringLiteral("boss spawns"));
-        game->arena_.combatants_.boss()->takeDamage(
-            game->arena_, arena::Damage{99999.0f, false, arena::DamageSource::Bullet});
+        success &= require(game->arena_.boss() != nullptr, QStringLiteral("boss spawns"));
+        game->arena_.boss()->takeDamage(
+            game->arena_.context(), arena::Damage{99999.0f, false, arena::DamageSource::Bullet});
         success &= require(game->arena_.bossDefeated(),
                            QStringLiteral("boss death is recorded"));
         simulate(*game, 3.0f, false);
@@ -278,11 +278,11 @@ public:
                                       == QStringLiteral("BOSS SIGNAL"),
                            QStringLiteral("middle boss banner is not the final wave"));
         game->waves_.queue_.clear();
-        game->arena_.combatants_.enemies().clear();
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("boss"),
+        game->arena_.enemies().clear();
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("boss"),
                                Math::Vec2(GameConfig::ScreenWidth / 2.0f, 220.0f), 2);
-        game->arena_.combatants_.boss()->takeDamage(
-            game->arena_, arena::Damage{99999.0f, false, arena::DamageSource::Bullet});
+        game->arena_.boss()->takeDamage(
+            game->arena_.context(), arena::Damage{99999.0f, false, arena::DamageSource::Bullet});
         game->update(1.0f / 60.0f);
         success &= require(game->state() == Games::State::Playing,
                            QStringLiteral("a boss in a middle wave does not end the run"));
@@ -294,9 +294,9 @@ public:
         log(QStringLiteral("Game over"));
         menu.startLevel(0);
         game = menu.match_.game();
-        game->arena_.combatants_.player().state.invuln = 0.0f;
-        game->arena_.combatants_.player().takeDamage(
-            game->arena_, arena::Damage{9999.0f, false, arena::DamageSource::Bullet});
+        game->arena_.player().state.invuln = 0.0f;
+        game->arena_.player().takeDamage(
+            game->arena_.context(), arena::Damage{9999.0f, false, arena::DamageSource::Bullet});
         game->update(1.0f / 60.0f);
         success &= require(game->state() == Games::State::Defeat,
                            QStringLiteral("lethal damage ends run"));
@@ -379,50 +379,50 @@ public:
         menu.mouseReleaseLeft();
         success &= require(menu.screen() == Menu::Screen::Settings,
                            QStringLiteral("settings button opens settings"));
-        menu.base_.setSoundVolume(0.5f);
-        menu.base_.setMusicVolume(0.5f);
+        BaseService.setSoundVolume(0.5f);
+        BaseService.setMusicVolume(0.5f);
         menu.keyPress(Qt::Key_Down);
         menu.keyPress(Qt::Key_Left);
-        success &= require(menu.base_.musicVolume() < 0.5f,
+        success &= require(BaseService.musicVolume() < 0.5f,
                            QStringLiteral("left lowers the music volume"));
         menu.keyPress(Qt::Key_Right);
-        success &= require(std::abs(menu.base_.musicVolume() - 0.5f) < 0.001f,
+        success &= require(std::abs(BaseService.musicVolume() - 0.5f) < 0.001f,
                            QStringLiteral("right raises the music volume"));
         menu.keyPress(Qt::Key_Up);
         menu.keyPress(Qt::Key_Left);
-        success &= require(menu.base_.soundVolume() < 0.5f,
+        success &= require(BaseService.soundVolume() < 0.5f,
                            QStringLiteral("left lowers the sound volume"));
         const QRectF musicTrack = menu.settings_.trackRect(1);
         menu.keyPress(Qt::Key_Down);
         menu.mousePressLeft({float(musicTrack.left()) + float(musicTrack.width()) * 0.25f,
                              float(musicTrack.center().y())});
         menu.mouseReleaseLeft();
-        success &= require(std::abs(menu.base_.musicVolume() - 0.25f) < 0.02f,
+        success &= require(std::abs(BaseService.musicVolume() - 0.25f) < 0.02f,
                            QStringLiteral("clicking the track sets the volume"));
         menu.keyPress(Qt::Key_Escape);
         success &= require(menu.screen() == Menu::Screen::Main,
                            QStringLiteral("escape leaves settings"));
 
         log(QStringLiteral("Score"));
-        const int wallet = menu.shop_.score().total();
-        menu.shop_.score().beginRun();
-        menu.shop_.score().addKill(120);
-        success &= require(menu.shop_.score().total() == wallet + 120
-                               && menu.shop_.score().run() == 120 && menu.shop_.score().kills() == 1,
+        const int wallet = ShopService.score().total();
+        ShopService.score().beginRun();
+        ShopService.score().addKill(120);
+        success &= require(ShopService.score().total() == wallet + 120
+                               && ShopService.score().run() == 120 && ShopService.score().kills() == 1,
                            QStringLiteral("kill adds to global wallet and run total"));
-        success &= require(menu.shop_.score().spend(50) && menu.shop_.score().total() == wallet + 70,
+        success &= require(ShopService.score().spend(50) && ShopService.score().total() == wallet + 70,
                            QStringLiteral("spend deducts from the wallet"));
-        success &= require(!menu.shop_.score().spend(999999),
+        success &= require(!ShopService.score().spend(999999),
                            QStringLiteral("overdraft is rejected"));
-        menu.shop_.score().beginRun();
-        success &= require(menu.shop_.score().kills() == 0 && menu.shop_.score().run() == 0
-                               && menu.shop_.score().total() == wallet + 70,
+        ShopService.score().beginRun();
+        success &= require(ShopService.score().kills() == 0 && ShopService.score().run() == 0
+                               && ShopService.score().total() == wallet + 70,
                            QStringLiteral("beginRun resets only the run stats"));
-        menu.shop_.score().total_ = wallet;   // 还原，避免测试改动持久化余额
+        ShopService.score().total_ = wallet;   // 还原，避免测试改动持久化余额
 
         log(QStringLiteral("Shop"));
-        menu.shop_.score().total_ = 500;
-        const int startMines = menu.shop_.inventory().mines();
+        ShopService.score().total_ = 500;
+        const int startMines = ShopService.inventory().mines();
         const QRectF shopButton = menu.main_.shopButtonRect();
         menu.mousePressLeft({float(shopButton.center().x()),
                              float(shopButton.center().y())});
@@ -431,8 +431,8 @@ public:
         const QRectF buyButton = menu.depot_.buyRect();
         menu.mousePressLeft({float(buyButton.center().x()),
                              float(buyButton.center().y())});
-        success &= require(menu.shop_.score().total() == 500 - data::kMine.price
-                               && menu.shop_.inventory().mines() == startMines + 1,
+        success &= require(ShopService.score().total() == 500 - data::kMine.price
+                               && ShopService.inventory().mines() == startMines + 1,
                            QStringLiteral("buying a mine spends score and adds stock"));
         menu.keyPress(Qt::Key_Escape);
         success &= require(menu.screen() == Menu::Screen::Main,
@@ -443,18 +443,18 @@ public:
         Games *mineGame = menu.match_.game();
         success &= require(mineGame != nullptr, QStringLiteral("mine test starts a run"));
         if (mineGame != nullptr) {
-            for (int i = 0; i < 240 && mineGame->arena_.combatants_.enemies().empty(); ++i) {
+            for (int i = 0; i < 240 && mineGame->arena_.enemies().empty(); ++i) {
                 mineGame->update(1.0f / 60.0f);
             }
-            success &= require(!mineGame->arena_.combatants_.enemies().empty(),
+            success &= require(!mineGame->arena_.enemies().empty(),
                                QStringLiteral("wave spawns enemies for the mine test"));
-            if (!mineGame->arena_.combatants_.enemies().empty()) {
-                arena::Enemy *victim = mineGame->arena_.combatants_.enemies().front().get();
+            if (!mineGame->arena_.enemies().empty()) {
+                arena::Enemy *victim = mineGame->arena_.enemies().front().get();
                 const Math::Vec2 spot = victim->pos;
-                const int stockBefore = menu.shop_.inventory().mines();
+                const int stockBefore = ShopService.inventory().mines();
                 menu.mousePressRight(spot);
                 success &= require(mineGame->arena_.mineCount() == 1
-                                       && menu.shop_.inventory().mines() == stockBefore - 1,
+                                       && ShopService.inventory().mines() == stockBefore - 1,
                                    QStringLiteral("right click places a mine"));
                 const int killsBefore = mineGame->kills();
                 for (int i = 0; i < 60 && mineGame->arena_.mineCount() > 0; ++i) {
@@ -524,8 +524,8 @@ public:
         save(QStringLiteral("title.png"));
 
         // 商店
-        menu.shop_.score().total_ = 2400;
-        menu.shop_.inventory().addMine(2);
+        ShopService.score().total_ = 2400;
+        ShopService.inventory().addMine(2);
         const QRectF shopEntry = menu.main_.shopButtonRect();
         movePointer({float(shopEntry.center().x()), float(shopEntry.center().y())});
         menu.mousePressLeft({float(shopEntry.center().x()),
@@ -566,17 +566,17 @@ public:
         game->waves_.start(4);
         game->waves_.queue_ = {QStringLiteral("drone"), QStringLiteral("spitter")};
         game->waves_.waveTotal_ = 17;
-        game->arena_.combatants_.enemies().clear();
-        game->arena_.entities_.portals().clear();
-        game->arena_.entities_.pickups().clear();
-        game->arena_.bullets_.player().clear();
-        game->arena_.bullets_.clearEnemy();
-        game->arena_.entities_.particles().clear();
-        game->arena_.entities_.floatingTexts().clear();
-        game->arena_.entities_.shockwaves().clear();
-        menu.shop_.score().total_ = 2840;
-        menu.shop_.score().kills_ = 31;
-        Arena::PlayerState &player = game->arena_.combatants_.player().state;
+        game->arena_.enemies().clear();
+        game->arena_.portals().clear();
+        game->arena_.pickups().clear();
+        game->arena_.playerBullets().clear();
+        game->arena_.clearEnemy();
+        game->arena_.particles().clear();
+        game->arena_.floatingTexts().clear();
+        game->arena_.shockwaves().clear();
+        ShopService.score().total_ = 2840;
+        ShopService.score().kills_ = 31;
+        Arena::PlayerState &player = game->arena_.player().state;
         player.pos = {475, 430};
         player.hp = 74;
         player.hpDisplay = 84;
@@ -584,50 +584,50 @@ public:
         player.invuln = 99.0f;
         movePointer({1010, 265});
 
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("drone"), {820, 285}, 4);
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("drone"), {960, 520}, 4);
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("drone"), {700, 165}, 4);
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("drone"), {1080, 360}, 4);
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("spitter"), {950, 210}, 4);
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("spitter"), {1120, 470}, 4);
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("tank"), {760, 445}, 4);
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("splitter"), {600, 210}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("drone"), {820, 285}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("drone"), {960, 520}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("drone"), {700, 165}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("drone"), {1080, 360}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("spitter"), {950, 210}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("spitter"), {1120, 470}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("tank"), {760, 445}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("splitter"), {600, 210}, 4);
         int enemyIndex = 0;
-        for (const auto &enemy : game->arena_.combatants_.enemies()) {
+        for (const auto &enemy : game->arena_.enemies()) {
             enemy->age = 2.0f + float(enemyIndex) * 0.3f;
             if (enemyIndex < 3) {
                 enemy->hp = enemy->maxHp * 0.55f;
             }
             ++enemyIndex;
         }
-        game->arena_.entities_.portals().emplace_back(QStringLiteral("spitter"),
+        game->arena_.portals().emplace_back(QStringLiteral("spitter"),
                                                      Math::Vec2(1160, 615), 4);
-        game->arena_.entities_.spawnPickup(game->arena_, {360, 315}, 16);
-        game->arena_.combatants_.player().shoot(game->arena_);
-        game->arena_.bullets_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(650, 360), Math::Vec2(900, -250), 12.5f, Base::Cyan, Bullet::Standpoint::Player, 3.2f));
-        game->arena_.bullets_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(590, 325), Math::Vec2(950, -180), 12.5f, Base::Cyan, Bullet::Standpoint::Player, 3.2f));
-        game->arena_.bullets_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(720, 400), Math::Vec2(880, -60), 12.5f, Base::Cyan, Bullet::Standpoint::Player, 3.2f));
-        game->arena_.bullets_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(850, 300), Math::Vec2(-420, 150), 11.0f, Base::Magenta, Bullet::Standpoint::Enemy, 4.0f));
-        game->arena_.bullets_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(1010, 510), Math::Vec2(-380, -90), 11.0f, Base::Magenta, Bullet::Standpoint::Enemy, 4.0f));
-        game->arena_.bullets_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(1090, 420), Math::Vec2(-440, -30), 13.0f, QColor(255, 112, 190), Bullet::Standpoint::Enemy, 5.0f));
-        game->arena_.entities_.spawnBurst(game->arena_, {860, 290}, Base::Coral, 14, 130.0f, 0.7f);
-        game->arena_.entities_.spawnBurst(game->arena_, {715, 400}, Base::Cyan, 8, 100.0f, 0.5f);
-        game->arena_.entities_.addShockwave({860, 290}, 48.0f, Base::Coral, 0.6f, 2);
+        game->arena_.spawnPickup(game->arena_.context(), {360, 315}, 16);
+        game->arena_.player().shoot(game->arena_.context());
+        game->arena_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(650, 360), Math::Vec2(900, -250), 12.5f, Base::Cyan, Bullet::Standpoint::Player, 3.2f));
+        game->arena_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(590, 325), Math::Vec2(950, -180), 12.5f, Base::Cyan, Bullet::Standpoint::Player, 3.2f));
+        game->arena_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(720, 400), Math::Vec2(880, -60), 12.5f, Base::Cyan, Bullet::Standpoint::Player, 3.2f));
+        game->arena_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(850, 300), Math::Vec2(-420, 150), 11.0f, Base::Magenta, Bullet::Standpoint::Enemy, 4.0f));
+        game->arena_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(1010, 510), Math::Vec2(-380, -90), 11.0f, Base::Magenta, Bullet::Standpoint::Enemy, 4.0f));
+        game->arena_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(1090, 420), Math::Vec2(-440, -30), 13.0f, QColor(255, 112, 190), Bullet::Standpoint::Enemy, 5.0f));
+        game->arena_.spawnBurst(game->arena_.context(), {860, 290}, Base::Coral, 14, 130.0f, 0.7f);
+        game->arena_.spawnBurst(game->arena_.context(), {715, 400}, Base::Cyan, 8, 100.0f, 0.5f);
+        game->arena_.addShockwave({860, 290}, 48.0f, Base::Coral, 0.6f, 2);
         game->renderer_.showBanner(QStringLiteral("第 4 波"),
                                   QStringLiteral("敌方信号正在接近"), 1.8f, Base::Cyan);
         game->renderer_.bannerTimer_ = 1.3f;
         game->arena_.placeMine(Math::Vec2(520, 430));
         save(QStringLiteral("gameplay.png"));
 
-        game->arena_.combatants_.enemies().clear();
-        game->arena_.entities_.portals().clear();
-        game->arena_.entities_.pickups().clear();
-        game->arena_.bullets_.player().clear();
-        game->arena_.bullets_.clearEnemy();
-        game->arena_.entities_.particles().clear();
-        game->arena_.entities_.floatingTexts().clear();
-        game->arena_.entities_.shockwaves().clear();
-        game->arena_.combatants_.player().state.pos = {585, 420};
+        game->arena_.enemies().clear();
+        game->arena_.portals().clear();
+        game->arena_.pickups().clear();
+        game->arena_.playerBullets().clear();
+        game->arena_.clearEnemy();
+        game->arena_.particles().clear();
+        game->arena_.floatingTexts().clear();
+        game->arena_.shockwaves().clear();
+        game->arena_.player().state.pos = {585, 420};
         game->waves_.start(4);
         game->waves_.queue_.clear();
         game->waves_.waveTotal_ = 15;
@@ -643,39 +643,39 @@ public:
         game->waves_.waveTotal_ = 16;
         game->arena_.beginWave();
         game->runTime_ = 304.0f;
-        menu.shop_.score().total_ = 9870;
-        menu.shop_.score().kills_ = 63;
-        game->arena_.combatants_.enemies().clear();
-        game->arena_.bullets_.player().clear();
-        game->arena_.bullets_.clearEnemy();
-        game->arena_.entities_.particles().clear();
-        game->arena_.entities_.shockwaves().clear();
-        Arena::PlayerState &bossPlayer = game->arena_.combatants_.player().state;
+        ShopService.score().total_ = 9870;
+        ShopService.score().kills_ = 63;
+        game->arena_.enemies().clear();
+        game->arena_.playerBullets().clear();
+        game->arena_.clearEnemy();
+        game->arena_.particles().clear();
+        game->arena_.shockwaves().clear();
+        Arena::PlayerState &bossPlayer = game->arena_.player().state;
         bossPlayer.pos = {430, 435};
         bossPlayer.hp = 58;
         bossPlayer.hpDisplay = 71;
         bossPlayer.aim = -0.25f;
         bossPlayer.invuln = 99.0f;
         movePointer({850, 380});
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("boss"), {870, 365}, 8);
-        game->arena_.combatants_.boss()->hp =
-            game->arena_.combatants_.boss()->maxHp * 0.63f;
-        game->arena_.combatants_.boss()->hpDisplay =
-            game->arena_.combatants_.boss()->maxHp * 0.74f;
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("drone"), {680, 250}, 8);
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("drone"), {740, 540}, 8);
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("tank"), {1020, 500}, 8);
-        game->arena_.combatants_.spawnEnemy(game->arena_, QStringLiteral("spitter"), {1100, 300}, 8);
-        game->arena_.entities_.spawnPickup(game->arena_, {330, 285}, 16);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("boss"), {870, 365}, 8);
+        game->arena_.boss()->hp =
+            game->arena_.boss()->maxHp * 0.63f;
+        game->arena_.boss()->hpDisplay =
+            game->arena_.boss()->maxHp * 0.74f;
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("drone"), {680, 250}, 8);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("drone"), {740, 540}, 8);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("tank"), {1020, 500}, 8);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("spitter"), {1100, 300}, 8);
+        game->arena_.spawnPickup(game->arena_.context(), {330, 285}, 16);
         for (int i = 0; i < 12; ++i) {
             const float angle = i * Math::Tau / 12.0f;
             const Math::Vec2 direction(std::cos(angle), std::sin(angle));
-            game->arena_.bullets_.submit(std::make_unique<arena::StandardBullet>(game->arena_.combatants_.boss()->pos + direction * 58.0f,
+            game->arena_.submit(std::make_unique<arena::StandardBullet>(game->arena_.boss()->pos + direction * 58.0f,
                 direction * 285.0f, 13.0f, Base::Magenta, Bullet::Standpoint::Enemy, 5.0f));
         }
         bossPlayer.fireFlash = 0.04f;
-        game->arena_.combatants_.player().shoot(game->arena_);
-        game->arena_.entities_.spawnBurst(game->arena_, game->arena_.combatants_.boss()->pos,
+        game->arena_.player().shoot(game->arena_.context());
+        game->arena_.spawnBurst(game->arena_.context(), game->arena_.boss()->pos,
                                          Base::Magenta, 12, 150.0f, 0.8f);
         game->renderer_.showBanner(QStringLiteral("最终波次"),
                                   QStringLiteral("警告：检测到「虚空吞噬者」"),
@@ -683,9 +683,9 @@ public:
         game->renderer_.bannerTimer_ = 0.0f;
         save(QStringLiteral("boss.png"));
 
-        if (game->arena_.combatants_.boss() != nullptr) {
-            game->arena_.combatants_.boss()->takeDamage(
-                game->arena_, arena::Damage{999999.0f, false, arena::DamageSource::Bullet});
+        if (game->arena_.boss() != nullptr) {
+            game->arena_.boss()->takeDamage(
+                game->arena_.context(), arena::Damage{999999.0f, false, arena::DamageSource::Bullet});
         }
         // 胜负由台本决定：Boss 被毁只是战果，最后一波清空才进入结算。
         game->triggerVictory();
@@ -702,12 +702,12 @@ public:
         game->waves_.queue_.clear();
         game->waves_.waveTotal_ = 12;
         game->runTime_ = 86.0f;
-        menu.shop_.score().total_ = 1240;
-        menu.shop_.score().kills_ = 17;
-        game->arena_.combatants_.player().state.hp = 8;
-        game->arena_.combatants_.player().state.invuln = 0.0f;
-        game->arena_.combatants_.player().takeDamage(
-            game->arena_, arena::Damage{20.0f, false, arena::DamageSource::Bullet});
+        ShopService.score().total_ = 1240;
+        ShopService.score().kills_ = 17;
+        game->arena_.player().state.hp = 8;
+        game->arena_.player().state.invuln = 0.0f;
+        game->arena_.player().takeDamage(
+            game->arena_.context(), arena::Damage{20.0f, false, arena::DamageSource::Bullet});
         for (int i = 0; i < 30; ++i) {
             game->update(1.0f / 60.0f);
         }

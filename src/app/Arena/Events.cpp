@@ -1,6 +1,7 @@
 #include "Events.h"
 
-#include "Arena/Arena.h"
+#include "Arena/Context.h"
+#include "Arena/Host.h"
 #include "Arena/Bullets/Bullets.h"
 #include "Arena/Combatants/Combatants.h"
 #include "Arena/Entities/Entities.h"
@@ -12,7 +13,7 @@
 #include "Data/GameData.h"
 #include "GameConfig.h"
 #include "Random.h"
-#include "Shop/Score/Score.h"
+#include "Shop/Shop.h"
 #include "Base/Base.h"
 
 #include <algorithm>
@@ -22,19 +23,19 @@
 
 namespace arena {
 
-void Events::resolvePlayerBullets(Arena &arena)
+void Events::resolvePlayerBullets(const Context &ctx)
 {
-    for (auto &owned : arena.bullets_.player()) {
+    for (auto &owned : ctx.bullets.playerBullets()) {
         Bullet &bullet = *owned;
         if (!bullet.alive()) {
             continue;
         }
-        const size_t count = arena.combatants_.enemies().size();
+        const size_t count = ctx.combatants.enemies().size();
         for (size_t i = 0; i < count; ++i) {
-            if (i >= arena.combatants_.enemies().size()) {
+            if (i >= ctx.combatants.enemies().size()) {
                 break;
             }
-            Enemy *enemy = arena.combatants_.enemies()[i].get();
+            Enemy *enemy = ctx.combatants.enemies()[i].get();
             Fighter &fighter = *enemy;
             if (!fighter.isAlive()) {
                 continue;
@@ -45,25 +46,25 @@ void Events::resolvePlayerBullets(Arena &arena)
                 continue;
             }
             // 命中结算（伤害/暴击/穿透）由子弹自己处理；返回 false 表示这颗弹结束。
-            if (!bullet.hit(arena, fighter)) {
+            if (!bullet.hit(ctx, fighter)) {
                 break;
             }
         }
-        if (arena.state_.playerDefeated()) {
+        if (ctx.state.playerDefeated()) {
             break;
         }
     }
-    arena.bullets_.cleanup();
+    ctx.bullets.cleanup();
 }
 
-void Events::resolveEnemyBullets(Arena &arena)
+void Events::resolveEnemyBullets(const Context &ctx)
 {
-    Player &player = arena.combatants_.player();
+    Player &player = ctx.combatants.player();
     if (!player.isAlive()) {
-        arena.bullets_.cleanup();
+        ctx.bullets.cleanup();
         return;
     }
-    for (auto &owned : arena.bullets_.enemy()) {
+    for (auto &owned : ctx.bullets.enemyBullets()) {
         Bullet &bullet = *owned;
         if (!bullet.alive()) {
             continue;
@@ -74,60 +75,60 @@ void Events::resolveEnemyBullets(Arena &arena)
             continue;
         }
         if (player.state.invuln > 0.0f) {
-            arena.entities_.spawnBurst(arena, bullet.position(), Base::Cyan, 5, 80.0f,
-                                       0.25f);
+            ctx.entities.spawnBurst(ctx, bullet.position(), Base::Cyan, 5, 80.0f,
+                                    0.25f);
         }
-        bullet.hit(arena, player);
-        if (arena.state_.playerDefeated()) {
+        bullet.hit(ctx, player);
+        if (ctx.state.playerDefeated()) {
             break;
         }
     }
-    arena.bullets_.cleanup();
+    ctx.bullets.cleanup();
 }
 
-void Events::resolveMines(Arena &arena)
+void Events::resolveMines(const Context &ctx)
 {
-    for (Mine &mine : arena.entities_.mines()) {
+    for (Mine &mine : ctx.entities.mines()) {
         if (!mine.alive || mine.age < mine.armTime) {
             continue;
         }
-        for (const auto &enemy : arena.combatants_.enemies()) {
+        for (const auto &enemy : ctx.combatants.enemies()) {
             if (!enemy->alive) {
                 continue;
             }
             if (mine.pos.distanceTo(enemy->pos) > mine.triggerRadius + enemy->radius) {
                 continue;
             }
-            detonateMine(arena, mine);
+            detonateMine(ctx, mine);
             break;
         }
     }
-    arena.entities_.cleanup();
+    ctx.entities.cleanup();
 }
 
-void Events::detonateMine(Arena &arena, Mine &mine)
+void Events::detonateMine(const Context &ctx, Mine &mine)
 {
     mine.alive = false;
-    for (const auto &enemy : arena.combatants_.enemies()) {
+    for (const auto &enemy : ctx.combatants.enemies()) {
         if (!enemy->alive) {
             continue;
         }
         if (mine.pos.distanceTo(enemy->pos) > mine.blastRadius + enemy->radius) {
             continue;
         }
-        enemy->takeDamage(arena, Damage{data::kMine.damage, false, DamageSource::Shock});
+        enemy->takeDamage(ctx, Damage{data::kMine.damage, false, DamageSource::Shock});
     }
-    arena.entities_.spawnBurst(arena, mine.pos, Base::Amber, 30, 230.0f, 0.7f);
-    arena.entities_.addShockwave(mine.pos, mine.blastRadius, Base::Amber, 0.5f, 3);
-    arena.addFeedback(Base::Amber, 42, 8.0f);
-    arena.base_.playSound(QStringLiteral("explode"));
+    ctx.entities.spawnBurst(ctx, mine.pos, Base::Amber, 30, 230.0f, 0.7f);
+    ctx.entities.addShockwave(mine.pos, mine.blastRadius, Base::Amber, 0.5f, 3);
+    ctx.host.addFeedback(Base::Amber, 42, 8.0f);
+    BaseService.playSound(QStringLiteral("explode"));
 }
 
-void Events::separateEnemies(Arena &arena)
+void Events::separateEnemies(const Context &ctx)
 {
     std::vector<Enemy *> alive;
-    alive.reserve(arena.combatants_.enemies().size());
-    for (const auto &enemy : arena.combatants_.enemies()) {
+    alive.reserve(ctx.combatants.enemies().size());
+    for (const auto &enemy : ctx.combatants.enemies()) {
         if (enemy->isAlive()) {
             alive.push_back(enemy.get());
         }
@@ -164,13 +165,13 @@ void Events::separateEnemies(Arena &arena)
     }
 }
 
-void Events::contactDamage(Arena &arena)
+void Events::contactDamage(const Context &ctx)
 {
-    Player &player = arena.combatants_.player();
+    Player &player = ctx.combatants.player();
     if (!player.isAlive() || player.state.invuln > 0.0f) {
         return;
     }
-    for (const auto &enemy : arena.combatants_.enemies()) {
+    for (const auto &enemy : ctx.combatants.enemies()) {
         if (!enemy->isAlive()) {
             continue;
         }
@@ -178,7 +179,7 @@ void Events::contactDamage(Arena &arena)
         const Math::Vec2 delta = player.position() - fighter.position();
         const float minimum = player.state.radius + fighter.collisionRadius();
         if (delta.lengthSquared() <= minimum * minimum) {
-            player.takeDamage(arena, Damage{fighter.contactDamage(), false,
+            player.takeDamage(ctx, Damage{fighter.contactDamage(), false,
                                             DamageSource::Contact});
             if (delta.lengthSquared() > 0.001f) {
                 const Math::Vec2 direction = delta.normalized();
@@ -196,42 +197,42 @@ void Events::contactDamage(Arena &arena)
     }
 }
 
-void Events::handleKill(Arena &arena, Enemy &enemy)
+void Events::handleKill(const Context &ctx, Enemy &enemy)
 {
     if (!enemy.alive) {
         return;
     }
     enemy.alive = false;
-    arena.score_.addKill(enemy.score);
-    arena.entities_.spawnBurst(arena, enemy.pos, enemy.color,
-                               enemy.boss ? 32 : 14,
-                               enemy.boss ? 240.0f : 150.0f, 0.65f);
-    arena.entities_.addShockwave(enemy.pos, enemy.boss ? 170.0f : 70.0f,
-                                 enemy.color, 0.45f, 2);
-    arena.base_.playSound(QStringLiteral("kill"));
+    ShopService.score().addKill(enemy.score);
+    ctx.entities.spawnBurst(ctx, enemy.pos, enemy.color,
+                            enemy.boss ? 32 : 14,
+                            enemy.boss ? 240.0f : 150.0f, 0.65f);
+    ctx.entities.addShockwave(enemy.pos, enemy.boss ? 170.0f : 70.0f,
+                              enemy.color, 0.45f, 2);
+    BaseService.playSound(QStringLiteral("kill"));
 
     if (enemy.kind == QStringLiteral("splitter")) {
         for (int side = -1; side <= 1; side += 2) {
             const Math::Vec2 offset(float(side) * 18.0f,
-                                    arena.random_.real(-12.0f, 12.0f));
+                                    RandomService.real(-12.0f, 12.0f));
             auto child = std::make_unique<Enemy>(QStringLiteral("mini"),
                                                  enemy.pos + offset,
-                                                 enemy.wave, arena.random_);
-            arena.entities_.spawnBurst(arena, child->pos, child->color, 6, 90.0f, 0.3f);
-            arena.combatants_.enemies().push_back(std::move(child));
+                                                 enemy.wave);
+            ctx.entities.spawnBurst(ctx, child->pos, child->color, 6, 90.0f, 0.3f);
+            ctx.combatants.enemies().push_back(std::move(child));
         }
     }
 
     if (enemy.boss) {
-        arena.base_.playSound(QStringLiteral("boss"));
+        BaseService.playSound(QStringLiteral("boss"));
         for (int i = 0; i < 4; ++i) {
-            arena.entities_.spawnPickup(
-                arena,
-                enemy.pos + Math::Vec2(arena.random_.real(-55.0f, 55.0f),
-                                       arena.random_.real(-55.0f, 55.0f)),
+            ctx.entities.spawnPickup(
+                ctx,
+                enemy.pos + Math::Vec2(RandomService.real(-55.0f, 55.0f),
+                                       RandomService.real(-55.0f, 55.0f)),
                 20);
         }
-        arena.state_.markBossDefeated();
+        ctx.state.markBossDefeated();
         return;
     }
 
@@ -247,9 +248,9 @@ void Events::handleKill(Arena &arena, Enemy &enemy)
     } else if (enemy.kind == QStringLiteral("splitter")) {
         dropChance = 0.14f;
     }
-    if (arena.random_.real(0.0f, 1.0f) < dropChance) {
-        arena.entities_.spawnPickup(arena, enemy.pos,
-                                    enemy.kind == QStringLiteral("tank") ? 22 : 16);
+    if (RandomService.real(0.0f, 1.0f) < dropChance) {
+        ctx.entities.spawnPickup(ctx, enemy.pos,
+                                 enemy.kind == QStringLiteral("tank") ? 22 : 16);
     }
 }
 

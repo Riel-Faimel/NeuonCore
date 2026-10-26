@@ -8,8 +8,6 @@
 #include <vector>
 
 class Arena;
-class Base;
-class Random;
 class SelfTest;
 
 namespace games {
@@ -30,7 +28,7 @@ public:
         float value = 0.0f;  // 本轮掷出的实际数值
     };
 
-    Upgrades(Random &random, Arena &arena, Base &base);
+    Upgrades(Arena &arena);
 
     void reset();
     bool open();
@@ -59,9 +57,7 @@ private:
     static QString valueLabel(std::string_view key, float value);
     void applyEffect(const Offer &offer);
 
-    Random &random_;
     Arena &arena_;
-    Base &base_;
     QHash<QString, int> counts_;
     std::vector<Offer> offers_;
     bool open_ = false;

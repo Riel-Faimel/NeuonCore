@@ -7,7 +7,6 @@
 #include <QRectF>
 #include <QString>
 
-class Base;
 class QPainter;
 
 namespace menu {
@@ -27,8 +26,8 @@ public:
 
     void reset();
     void prepare();   // 进入编辑器前把选中行列夹到合法范围
-    Action keyPress(int key, Base &base);
-    Action mousePress(const Math::Vec2 &position, Base &base);
+    Action keyPress(int key);
+    Action mousePress(const Math::Vec2 &position);
 
     void render(QPainter &painter, bool muted) const;
 
@@ -59,9 +58,9 @@ private:
     static QString enemyKind(int column);
     void setEnemyCount(int row, int column, int count);
     void setWaveBoss(int row, bool on);
-    void adjustCell(int delta, Base &base);
-    void addWave(Base &base);
-    void removeWave(Base &base);
+    void adjustCell(int delta);
+    void addWave();
+    void removeWave();
 
     QRectF rowRect(int row) const;
     QRectF cellRect(int row, int column) const;

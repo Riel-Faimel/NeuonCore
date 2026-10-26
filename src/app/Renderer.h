@@ -14,9 +14,7 @@
 #include <vector>
 
 class Arena;
-class Base;
 class Games;
-class Random;
 
 namespace games {
 class Upgrades;
@@ -29,7 +27,7 @@ class Waves;
 // 暴露：渲染一帧、frame、表现反馈（shake/flash/banner）、强化卡命中测试。
 class Renderer {
 public:
-    Renderer(Random &random, Base &base);
+    Renderer();
 
     void initialize();
     void update(float dt);
@@ -84,8 +82,6 @@ private:
     void drawPauseOverlay(QPainter &painter, const Arena &arena, const games::Waves &waves);
     QRectF cardRect(int index) const;
 
-    Random &random_;
-    Base &base_;
     QImage background_;
     QImage vignette_;
     QImage world_;

@@ -140,9 +140,11 @@ cpp/
 ├─ src/
 │  ├─ app/
 │  │  ├─ Arena/
-│  │  │  ├─ Arena.h / Arena.cpp   模块入口：组合 5 个组件
+│  │  │  ├─ Arena.h / Arena.cpp   模块入口：私有继承 5 个组件 + 编排
+│  │  │  ├─ Context.h             组件之间共享的引用集合（Arena 注入，模块内部）
+│  │  │  ├─ Host.h                组件 → 模块的回调接口（虚函数，Arena 实现）
 │  │  │  ├─ Events.h / Events.cpp 组件：碰撞 + 击杀（单个 class）
-│  │  │  ├─ State.h / State.cpp   组件：Boss 阶段 + 分数 + 玩家失败
+│  │  │  ├─ State.h / State.cpp   组件：Boss 阶段 + 玩家失败
 │  │  │  ├─ Bullets/
 │  │  │  │  ├─ Bullets.h/.cpp     组件：子弹池（Bullet 纯虚接口）
 │  │  │  │  └─ StandardBullet.h/.cpp 标准弹实现
@@ -156,7 +158,7 @@ cpp/
 │  │  │     ├─ Portal / Pickup
 │  │  │     └─ Particle / FloatingText / Shockwave
 │  │  ├─ Base/
-│  │  │  ├─ Base.h / Base.cpp     模块入口：组合 Input / Audio / Paint
+│  │  │  ├─ Base.h / Base.cpp     模块入口：组合 Input / Audio / Music / Paint；含全局单例 BaseService
 │  │  │  ├─ Input/Input.h/.cpp    组件：键鼠状态
 │  │  │  ├─ Audio/Audio.h/.cpp    组件：程序化 WAV 音效
 │  │  │  ├─ Audio/Music.h/.cpp    组件：背景音乐管理器（常驻）
@@ -178,7 +180,7 @@ cpp/
 │  │  │  └─ Inventory/Inventory.h/.cpp 组件：地雷库存（持久化）
 │  │  ├─ Pointer.h / Pointer.cpp  全局鼠标指针（窗口每帧叠加）
 │  │  ├─ app.rc                   Windows 资源：嵌入应用图标
-│  │  └─ main.cpp                 QWidget 窗口、输入桥接、release 入口
+│  │  └─ main.cpp                 QWidget 窗口、输入桥接、全局服务初始化、release 入口
 │  ├─ Data/GameData.h             编译期数值表（展开自 src/json）
 │  ├─ lib/
 │  │  ├─ Math.h / Math.cpp        向量与几何
@@ -210,19 +212,19 @@ cpp/
 └─ dist/NeonCore/                 交付用 release GUI + 运行库
 ```
 
-`src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Music`、`Paint` 四个 `namespace base` 组件。`Base.h` 仍只暴露 Base 的输入/音频/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Music` 的 QMediaPlayer、`Paint` 的 QFontDatabase 细节都在各自组件内。
+`src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Music`、`Paint` 四个 `namespace base` 组件。`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），Menu / Games / Arena / Renderer / Shop 都直接调用 `BaseService`，不再通过构造函数传递 `Base&`。`Base.h` 仍只暴露 Base 的输入/音频/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Music` 的 QMediaPlayer、`Paint` 的 QFontDatabase 细节都在各自组件内。字体由 `main()` 在 `QApplication` 之后调 `Base::initialize()`；音频由 `BaseService.initAudio()` 按需初始化，`main()` 退出前调 `BaseService.shutdown()` 释放 Qt 音频对象。
 
-`src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades` 两个 `namespace games` 组件，并拥有 `Random`、`Arena`、`Renderer`。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Games` 负责局内状态机和调用顺序。
+`src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades` 两个 `namespace games` 组件，并拥有 `Arena`、`Renderer`。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Games` 负责局内状态机和调用顺序。随机数走全局 `RandomService`，不再作为构造参数传入。
 
-积分和库存由全局模块 `Shop` 持有（`Menu` 进程级成员，`Games` 以引用拿到）：`Shop` 组合 `shop::Score`（跨局钱包，写入 `settings.ini` 的 `[score] total`）和 `shop::Inventory`（地雷库存，写入 `[inventory] mines`）。`arena::Events::handleKill()` 击杀上报积分；HUD 显示全局钱包，结算显示本局获得（`runScore()`）；`Shop::buyMine()` 负责扣款入库。
+积分和库存由进程级单例 `ShopService` 持有（`extern Shop ShopService;`）：`Shop` 组合 `shop::Score`（跨局钱包，写入 `settings.ini` 的 `[score] total`）和 `shop::Inventory`（地雷库存，写入 `[inventory] mines`）。`main()` 启动时调 `ShopService.load()`、退出前调 `ShopService.save()`；`arena::Events::handleKill()` 击杀上报积分；HUD 显示全局钱包，结算显示本局获得（`runScore()`）；`Shop::buyMine()` 负责扣款入库。
 
-`src/app/Shop/` 和 `Arena/` 同构：`Shop` 是全局模块类，组合 `Score`（全局钱包/本局统计）和 `Inventory`（地雷库存）两个 `namespace shop` 组件，负责 `load()/save()` 与 `buyMine()`；补给站界面是 `menu::Depot`，只展示和调用接口，不直接改数据。
+`src/app/Shop/` 和 `Arena/` 同构：`Shop` 是全局模块类（进程级单例 `ShopService`），组合 `Score`（全局钱包/本局统计）和 `Inventory`（地雷库存）两个 `namespace shop` 组件，负责 `load()/save()` 与 `buyMine()`；补给站界面是 `menu::Depot`，只展示和调用接口，不直接改数据。
 
-`src/app/Menu/` 和 `Arena/` 同构：`Menu` 只持有进程级的 `Base`、关卡表、当前屏幕和输入路由，五个界面是 `namespace menu` 组件——`Main`（标题/关卡卡/设置入口）、`Match`（持有这一局的 `Games`）、`Result`（只读 `Summary` 的结算层）、`Editor`（持有自定义台本）、`Settings`（音量 + `settings.ini`）。组件把玩家意图作为 `Action` 交回 `Menu`，`Menu` 负责开局、进编辑器和回主菜单；“自定义协议”点开即进编辑器，逐波编辑台本（1–12 波、四种敌人数量、单 Boss），部署时由 `Menu` 把 `Editor::script()` 写进 `Level.script` 交给 `Match`。
+`src/app/Menu/` 和 `Arena/` 同构：`Menu` 只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop` 都是全局单例，不在 `Menu` 里），六个界面是 `namespace menu` 组件——`Main`（标题/关卡卡/设置入口）、`Match`（持有这一局的 `Games`）、`Result`（只读 `Summary` 的结算层）、`Editor`（持有自定义台本）、`Depot`（补给站/商店）、`Settings`（音量 + `settings.ini`）。组件把玩家意图作为 `Action` 交回 `Menu`，`Menu` 负责开局、进编辑器和回主菜单；“自定义协议”点开即进编辑器，逐波编辑台本（1–12 波、四种敌人数量、单 Boss），部署时由 `Menu` 把 `Editor::script()` 写进 `Level.script` 交给 `Match`。
 
-`src/app/Arena/` 是模块目录：`Arena` 是全局模块类，组合 `Bullets`、`Combatants`、`Entities`、`Events`、`State` 五个 `namespace arena` 组件。`Bullet` 是 `src/include/Bullet.h` 里的全局纯虚接口，具体弹种（目前是 `StandardBullet`）在 `Arena/Bullets/`；发射方只 `submit()` 对象，推进、回收和绘制都由池统一做。`Fighter` 也放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段和玩家失败（积分在全局模块 `Shop` 的 `Score` 组件）。
+`src/app/Arena/` 是模块目录：`Arena` 是全局模块类，**私有继承** `Bullets`、`Combatants`、`Entities`、`Events`、`State` 五个 `namespace arena` 组件。私有继承意味着这些组件是 `Arena` 的实现细节：外部只能调用 `Arena` 自己声明的接口（`beginWave/update/draw/placeMine/playerState/bossInfo/clear*/celebrate*/takeFeedback` 等），看不到 `enemies()`、`submit()`、`player()` 这类组件方法。组件之间通过 `Arena/Context.h` 的 `arena::Context` 协作——`Arena` 调用组件时把 `Host&` 和 5 个兄弟组件引用显式注入，组件头文件因此不需要知道 `Arena`；组件 → 模块的反馈（闪屏/震屏）通过 `Arena/Host.h` 的 `arena::Host` 虚接口回调 `Arena::addFeedback()`。`Bullet` 是 `src/include/Bullet.h` 里的全局纯虚接口，具体弹种（目前是 `StandardBullet`）在 `Arena/Bullets/`；发射方只 `submit()` 对象，推进、回收和绘制都由池统一做。`Fighter` 也放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段和玩家失败（积分在 `ShopService` 的 `Score` 组件）。`SelfTest` 是 `Arena` 唯一保留的 friend（测试要直接摆局面）。
 
-`src/lib/` 放不依赖应用层的通用模块：`Math`（向量/几何）和 `Random`（可注入随机数）。
+`src/lib/` 放不依赖应用层的通用模块：`Math`（向量/几何）和 `Random`（可注入随机数，并提供全局 `RandomService`）。
 
 渲染使用 Qt 的 `QPainter`：所有形状、发光、粒子、文字和 UI 都由代码绘制，不加载外部图片。音效由代码生成 WAV 后通过 `QSoundEffect` 播放。
 

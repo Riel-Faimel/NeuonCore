@@ -1,6 +1,7 @@
 #include "Menu/Menu.h"
 #include "Base/Base.h"
 #include "Pointer.h"
+#include "Shop/Shop.h"
 
 #include <QApplication>
 #include <QDir>
@@ -249,12 +250,24 @@ int main(int argc, char *argv[])
     QApplication::setApplicationName(QStringLiteral("NeonCore"));
     QApplication::setOrganizationName(QStringLiteral("NeonCore"));
 
+    // 全局服务：字体/颜色等绘制资源必须在 QGuiApplication 之后初始化。
+    // 音频（QSoundEffect / QMediaPlayer）由 Menu 按需调用 BaseService.initAudio()。
+    Base::initialize();
+    // Shop 的存档由 main 负责：启动读一次，退出前写一次。
+    ShopService.load();
+
 #ifdef DEBUG
     if (smoke) {
-        return SelfTest::run();
+        const int code = SelfTest::run();
+        ShopService.save();
+        BaseService.shutdown();
+        return code;
     }
     if (capture) {
-        return SelfTest::capture(captureDirectory);
+        const int code = SelfTest::capture(captureDirectory);
+        ShopService.save();
+        BaseService.shutdown();
+        return code;
     }
 
     if (windowTest) {
@@ -273,13 +286,21 @@ int main(int argc, char *argv[])
             const QPixmap shot = window.grab();
             QApplication::exit(shot.save(windowShot) ? 0 : 2);
         });
-        return app.exec();
+        const int code = app.exec();
+        ShopService.save();
+        BaseService.shutdown();
+        return code;
     }
 #endif
 
     GameWindow window;
     window.show();
-    return app.exec();
+    const int code = app.exec();
+    // BaseService 是全局对象，析构发生在 QApplication 之后；
+    // 先把音频对象在应用还活着时释放掉。
+    ShopService.save();
+    BaseService.shutdown();
+    return code;
 }
 
 #ifdef Q_OS_WIN

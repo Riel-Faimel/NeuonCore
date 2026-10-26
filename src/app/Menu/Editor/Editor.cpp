@@ -107,14 +107,14 @@ void Editor::setWaveBoss(int row, bool on)
     }
 }
 
-void Editor::adjustCell(int delta, Base &base)
+void Editor::adjustCell(int delta)
 {
     if (delta == 0) {
         return;
     }
     if (column_ == 4) {
         setWaveBoss(row_, !waveHasBoss(row_));
-        base.playSound(QStringLiteral("ui"));
+        BaseService.playSound(QStringLiteral("ui"));
         return;
     }
     const int current = enemyCount(row_, column_);
@@ -123,10 +123,10 @@ void Editor::adjustCell(int delta, Base &base)
         return;
     }
     setEnemyCount(row_, column_, next);
-    base.playSound(QStringLiteral("ui"));
+    BaseService.playSound(QStringLiteral("ui"));
 }
 
-void Editor::addWave(Base &base)
+void Editor::addWave()
 {
     if (waveCount() >= MaxWaves) {
         return;
@@ -142,17 +142,17 @@ void Editor::addWave(Base &base)
     }
     script_.push_back(wave);
     row_ = waveCount() - 1;
-    base.playSound(QStringLiteral("ui"));
+    BaseService.playSound(QStringLiteral("ui"));
 }
 
-void Editor::removeWave(Base &base)
+void Editor::removeWave()
 {
     if (waveCount() <= 1) {
         return;
     }
     script_.pop_back();
     row_ = std::min(row_, waveCount() - 1);
-    base.playSound(QStringLiteral("ui"));
+    BaseService.playSound(QStringLiteral("ui"));
 }
 
 int Editor::totalEnemies() const
@@ -166,7 +166,7 @@ int Editor::totalEnemies() const
     return total;
 }
 
-Editor::Action Editor::keyPress(int key, Base &base)
+Editor::Action Editor::keyPress(int key)
 {
     if (key == Qt::Key_Up || key == Qt::Key_W) {
         row_ = std::max(0, row_ - 1);
@@ -177,13 +177,13 @@ Editor::Action Editor::keyPress(int key, Base &base)
     } else if (key == Qt::Key_Right || key == Qt::Key_D) {
         column_ = std::min(Columns - 1, column_ + 1);
     } else if (key == Qt::Key_Plus || key == Qt::Key_Equal) {
-        adjustCell(1, base);
+        adjustCell(1);
     } else if (key == Qt::Key_Minus) {
-        adjustCell(-1, base);
+        adjustCell(-1);
     } else if (key == Qt::Key_N) {
-        addWave(base);
+        addWave();
     } else if (key == Qt::Key_X) {
-        removeWave(base);
+        removeWave();
     } else if (key == Qt::Key_Return || key == Qt::Key_Enter) {
         return Action::Deploy;
     } else if (key == Qt::Key_Escape || key == Qt::Key_Q) {
@@ -192,7 +192,7 @@ Editor::Action Editor::keyPress(int key, Base &base)
     return Action::None;
 }
 
-Editor::Action Editor::mousePress(const Math::Vec2 &position, Base &base)
+Editor::Action Editor::mousePress(const Math::Vec2 &position)
 {
     const QPointF point(position.x, position.y);
     if (backRect().contains(point)) {
@@ -202,19 +202,19 @@ Editor::Action Editor::mousePress(const Math::Vec2 &position, Base &base)
         return Action::Deploy;
     }
     if (addWaveRect().contains(point)) {
-        addWave(base);
+        addWave();
         return Action::None;
     }
     if (removeWaveRect().contains(point)) {
-        removeWave(base);
+        removeWave();
         return Action::None;
     }
     if (column_ < 4 && minusRect().contains(point)) {
-        adjustCell(-1, base);
+        adjustCell(-1);
         return Action::None;
     }
     if (column_ < 4 && plusRect().contains(point)) {
-        adjustCell(1, base);
+        adjustCell(1);
         return Action::None;
     }
     for (int row = 0; row < waveCount(); ++row) {
@@ -226,7 +226,7 @@ Editor::Action Editor::mousePress(const Math::Vec2 &position, Base &base)
             column_ = column;
             if (column == 4) {
                 // BOSS 列整格就是开关。
-                adjustCell(1, base);
+                adjustCell(1);
             }
             return Action::None;
         }

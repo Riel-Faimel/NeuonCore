@@ -26,8 +26,10 @@ public:
     int playerCount() const { return int(player_.size()); }
     int enemyCount() const { return int(enemy_.size()); }
 
-    std::vector<std::unique_ptr<Bullet>> &player() { return player_; }
-    std::vector<std::unique_ptr<Bullet>> &enemy() { return enemy_; }
+    // 名字不能叫 player()/enemy()：Arena 同时继承 Combatants，
+    // 而 Combatants::player() 返回 Player&，会形成二义性。
+    std::vector<std::unique_ptr<Bullet>> &playerBullets() { return player_; }
+    std::vector<std::unique_ptr<Bullet>> &enemyBullets() { return enemy_; }
 
 private:
     static void compact(std::vector<std::unique_ptr<Bullet>> &bullets);

@@ -4,7 +4,6 @@
 
 #include <QRectF>
 
-class Base;
 class QPainter;
 
 namespace menu {
@@ -21,12 +20,12 @@ public:
     explicit Settings(bool persistent = true);
 
     void reset();
-    void load(Base &base);
-    Action keyPress(int key, Base &base);
-    Action mousePress(const Math::Vec2 &position, Base &base);
-    void mouseMove(const Math::Vec2 &position, Base &base);
+    void load();
+    Action keyPress(int key);
+    Action mousePress(const Math::Vec2 &position);
+    void mouseMove(const Math::Vec2 &position);
     void mouseRelease();
-    void render(QPainter &painter, const Base &base) const;
+    void render(QPainter &painter) const;
 
     int row() const { return row_; }
     QRectF rowRect(int row) const;
@@ -35,9 +34,9 @@ public:
 
 private:
     static QString path();
-    void adjust(int row, float delta, Base &base);
-    void setFromPointer(const Math::Vec2 &position, Base &base);
-    void save(const Base &base) const;
+    void adjust(int row, float delta);
+    void setFromPointer(const Math::Vec2 &position);
+    void save() const;
 
     bool persistent_ = true;
     int row_ = 0;

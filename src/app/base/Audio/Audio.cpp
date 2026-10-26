@@ -230,6 +230,17 @@ void Audio::init()
     io.audioEnabled = !io.pools.isEmpty();
 }
 
+void Audio::shutdown()
+{
+    Impl &io = *impl_;
+    if (!io.audioInitialized && io.pools.isEmpty()) {
+        return;
+    }
+    io.logEvent(QStringLiteral("audio shutdown"));
+    io.clear();
+    io.audioInitialized = false;
+}
+
 void Audio::play(const QString &name)
 {
     Impl &io = *impl_;

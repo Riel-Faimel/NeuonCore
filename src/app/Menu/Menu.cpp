@@ -10,12 +10,12 @@
 
 Menu::Menu(bool enableAudio) : settings_(enableAudio)
 {
-    Base::initialize();
+    // 绘制资源（字体/颜色）由 main() 在 QApplication 之后统一初始化。
+    // Shop 也是进程级单例，由 main() 负责 load()/save()。
     audioRequested_ = enableAudio;
-    shop_.load();
     if (enableAudio) {
-        base_.initAudio();
-        settings_.load(base_);
+        BaseService.initAudio();
+        settings_.load();
     }
     frame_ = QImage(GameConfig::ScreenWidth, GameConfig::ScreenHeight,
                     QImage::Format_ARGB32_Premultiplied);
@@ -27,10 +27,7 @@ Menu::Menu(bool enableAudio) : settings_(enableAudio)
     };
 }
 
-Menu::~Menu()
-{
-    shop_.save();
-}
+Menu::~Menu() = default;
 
 // 台本是数据：src/json/waves.json 的 campaign 在编译期展开成常量，
 // 这里只是把它转成这一局要提交给 Games 的 games::Script。
@@ -123,14 +120,14 @@ void Menu::render()
     }
     QPainter painter(&frame_);
     if (screen_ == Screen::Editor) {
-        editor_.render(painter, base_.muted());
+        editor_.render(painter, BaseService.muted());
     } else if (screen_ == Screen::Shop) {
-        depot_.render(painter, shop_);
+        depot_.render(painter);
     } else if (screen_ == Screen::Settings) {
-        settings_.render(painter, base_);
+        settings_.render(painter);
     } else {
-        main_.render(painter, cards(), mouse_, mouseActive_, base_.muted(),
-                     audioRequested_ && !base_.audioEnabled());
+        main_.render(painter, cards(), mouse_, mouseActive_, BaseService.muted(),
+                     audioRequested_ && !BaseService.audioEnabled());
     }
 }
 
@@ -146,24 +143,23 @@ void Menu::startLevel(int index)
         level.script = editor_.script();
         level.startWave = 1;
     }
-    match_.start(level, base_, shop_);
+    match_.start(level);
     screen_ = Screen::Match;
-    base_.keyRelease(Qt::Key_Escape);
+    BaseService.keyRelease(Qt::Key_Escape);
 }
 
 void Menu::returnToMenu()
 {
     screen_ = Screen::Main;
     match_.stop();
-    shop_.save();
-    base_.clear();
+    BaseService.clear();
 }
 
 void Menu::openEditor()
 {
     editor_.prepare();
     screen_ = Screen::Editor;
-    base_.playSound(QStringLiteral("ui"));
+    BaseService.playSound(QStringLiteral("ui"));
 }
 
 void Menu::keyPress(int key, bool autoRepeat)
@@ -185,12 +181,12 @@ void Menu::keyPress(int key, bool autoRepeat)
         case menu::Main::Action::OpenShop:
             depot_.reset();
             screen_ = Screen::Shop;
-            base_.playSound(QStringLiteral("ui"));
+            BaseService.playSound(QStringLiteral("ui"));
             break;
         case menu::Main::Action::OpenSettings:
             settings_.reset();
             screen_ = Screen::Settings;
-            base_.playSound(QStringLiteral("ui"));
+            BaseService.playSound(QStringLiteral("ui"));
             break;
         case menu::Main::Action::None:
             break;
@@ -216,7 +212,7 @@ void Menu::keyPress(int key, bool autoRepeat)
         break;
     }
     case Screen::Editor: {
-        const menu::Editor::Action action = editor_.keyPress(key, base_);
+        const menu::Editor::Action action = editor_.keyPress(key);
         if (action == menu::Editor::Action::Deploy) {
             startLevel(CustomLevelIndex);
         } else if (action == menu::Editor::Action::Back) {
@@ -225,18 +221,18 @@ void Menu::keyPress(int key, bool autoRepeat)
         break;
     }
     case Screen::Shop: {
-        const menu::Depot::Action action = depot_.keyPress(key, shop_, base_);
+        const menu::Depot::Action action = depot_.keyPress(key);
         if (action == menu::Depot::Action::Back) {
             screen_ = Screen::Main;
-            base_.playSound(QStringLiteral("ui"));
+            BaseService.playSound(QStringLiteral("ui"));
         }
         break;
     }
     case Screen::Settings: {
-        const menu::Settings::Action action = settings_.keyPress(key, base_);
+        const menu::Settings::Action action = settings_.keyPress(key);
         if (action == menu::Settings::Action::Back) {
             screen_ = Screen::Main;
-            base_.playSound(QStringLiteral("ui"));
+            BaseService.playSound(QStringLiteral("ui"));
         }
         break;
     }
@@ -257,7 +253,7 @@ void Menu::mouseMove(const Math::Vec2 &position)
     if (screen_ == Screen::Match) {
         match_.mouseMove(position);
     } else if (screen_ == Screen::Settings) {
-        settings_.mouseMove(position, base_);
+        settings_.mouseMove(position);
     }
 }
 
@@ -278,12 +274,12 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
         case menu::Main::Action::OpenShop:
             depot_.reset();
             screen_ = Screen::Shop;
-            base_.playSound(QStringLiteral("ui"));
+            BaseService.playSound(QStringLiteral("ui"));
             break;
         case menu::Main::Action::OpenSettings:
             settings_.reset();
             screen_ = Screen::Settings;
-            base_.playSound(QStringLiteral("ui"));
+            BaseService.playSound(QStringLiteral("ui"));
             break;
         case menu::Main::Action::None:
             break;
@@ -303,7 +299,7 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
         break;
     }
     case Screen::Editor: {
-        const menu::Editor::Action action = editor_.mousePress(position, base_);
+        const menu::Editor::Action action = editor_.mousePress(position);
         if (action == menu::Editor::Action::Deploy) {
             startLevel(CustomLevelIndex);
         } else if (action == menu::Editor::Action::Back) {
@@ -313,18 +309,18 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
     }
     case Screen::Shop: {
         const menu::Depot::Action action =
-            depot_.mousePress(position, shop_, base_);
+            depot_.mousePress(position);
         if (action == menu::Depot::Action::Back) {
             screen_ = Screen::Main;
-            base_.playSound(QStringLiteral("ui"));
+            BaseService.playSound(QStringLiteral("ui"));
         }
         break;
     }
     case Screen::Settings: {
-        const menu::Settings::Action action = settings_.mousePress(position, base_);
+        const menu::Settings::Action action = settings_.mousePress(position);
         if (action == menu::Settings::Action::Back) {
             screen_ = Screen::Main;
-            base_.playSound(QStringLiteral("ui"));
+            BaseService.playSound(QStringLiteral("ui"));
         }
         break;
     }
@@ -348,12 +344,12 @@ void Menu::mouseReleaseLeft()
 
 void Menu::clearInput()
 {
-    base_.clear();
+    BaseService.clear();
 }
 
 void Menu::toggleMute()
 {
-    if (!base_.toggleMute()) {
-        base_.playSound(QStringLiteral("ui"));
+    if (!BaseService.toggleMute()) {
+        BaseService.playSound(QStringLiteral("ui"));
     }
 }

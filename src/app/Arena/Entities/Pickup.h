@@ -5,9 +5,9 @@
 #include <QColor>
 #include <QPainter>
 
-class Arena;
-
 namespace arena {
+
+struct Context;
 
 // 掉落实体：靠近玩家时被吸附并治疗。
 class Pickup {
@@ -22,7 +22,7 @@ public:
     float radius = 10.0f;
 
     Pickup(const Math::Vec2 &position, int healAmount);
-    void update(Arena &arena, float dt);
+    void update(const Context &ctx, float dt);
     void draw(QPainter &world, QPainter &glow) const;
 };
 

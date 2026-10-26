@@ -4,9 +4,8 @@
 
 #include <QPainter>
 
-class Arena;
-
 namespace arena {
+struct Context;
 class Fighter;
 }
 
@@ -26,7 +25,7 @@ public:
     // 样式绘制。
     virtual void draw(QPainter &world, QPainter &glow) const = 0;
     // 碰撞事件：命中目标后由子弹自己结算伤害/穿透等，返回 false 表示这颗弹到此结束。
-    virtual bool hit(Arena &arena, arena::Fighter &target) = 0;
+    virtual bool hit(const arena::Context &ctx, arena::Fighter &target) = 0;
 
     // 池用它检查是否回收（子弹通过 hit() 的返回值或自身寿命结束自己）。
     virtual bool alive() const = 0;

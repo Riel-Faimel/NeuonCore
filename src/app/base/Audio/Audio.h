@@ -17,6 +17,7 @@ public:
     Audio &operator=(const Audio &) = delete;
 
     void init();
+    void shutdown();
     void play(const QString &name);
     void setVolume(float volume);
     float volume() const;

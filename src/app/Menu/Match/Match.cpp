@@ -4,9 +4,9 @@
 
 namespace menu {
 
-void Match::start(const Games::Level &level, Base &base, Shop &shop)
+void Match::start(const Games::Level &level)
 {
-    games_ = std::make_unique<Games>(level, base, shop);
+    games_ = std::make_unique<Games>(level);
 }
 
 void Match::stop()

@@ -10,8 +10,8 @@
 
 namespace games {
 
-Upgrades::Upgrades(Random &random, Arena &arena, Base &base)
-    : random_(random), arena_(arena), base_(base)
+Upgrades::Upgrades(Arena &arena)
+    : arena_(arena)
 {
 }
 
@@ -59,7 +59,7 @@ const std::vector<Upgrades::Definition> &Upgrades::catalog()
 
 bool Upgrades::eligible(const Definition &definition) const
 {
-    const Arena::PlayerState &player = arena_.player();
+    const Arena::PlayerState &player = arena_.playerState();
     if (definition.key == "multi" && player.multishot >= 5) {
         return false;
     }
@@ -82,7 +82,7 @@ float Upgrades::rollValue(const Definition &definition) const
 {
     float value = definition.minValue;
     if (definition.maxValue > definition.minValue) {
-        value = random_.real(definition.minValue, definition.maxValue);
+        value = RandomService.real(definition.minValue, definition.maxValue);
     }
     if (definition.key == "maxhp") {
         return std::round(value);
@@ -161,7 +161,7 @@ bool Upgrades::open()
     if (pool.size() < 3) {
         pool = catalog();
     }
-    random_.shuffle(pool);
+    RandomService.shuffle(pool);
     if (pool.size() > 3) {
         pool.resize(3);
     }
@@ -182,7 +182,7 @@ bool Upgrades::open()
         offers_.push_back(offer);
     }
     open_ = true;
-    base_.playSound(QStringLiteral("upgrade"));
+    BaseService.playSound(QStringLiteral("upgrade"));
     return true;
 }
 
@@ -194,12 +194,12 @@ bool Upgrades::apply(int index)
     const Offer offer = offers_.at(size_t(index));
     applyEffect(offer);
     counts_[offer.key] += 1;
-    if (arena_.player().hp < arena_.player().maxHp) {
-        arena_.editablePlayer().hp = std::min(
-            arena_.player().maxHp, arena_.player().hp + 10.0f);
+    if (arena_.playerState().hp < arena_.playerState().maxHp) {
+        arena_.playerState().hp = std::min(
+            arena_.playerState().maxHp, arena_.playerState().hp + 10.0f);
     }
     arena_.celebrateUpgrade();
-    base_.playSound(QStringLiteral("upgrade"));
+    BaseService.playSound(QStringLiteral("upgrade"));
     offers_.clear();
     open_ = false;
     return true;
@@ -207,7 +207,7 @@ bool Upgrades::apply(int index)
 
 void Upgrades::applyEffect(const Offer &offer)
 {
-    Arena::PlayerState &player = arena_.editablePlayer();
+    Arena::PlayerState &player = arena_.playerState();
     const QString &key = offer.key;
     if (key == QStringLiteral("damage")) {
         player.damage *= 1.0f + offer.value;

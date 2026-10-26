@@ -1,106 +1,115 @@
 #include "Arena/Arena.h"
 
-#include "GameConfig.h"
-#include "Random.h"
-#include "Shop/Score/Score.h"
 #include "Base/Base.h"
+#include "GameConfig.h"
+#include "Shop/Shop.h"
 
 #include <algorithm>
 #include <array>
 
-Arena::Arena(Random &random, Base &base, shop::Score &score)
-    : random_(random), base_(base), score_(score)
+// 组件是私有基类：构造函数里它们已经就绪，这里只做一轮 reset。
+Arena::Arena()
 {
     reset();
 }
 
+Arena::~Arena() = default;
+
 int Arena::score() const
 {
-    return score_.total();
+    return ShopService.score().total();
 }
 
 int Arena::kills() const
 {
-    return score_.kills();
+    return ShopService.score().kills();
 }
 
-Arena::~Arena() = default;
+// Context 只保存组件引用；const 方法（draw）也要把可写引用交给组件的 const 绘制，
+// 组件不会修改状态，所以这里只做一次 const_cast。
+arena::Context Arena::context() const
+{
+    Arena &self = const_cast<Arena &>(*this);
+    return arena::Context{self, self, self, self, self, self};
+}
 
 void Arena::reset()
 {
-    bullets_.clear();
-    combatants_.reset();
-    entities_.reset();
-    state_.reset();
+    Bullets::clear();
+    Combatants::reset();
+    Entities::reset();
+    State::reset();
     feedback_ = Feedback{};
 }
 
 void Arena::beginWave()
 {
-    bullets_.clear();
-    entities_.clearMines();
-    combatants_.beginWave();
-    state_.beginWave();
-    entities_.spawnBurst(*this, combatants_.player().state.pos, Base::Cyan,
-                         14, 90.0f, 0.5f);
+    const arena::Context ctx = context();
+    Bullets::clear();
+    Entities::clearMines();
+    Combatants::beginWave();
+    State::beginWave();
+    Entities::spawnBurst(ctx, player().state.pos, Base::Cyan, 14, 90.0f, 0.5f);
 }
 
 void Arena::update(float dt)
 {
-    if (!combatants_.player().isAlive()) {
-        entities_.updateEffects(*this, dt);
+    const arena::Context ctx = context();
+    if (!player().isAlive()) {
+        Entities::updateEffects(ctx, dt);
         return;
     }
 
-    combatants_.updatePlayer(*this, dt);
-    if (state_.playerDefeated()) {
-        entities_.updateEffects(*this, dt);
+    Combatants::updatePlayer(ctx, dt);
+    if (State::playerDefeated()) {
+        Entities::updateEffects(ctx, dt);
         return;
     }
 
-    entities_.updatePortals(*this, dt);
-    bullets_.update(dt);
-    events_.resolvePlayerBullets(*this);
-    if (state_.playerDefeated()) {
-        entities_.updateEffects(*this, dt);
+    Entities::updatePortals(ctx, dt);
+    Bullets::update(dt);
+    Events::resolvePlayerBullets(ctx);
+    if (State::playerDefeated()) {
+        Entities::updateEffects(ctx, dt);
         return;
     }
 
-    events_.resolveEnemyBullets(*this);
-    if (state_.playerDefeated()) {
-        entities_.updateEffects(*this, dt);
+    Events::resolveEnemyBullets(ctx);
+    if (State::playerDefeated()) {
+        Entities::updateEffects(ctx, dt);
         return;
     }
 
-    combatants_.updateEnemies(*this, dt);
-    events_.separateEnemies(*this);
-    events_.contactDamage(*this);
-    if (state_.playerDefeated()) {
-        entities_.updateEffects(*this, dt);
+    Combatants::updateEnemies(ctx, dt);
+    Events::separateEnemies(ctx);
+    Events::contactDamage(ctx);
+    if (State::playerDefeated()) {
+        Entities::updateEffects(ctx, dt);
         return;
     }
 
-    entities_.updatePickups(*this, dt);
-    entities_.updateMines(dt);
-    events_.resolveMines(*this);
-    combatants_.cleanup();
-    bullets_.cleanup();
-    entities_.cleanup();
-    entities_.updateEffects(*this, dt);
+    Entities::updatePickups(ctx, dt);
+    Entities::updateMines(dt);
+    Events::resolveMines(ctx);
+    Combatants::cleanup();
+    Bullets::cleanup();
+    Entities::cleanup();
+    Entities::updateEffects(ctx, dt);
 }
 
 void Arena::draw(QPainter &world, QPainter &glow) const
 {
+    const arena::Context ctx = context();
     drawBorder(world);
-    entities_.drawBackground(world, glow);
-    bullets_.draw(world, glow);
-    combatants_.draw(world, glow, *this);
-    entities_.drawForeground(world, glow);
+    Entities::drawBackground(world, glow);
+    Bullets::draw(world, glow);
+    Combatants::draw(world, glow, ctx);
+    Entities::drawForeground(world, glow);
 }
 
 void Arena::spawnPortal(const QString &kind, int wave)
 {
-    entities_.spawnPortal(*this, kind, wave);
+    Entities::spawnPortal(context(), kind, wave);
 }
 
 void Arena::placeMine(const Math::Vec2 &position)
@@ -110,49 +119,50 @@ void Arena::placeMine(const Math::Vec2 &position)
                     GameConfig::FieldRight - 16.0f),
         Math::clamp(position.y, GameConfig::FieldTop + 16.0f,
                     GameConfig::FieldBottom - 16.0f));
-    entities_.spawnMine(*this, clamped);
+    Entities::spawnMine(context(), clamped);
 }
 
 void Arena::updateVisuals(float dt)
 {
-    entities_.updateEffects(*this, dt);
+    Entities::updateEffects(context(), dt);
 }
 
 void Arena::clearEnemyBullets()
 {
-    bullets_.clearEnemy();
+    Bullets::clearEnemy();
 }
 
 void Arena::clearProjectiles()
 {
-    bullets_.clear();
+    Bullets::clear();
 }
 
 void Arena::clearForVictory()
 {
-    bullets_.clearEnemy();
-    entities_.clearMines();
-    combatants_.clearForVictory(*this);
+    Bullets::clearEnemy();
+    Entities::clearMines();
+    Combatants::clearForVictory(context());
 }
 
 void Arena::requestDash()
 {
-    combatants_.player().state.dashBuffer = 0.16f;
+    player().state.dashBuffer = 0.16f;
 }
 
 void Arena::celebrateUpgrade()
 {
-    const Math::Vec2 pos = combatants_.player().state.pos;
-    entities_.spawnBurst(*this, pos, Base::Cyan, 26, 190.0f, 0.6f);
-    entities_.addShockwave(pos, 110.0f, Base::Cyan, 0.55f, 2);
+    const arena::Context ctx = context();
+    const Math::Vec2 pos = player().state.pos;
+    Entities::spawnBurst(ctx, pos, Base::Cyan, 26, 190.0f, 0.6f);
+    Entities::addShockwave(pos, 110.0f, Base::Cyan, 0.55f, 2);
 }
 
 void Arena::celebrateVictory()
 {
-    const Math::Vec2 pos = combatants_.player().state.pos;
-    entities_.addShockwave(pos, 150.0f, Base::Cyan, 0.7f, 2);
-    entities_.addShockwave(pos, 250.0f, Base::Cyan, 0.9f, 2);
-    entities_.addShockwave(pos, 380.0f, Base::Cyan, 1.1f, 2);
+    const Math::Vec2 pos = player().state.pos;
+    Entities::addShockwave(pos, 150.0f, Base::Cyan, 0.7f, 2);
+    Entities::addShockwave(pos, 250.0f, Base::Cyan, 0.9f, 2);
+    Entities::addShockwave(pos, 380.0f, Base::Cyan, 1.1f, 2);
 }
 
 Arena::Feedback Arena::takeFeedback()
@@ -162,6 +172,7 @@ Arena::Feedback Arena::takeFeedback()
     return result;
 }
 
+// arena::Host 的实现：组件通过虚接口调用到这里。
 void Arena::addFeedback(const QColor &color, int alpha, float shake)
 {
     if (alpha > 0) {

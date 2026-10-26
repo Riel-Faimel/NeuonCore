@@ -19,6 +19,7 @@ public:
     Music &operator=(const Music &) = delete;
 
     void initialize();
+    void shutdown();
     void setMuted(bool muted);
     void setVolume(float volume);
     float volume() const;

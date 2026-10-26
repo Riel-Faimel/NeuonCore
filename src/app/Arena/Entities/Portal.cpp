@@ -1,6 +1,8 @@
 #include "Portal.h"
 
-#include "Arena/Arena.h"
+#include "Arena/Combatants/Combatants.h"
+#include "Arena/Context.h"
+#include "Arena/Entities/Entities.h"
 #include "Arena/Combatants/Enemy.h"
 #include "Base/Base.h"
 
@@ -18,15 +20,15 @@ Portal::Portal(const QString &portalKind, const Math::Vec2 &position, int waveNu
     radius = kind == QStringLiteral("boss") ? 54.0f : 23.0f;
 }
 
-void Portal::update(Arena &arena, float dt)
+void Portal::update(const Context &ctx, float dt)
 {
     timer -= dt;
     if (timer <= 0.0f) {
         alive = false;
-        arena.combatants_.spawnEnemy(arena, kind, pos, wave);
-        arena.entities_.spawnBurst(arena, pos, color,
-                                   kind == QStringLiteral("boss") ? 16 : 8,
-                                   160.0f, 0.5f);
+        ctx.combatants.spawnEnemy(ctx, kind, pos, wave);
+        ctx.entities.spawnBurst(ctx, pos, color,
+                                 kind == QStringLiteral("boss") ? 16 : 8,
+                                 160.0f, 0.5f);
     }
 }
 

@@ -1,24 +1,23 @@
 #pragma once
 
-class Arena;
-
 namespace arena {
 
+struct Context;
 class Enemy;
 struct Mine;
 
 // 事件组件：一个 class 同时负责碰撞事件与击杀事件。
 class Events {
 public:
-    void resolvePlayerBullets(Arena &arena);
-    void resolveEnemyBullets(Arena &arena);
-    void resolveMines(Arena &arena);
-    void separateEnemies(Arena &arena);
-    void contactDamage(Arena &arena);
-    void handleKill(Arena &arena, Enemy &enemy);
+    void resolvePlayerBullets(const Context &ctx);
+    void resolveEnemyBullets(const Context &ctx);
+    void resolveMines(const Context &ctx);
+    void separateEnemies(const Context &ctx);
+    void contactDamage(const Context &ctx);
+    void handleKill(const Context &ctx, Enemy &enemy);
 
 private:
-    void detonateMine(Arena &arena, Mine &mine);
+    void detonateMine(const Context &ctx, Mine &mine);
 };
 
 } // namespace arena

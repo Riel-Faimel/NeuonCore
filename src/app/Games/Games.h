@@ -1,10 +1,8 @@
 #pragma once
 
 #include "Arena/Arena.h"
-#include "Base/Base.h"
 #include "Games/Upgrades/Upgrades.h"
 #include "Games/Waves/Waves.h"
-#include "Random.h"
 #include "Renderer.h"
 #include "Shop/Shop.h"
 
@@ -35,7 +33,7 @@ public:
         Defeat,
     };
 
-    Games(const Level &level, Base &base, Shop &shop);
+    Games(const Level &level);
     ~Games();
 
     Games(const Games &) = delete;
@@ -46,9 +44,9 @@ public:
 
     State state() const { return state_; }
     float runTime() const { return runTime_; }
-    int score() const { return shop_.score().total(); }
-    int runScore() const { return shop_.score().run(); }
-    int kills() const { return shop_.score().kills(); }
+    int score() const { return ShopService.score().total(); }
+    int runScore() const { return ShopService.score().run(); }
+    int kills() const { return ShopService.score().kills(); }
     int currentWave() const { return waves_.currentWave(); }
     int totalWaves() const { return waves_.totalWaves(); }
     const QImage &frame() const { return renderer_.frame(); }
@@ -74,9 +72,6 @@ private:
     void applyFeedback(const Arena::Feedback &feedback);
 
     Level level_;
-    Random random_;
-    Base &base_;
-    Shop &shop_;
     Arena arena_;
     games::Waves waves_;
     games::Upgrades upgrades_;

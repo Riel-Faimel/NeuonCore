@@ -1,6 +1,6 @@
 #include "Arena/Bullets/StandardBullet.h"
 
-#include "Arena/Arena.h"
+#include "Arena/Context.h"
 #include "Base/Base.h"
 #include "Fighter.h"
 #include "GameConfig.h"
@@ -50,15 +50,15 @@ void StandardBullet::draw(QPainter &world, QPainter &glow) const
     Base::glow(glow, pos_, radius_ * 3.0f, color_, 1.0f);
 }
 
-bool StandardBullet::hit(Arena &arena, Fighter &target)
+bool StandardBullet::hit(const Context &ctx, Fighter &target)
 {
     const int targetId = target.id();
     if (hits_.count(targetId) != 0) {
         // 穿透弹在同一个目标上不重复结算。
         return true;
     }
-    const bool critical = arena.random().real(0.0f, 1.0f) < critChance_;
-    target.takeDamage(arena, Damage{damage_ * (critical ? 2.0f : 1.0f), critical,
+    const bool critical = RandomService.real(0.0f, 1.0f) < critChance_;
+    target.takeDamage(ctx, Damage{damage_ * (critical ? 2.0f : 1.0f), critical,
                                     DamageSource::Bullet});
     hits_.insert(targetId);
     if (pierce_ <= 0) {

@@ -15,6 +15,9 @@
 
 // Base 是全局模块类，组合 namespace base 的 Input / Audio / Music / Paint 组件。
 // 对外仍只暴露 Base 这一组接口，组件细节不泄露给业务模块。
+//
+// Base 是进程级单例：唯一实例是 Base.cpp 里的 BaseService，业务模块直接使用它，
+// 不再通过构造函数自上而下传递 Base&（Menu / Games / Arena / Renderer 都不再持有它）。
 class Base {
 public:
     Base();
@@ -40,6 +43,9 @@ public:
 
     // ----- 音频（转发 base::Audio / base::Music） -----
     void initAudio();
+    // 释放音频资源（QSoundEffect 池 / QMediaPlayer）。
+    // 进程退出前、QApplication 析构之前调用；可重复调用。
+    void shutdown();
     void playSound(const QString &name);
     void setSoundVolume(float volume);
     float soundVolume() const;
@@ -134,3 +140,10 @@ private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
+
+// 进程内唯一的 Base 实例。定义在 Base.cpp（全局对象，先于 main 构造），
+// 任何模块都可以直接调用：BaseService.playSound(...) / BaseService.movementAxis()。
+// 它的构造只分配组件对象，不碰 Qt 应用对象；真正的音频初始化仍然是 initAudio()。
+// main() 在 return 之前必须调用 BaseService.shutdown()，让 QSoundEffect / QMediaPlayer
+// 在 QApplication 还活着的时候被释放。
+extern Base BaseService;

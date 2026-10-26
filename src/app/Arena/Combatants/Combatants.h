@@ -9,9 +9,9 @@
 #include <memory>
 #include <vector>
 
-class Arena;
-
 namespace arena {
+
+struct Context;
 
 struct BossInfo {
     bool active = false;
@@ -25,16 +25,16 @@ class Combatants {
 public:
     void reset();
     void beginWave();
-    void updatePlayer(Arena &arena, float dt);
-    void updateEnemies(Arena &arena, float dt);
+    void updatePlayer(const Context &ctx, float dt);
+    void updateEnemies(const Context &ctx, float dt);
     void cleanup();
-    void draw(QPainter &world, QPainter &glow, const Arena &arena) const;
+    void draw(QPainter &world, QPainter &glow, const Context &ctx) const;
 
-    void spawnEnemy(Arena &arena, const QString &kind,
+    void spawnEnemy(const Context &ctx, const QString &kind,
                     const Math::Vec2 &pos, int wave);
-    void spawnMinions(Arena &arena, const Math::Vec2 &pos, int count, int wave);
-    void clearForVictory(Arena &arena);
-    void damageEnemiesInRadius(Arena &arena, const Math::Vec2 &center,
+    void spawnMinions(const Context &ctx, const Math::Vec2 &pos, int count, int wave);
+    void clearForVictory(const Context &ctx);
+    void damageEnemiesInRadius(const Context &ctx, const Math::Vec2 &center,
                                float radius, float damage,
                                DamageSource source = DamageSource::Shock);
 

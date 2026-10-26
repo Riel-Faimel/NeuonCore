@@ -1,6 +1,8 @@
 #include "Pickup.h"
 
-#include "Arena/Arena.h"
+#include "Arena/Combatants/Combatants.h"
+#include "Arena/Context.h"
+#include "Arena/Entities/Entities.h"
 #include "Arena/Entities/FloatingText.h"
 #include "Arena/Combatants/Player.h"
 #include "Base/Base.h"
@@ -15,7 +17,7 @@ Pickup::Pickup(const Math::Vec2 &position, int healAmount)
 {
 }
 
-void Pickup::update(Arena &arena, float dt)
+void Pickup::update(const Context &ctx, float dt)
 {
     age += dt;
     life -= dt;
@@ -23,7 +25,7 @@ void Pickup::update(Arena &arena, float dt)
         alive = false;
         return;
     }
-    const Math::Vec2 toPlayer = arena.combatants_.player().state.pos - pos;
+    const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
     const float distance = toPlayer.length();
     if (distance < 155.0f && distance > 0.1f) {
         const Math::Vec2 direction = toPlayer / distance;
@@ -33,21 +35,21 @@ void Pickup::update(Arena &arena, float dt)
     vel = vel * std::exp(-2.4f * dt);
     pos += vel * dt;
     if (distance < 22.0f) {
-        const float before = arena.combatants_.player().state.hp;
-        arena.combatants_.player().state.hp =
-            std::min(arena.combatants_.player().state.maxHp,
-                     arena.combatants_.player().state.hp + float(amount));
-        const int gained = int(arena.combatants_.player().state.hp - before);
+        const float before = ctx.combatants.player().state.hp;
+        ctx.combatants.player().state.hp =
+            std::min(ctx.combatants.player().state.maxHp,
+                     ctx.combatants.player().state.hp + float(amount));
+        const int gained = int(ctx.combatants.player().state.hp - before);
         if (gained > 0) {
-            arena.entities_.floatingTexts().push_back(FloatingText{
-                arena.combatants_.player().state.pos + Math::Vec2(0.0f, -28.0f),
+            ctx.entities.floatingTexts().push_back(FloatingText{
+                ctx.combatants.player().state.pos + Math::Vec2(0.0f, -28.0f),
                 QStringLiteral("+%1").arg(gained), Base::Green,
                 0.9f, 0.9f, 16, false});
         }
         alive = false;
-        arena.base_.playSound(QStringLiteral("pickup"));
-        arena.entities_.spawnBurst(arena, pos, Base::Green, 12, 120.0f, 0.45f);
-        arena.entities_.addShockwave(pos, 36.0f, Base::Green, 0.3f, 2);
+        BaseService.playSound(QStringLiteral("pickup"));
+        ctx.entities.spawnBurst(ctx, pos, Base::Green, 12, 120.0f, 0.45f);
+        ctx.entities.addShockwave(pos, 36.0f, Base::Green, 0.3f, 2);
     }
 }
 

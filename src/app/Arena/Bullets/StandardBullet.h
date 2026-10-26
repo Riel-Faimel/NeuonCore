@@ -17,7 +17,7 @@ public:
 
     void advance(float dt) override;
     void draw(QPainter &world, QPainter &glow) const override;
-    bool hit(Arena &arena, Fighter &target) override;
+    bool hit(const Context &ctx, Fighter &target) override;
 
     bool alive() const override { return alive_; }
     const Math::Vec2 &prev() const override { return prev_; }

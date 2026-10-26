@@ -12,29 +12,29 @@
 
 #include <vector>
 
-class Arena;
-
 namespace arena {
+
+struct Context;
 
 // 实体组件：地雷、传送门、掉落、粒子、飘字、冲击波（子弹在 arena::Bullets）。
 class Entities {
 public:
     void reset();
 
-    void updatePortals(Arena &arena, float dt);
-    void updatePickups(Arena &arena, float dt);
+    void updatePortals(const Context &ctx, float dt);
+    void updatePickups(const Context &ctx, float dt);
     void updateMines(float dt);
-    void updateEffects(Arena &arena, float dt);
+    void updateEffects(const Context &ctx, float dt);
     void cleanup();
 
     void drawBackground(QPainter &world, QPainter &glow) const;
     void drawForeground(QPainter &world, QPainter &glow) const;
 
-    void spawnPortal(Arena &arena, const QString &kind, int wave);
-    void spawnPickup(Arena &arena, const Math::Vec2 &pos, int amount);
-    void spawnMine(Arena &arena, const Math::Vec2 &pos);
+    void spawnPortal(const Context &ctx, const QString &kind, int wave);
+    void spawnPickup(const Context &ctx, const Math::Vec2 &pos, int amount);
+    void spawnMine(const Context &ctx, const Math::Vec2 &pos);
     void clearMines();
-    void spawnBurst(Arena &arena, const Math::Vec2 &pos, const QColor &color,
+    void spawnBurst(const Context &ctx, const Math::Vec2 &pos, const QColor &color,
                     int count, float speed, float life);
     void addShockwave(const Math::Vec2 &pos, float radius, const QColor &color,
                       float duration = 0.4f, int width = 2);
@@ -51,7 +51,7 @@ public:
     std::vector<Shockwave> &shockwaves() { return shockwaves_; }
 
 private:
-    Math::Vec2 randomSpawnPosition(const Arena &arena) const;
+    Math::Vec2 randomSpawnPosition(const Context &ctx) const;
 
     std::vector<Portal> portals_;
     std::vector<Pickup> pickups_;
