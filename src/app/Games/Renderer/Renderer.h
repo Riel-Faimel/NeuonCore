@@ -73,6 +73,13 @@ private:
     void updateSparks(float dt);
     void drawStars(QPainter &world, QPainter &glow) const;
     void drawSparks(QPainter &world, QPainter &glow) const;
+    // 世界通道（背景/星空/实体/粒子，不含字体）与辉光通道写不同目标，可并行。
+    void drawWorldPass(const Arena &arena, int offsetX, int offsetY);
+    void drawCombinedPass(const Arena &arena, int offsetX, int offsetY);
+    void drawGlowPass(const Arena &arena);
+    void drawUi(QPainter &painter, const Games &game, const Arena &arena,
+                const Waves &waves, const Upgrades &upgrades);
+    void compositeFrame(int offsetX, int offsetY);
     void drawHUD(QPainter &painter, const Arena &arena, const Waves &waves);
     void drawBossBar(QPainter &painter, const Arena &arena);
     void drawWaveBanner(QPainter &painter);
@@ -86,9 +93,11 @@ private:
 
     QImage background_;
     QImage vignette_;
-    QImage world_;
     QImage glow_;
     QImage frame_;
+    // 反通道的 1×1 哑目标：世界通道里忽略辉光、辉光通道里忽略世界绘制。
+    QImage dummyWorld_;
+    QImage dummyGlow_;
     std::vector<Star> stars_;
     std::vector<Spark> sparks_;
     float time_ = 0.0f;

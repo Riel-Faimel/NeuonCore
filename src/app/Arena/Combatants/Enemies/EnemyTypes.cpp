@@ -12,7 +12,7 @@ namespace {
 
 bool isSelfDestruct(const Enemy *enemy)
 {
-    return dynamic_cast<const SelfDestructEnemy *>(enemy) != nullptr;
+    return enemy->archetype() == Enemy::Archetype::SelfDestruct;
 }
 
 // 离自己最近的防御型友军（tank / linker）。
@@ -25,7 +25,7 @@ const Enemy *nearestDefender(const Context &ctx, const Enemy &self)
         if (other == &self || !other->alive) {
             continue;
         }
-        if (dynamic_cast<DefensiveEnemy *>(other) == nullptr) {
+        if (other->archetype() != Enemy::Archetype::Defensive) {
             continue;
         }
         const float distance = self.pos.distanceTo(other->pos);
@@ -146,8 +146,8 @@ Math::Vec2 DefensiveEnemy::desiredVelocity(const Context &ctx, float dt)
         if (ally == this || !ally->alive) {
             continue;
         }
-        if (dynamic_cast<const RangedEnemy *>(ally) != nullptr
-            || dynamic_cast<const SupportEnemy *>(ally) != nullptr) {
+        if (ally->archetype() == Enemy::Archetype::Ranged
+            || ally->archetype() == Enemy::Archetype::Support) {
             centroid += ally->pos;
             ++count;
         }

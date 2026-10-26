@@ -45,10 +45,10 @@ void SpitterEnemy::shoot(const Context &ctx)
     const float base = std::atan2(toPlayer.y, toPlayer.x);
     const Math::Vec2 aim = Math::Vec2(std::cos(base), std::sin(base))
         .rotated(RandomService.real(-0.055f, 0.055f));
-    ctx.bullets.submit(std::make_unique<StandardBullet>(
+    ctx.bullets.spawnStandard(
         pos + aim * 18.0f, aim * data::kSpitterBullet.speed,
         data::kSpitterBullet.damage * damageMultiplier(), Base::Magenta,
-        Bullet::Standpoint::Enemy, data::kSpitterBullet.radius));
+        Bullet::Standpoint::Enemy, data::kSpitterBullet.radius);
     ctx.entities.spawnBurst(ctx, pos, Base::Magenta, 5, 70.0f, 0.26f);
     BaseService.playSound(QStringLiteral("shoot_enemy"));
 }

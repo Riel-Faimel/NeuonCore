@@ -45,6 +45,16 @@ public:
         Support,
     };
 
+    // 敌人类型分类：AI 需要按类别筛选友军；用缓存值避免每帧 dynamic_cast。
+    enum class Archetype {
+        Offensive,
+        Ranged,
+        Defensive,
+        Support,
+        SelfDestruct,
+        Boss,
+    };
+
     QString kind;
     int eid = 0;
     Math::Vec2 pos;
@@ -94,6 +104,7 @@ public:
                                          const Math::Vec2 &position, int wave);
     static const EnemyStats &statsFor(const QString &kind);
     Role role() const { return role_; }
+    Archetype archetype() const { return archetype_; }
 
     // ----- 接口 -----
     void update(const Context &ctx, float dt) override;
@@ -119,7 +130,7 @@ public:
     virtual float damageShareRatio() const { return 0.0f; }
 
 protected:
-    Enemy(std::string_view kindName, Role role,
+    Enemy(std::string_view kindName, Role role, Archetype archetype,
           const Math::Vec2 &position, int waveNumber);
 
     // 具体敌人只需返回期望速度，积分、边界、闪避由基类统一处理。
@@ -132,6 +143,7 @@ protected:
     Math::Vec2 avoidPlayerBullets(const Context &ctx) const;
 
     Role role_ = Role::Melee;
+    Archetype archetype_ = Archetype::Offensive;
 
 private:
     static int sNextId;

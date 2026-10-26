@@ -12,6 +12,16 @@
 #include <cmath>
 
 namespace base {
+
+namespace {
+thread_local Paint::Pass tlsPass = Paint::Pass::All;
+}
+
+void Paint::setPass(Pass pass)
+{
+    tlsPass = pass;
+}
+
 bool Paint::sFontsReady = false;
 QFont Paint::sTiny;
 QFont Paint::sSmall;
@@ -121,53 +131,49 @@ QColor Paint::withAlpha(const QColor &color, int alpha)
 void Paint::fillCircle(QPainter &painter, const Math::Vec2 &center,
                       float radius, const QColor &color)
 {
-    if (radius <= 0.0f || color.alpha() <= 0) {
+    if (tlsPass == Pass::Glow || radius <= 0.0f || color.alpha() <= 0) {
         return;
     }
-    painter.save();
     painter.setPen(Qt::NoPen);
     painter.setBrush(color);
     painter.drawEllipse(QPointF(center.x, center.y), radius, radius);
-    painter.restore();
 }
 
 void Paint::strokeCircle(QPainter &painter, const Math::Vec2 &center,
                         float radius, const QColor &color, float width)
 {
-    if (radius <= 0.0f || color.alpha() <= 0) {
+    if (tlsPass == Pass::Glow || radius <= 0.0f || color.alpha() <= 0) {
         return;
     }
-    painter.save();
     painter.setBrush(Qt::NoBrush);
     QPen pen(color);
     pen.setWidthF(width);
     pen.setCapStyle(Qt::RoundCap);
     painter.setPen(pen);
     painter.drawEllipse(QPointF(center.x, center.y), radius, radius);
-    painter.restore();
 }
 
 void Paint::strokeLine(QPainter &painter, const Math::Vec2 &start,
                       const Math::Vec2 &end, const QColor &color, float width)
 {
-    painter.save();
+    if (tlsPass == Pass::Glow) {
+        return;
+    }
     QPen pen(color);
     pen.setWidthF(width);
     pen.setCapStyle(Qt::RoundCap);
     painter.setPen(pen);
     painter.setBrush(Qt::NoBrush);
     painter.drawLine(QPointF(start.x, start.y), QPointF(end.x, end.y));
-    painter.restore();
 }
 
 void Paint::arcRadians(QPainter &painter, const Math::Vec2 &center, float radius,
                       float startRadians, float spanRadians,
                       const QColor &color, float width)
 {
-    if (radius <= 0.0f || color.alpha() <= 0) {
+    if (tlsPass == Pass::Glow || radius <= 0.0f || color.alpha() <= 0) {
         return;
     }
-    painter.save();
     painter.setBrush(Qt::NoBrush);
     QPen pen(color);
     pen.setWidthF(width);
@@ -177,7 +183,6 @@ void Paint::arcRadians(QPainter &painter, const Math::Vec2 &center, float radius
     const int startAngle = int(std::lround(-startRadians * 180.0f / Math::Pi * 16.0f));
     const int spanAngle = int(std::lround(-spanRadians * 180.0f / Math::Pi * 16.0f));
     painter.drawArc(rect, startAngle, spanAngle);
-    painter.restore();
 }
 
 void Paint::reticle(QPainter &painter, const Math::Vec2 &center, float time)
@@ -305,10 +310,9 @@ QPixmap Paint::appIcon(int size)
 void Paint::polygon(QPainter &painter, const QPolygonF &points,
                    const QColor &fill, const QColor &outline, float width)
 {
-    if (points.size() < 3) {
+    if (tlsPass == Pass::Glow || points.size() < 3) {
         return;
     }
-    painter.save();
     painter.setBrush(fill.alpha() > 0 ? QBrush(fill) : QBrush(Qt::NoBrush));
     if (outline.alpha() > 0 && width > 0.0f) {
         QPen pen(outline);
@@ -319,24 +323,30 @@ void Paint::polygon(QPainter &painter, const QPolygonF &points,
         painter.setPen(Qt::NoPen);
     }
     painter.drawPolygon(points);
-    painter.restore();
 }
 
 void Paint::glow(QPainter &glowPainter, const Math::Vec2 &pos, float radius,
                 const QColor &color, float intensity)
 {
+    if (tlsPass == Pass::World || radius <= 0.0f || intensity <= 0.0f
+        || color.alpha() <= 0) {
+        return;
+    }
     const std::array<std::pair<float, float>, 3> layers = {
         std::pair{1.75f, 0.055f},
         std::pair{1.22f, 0.10f},
         std::pair{0.78f, 0.18f},
     };
+    glowPainter.setPen(Qt::NoPen);
     for (const auto &[scale, strength] : layers) {
         const QColor layerColor(
             int(Math::clamp(color.red() * strength * intensity, 0.0f, 255.0f)),
             int(Math::clamp(color.green() * strength * intensity, 0.0f, 255.0f)),
             int(Math::clamp(color.blue() * strength * intensity, 0.0f, 255.0f)),
             255);
-        fillCircle(glowPainter, pos, std::max(1.0f, radius * scale), layerColor);
+        const float layerRadius = std::max(1.0f, radius * scale);
+        glowPainter.setBrush(layerColor);
+        glowPainter.drawEllipse(QPointF(pos.x, pos.y), layerRadius, layerRadius);
     }
 }
 
@@ -344,6 +354,9 @@ void Paint::text(QPainter &painter, const QFont &font, const QString &value,
                 const QColor &color, const Math::Vec2 &pos,
                 const QString &anchor, int alpha)
 {
+    if (tlsPass != Pass::All) {
+        return;
+    }
     if (alpha <= 2 || value.isEmpty()) {
         return;
     }
@@ -421,6 +434,9 @@ QStringList Paint::wrapText(const QString &value, const QFont &font, float maxWi
 void Paint::bar(QPainter &painter, const QRectF &rect, float ratio,
                const QColor &color, float ghost, const QColor &background)
 {
+    if (tlsPass != Pass::All) {
+        return;
+    }
     ratio = Math::clamp(ratio, 0.0f, 1.0f);
     const float radius = std::max(2.0f, float(rect.height()) / 2.0f);
     painter.save();
@@ -457,6 +473,9 @@ void Paint::bar(QPainter &painter, const QRectF &rect, float ratio,
 void Paint::panel(QPainter &painter, const QRectF &rect, const QColor &border,
                  int alpha, int radius, const QColor &fill)
 {
+    if (tlsPass != Pass::All) {
+        return;
+    }
     painter.save();
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(fill.red(), fill.green(), fill.blue(), alpha));

@@ -54,20 +54,22 @@ void Combatants::cleanup()
 
 void Combatants::draw(QPainter &world, QPainter &glow, const Context &ctx) const
 {
-    drawOrder_.clear();
-    if (drawOrder_.capacity() < enemies_.size()) {
-        drawOrder_.reserve(enemies_.size());
+    // 世界通道与辉光通道并行绘制，各自持有线程内的排序缓冲。
+    thread_local std::vector<const Fighter *> drawOrder;
+    drawOrder.clear();
+    if (drawOrder.capacity() < enemies_.size()) {
+        drawOrder.reserve(enemies_.size());
     }
     for (const auto &enemy : enemies_) {
         if (enemy->isAlive()) {
-            drawOrder_.push_back(enemy.get());
+            drawOrder.push_back(enemy.get());
         }
     }
-    std::sort(drawOrder_.begin(), drawOrder_.end(),
+    std::sort(drawOrder.begin(), drawOrder.end(),
               [](const Fighter *a, const Fighter *b) {
                   return a->position().y < b->position().y;
               });
-    for (const Fighter *fighter : drawOrder_) {
+    for (const Fighter *fighter : drawOrder) {
         fighter->draw(world, glow, ctx);
     }
     player_.draw(world, glow, ctx);

@@ -39,7 +39,6 @@ constexpr PlayerBase loadPlayer()
 }
 
 inline constexpr PlayerBase kPlayer = loadPlayer();
-static_assert(kPlayer.hp > 0.0f, "src/json/player.json 解析失败");
 
 // ----- 敌人基础数值（enemies.json） -----
 struct EnemyBase {
@@ -106,7 +105,6 @@ constexpr EnemyTable loadEnemies()
 }
 
 inline constexpr EnemyTable kEnemies = loadEnemies();
-static_assert(kEnemies.count > 0, "src/json/enemies.json 解析失败");
 
 constexpr const EnemyBase *findEnemy(std::string_view kind)
 {
@@ -212,7 +210,6 @@ constexpr WaveScaling loadWaveScaling()
 inline constexpr Campaign kCampaign = loadCampaign();
 inline constexpr WaveTiming kWaveTiming = loadWaveTiming();
 inline constexpr WaveScaling kWaveScaling = loadWaveScaling();
-static_assert(kCampaign.count > 0, "src/json/waves.json 解析失败");
 
 // ----- 强化数值区间（upgrades.json） -----
 struct UpgradeRange {
@@ -250,7 +247,6 @@ constexpr UpgradeTable loadUpgradeRanges()
 }
 
 inline constexpr UpgradeTable kUpgradeRanges = loadUpgradeRanges();
-static_assert(kUpgradeRanges.count > 0, "src/json/upgrades.json 解析失败");
 
 constexpr const UpgradeRange *findUpgrade(std::string_view key)
 {
@@ -287,7 +283,6 @@ constexpr BulletSpec loadBullet(std::string_view key)
 inline constexpr BulletSpec kBossAimedBullet = loadBullet("boss_aimed");
 inline constexpr BulletSpec kBossRadialBullet = loadBullet("boss_radial");
 inline constexpr BulletSpec kSpitterBullet = loadBullet("spitter");
-static_assert(kBossAimedBullet.speed > 0.0f, "src/json/bullets.json 解析失败");
 
 // ----- 商店道具（items.json） -----
 struct MineSpec {
@@ -320,7 +315,6 @@ constexpr MineSpec loadMine()
 }
 
 inline constexpr MineSpec kMine = loadMine();
-static_assert(kMine.price > 0, "src/json/items.json 解析失败");
 
 // ----- 星区地图（levels.json） -----
 struct LevelNode {
@@ -367,6 +361,34 @@ constexpr LevelMap loadLevelMap()
 }
 
 inline constexpr LevelMap kLevelNodes = loadLevelMap();
-static_assert(kLevelNodes.count > 0, "src/json/levels.json 解析失败");
+
+// 运行期数据自检：返回 nullptr 表示通过，否则返回具体错误。
+// 构建期的 JSON 解析失败会让常量退化成默认值/空表；这里在启动入口显式处理，
+// 不依赖断言（release 构建同样会执行这套检查）。
+inline const char *validationError()
+{
+    if (!(kPlayer.hp > 0.0f)) {
+        return "src/json/player.json: hp must be > 0";
+    }
+    if (kEnemies.count <= 0) {
+        return "src/json/enemies.json: enemy table is empty";
+    }
+    if (kCampaign.count <= 0) {
+        return "src/json/waves.json: wave table is empty";
+    }
+    if (kUpgradeRanges.count <= 0) {
+        return "src/json/upgrades.json: upgrade table is empty";
+    }
+    if (!(kBossAimedBullet.speed > 0.0f)) {
+        return "src/json/bullets.json: boss aimed bullet speed must be > 0";
+    }
+    if (kMine.price <= 0) {
+        return "src/json/items.json: mine price must be > 0";
+    }
+    if (kLevelNodes.count <= 0) {
+        return "src/json/levels.json: level table is empty";
+    }
+    return nullptr;
+}
 
 } // namespace data

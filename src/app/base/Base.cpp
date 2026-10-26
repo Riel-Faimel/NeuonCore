@@ -5,6 +5,7 @@
 #include "Base/Input/Input.h"
 #include "Base/Paint/Paint.h"
 #include "Base/Pointer/Pointer.h"
+#include "Base/ThreadPool/ThreadPool.h"
 
 #include <memory>
 
@@ -17,6 +18,7 @@ struct Base::Impl {
     base::Audio audio;
     base::Music music;
     base::Pointer pointer;
+    base::ThreadPool threads;
 };
 
 Base::Base() : impl_(std::make_unique<Impl>()) {}
@@ -26,6 +28,8 @@ Base::~Base() = default;
 void Base::initialize()
 {
     base::Paint::initialize();
+    // 工作线程在 QApplication 就绪后启动，避免静态初始化期就创建线程。
+    BaseService.impl_->threads.start();
 }
 
 void Base::keyPress(int key)
@@ -103,6 +107,36 @@ void Base::pointerDraw(QPainter &painter) const
     impl_->pointer.draw(painter);
 }
 
+bool Base::parallelEnabled() const
+{
+    return impl_->threads.enabled();
+}
+
+int Base::parallelWorkers() const
+{
+    return impl_->threads.workerCount();
+}
+
+void Base::parallelFor(int taskCount, const std::function<void(int)> &task)
+{
+    impl_->threads.parallelFor(taskCount, task);
+}
+
+void Base::beginWorldPass()
+{
+    base::Paint::setPass(base::Paint::Pass::World);
+}
+
+void Base::beginGlowPass()
+{
+    base::Paint::setPass(base::Paint::Pass::Glow);
+}
+
+void Base::endRenderPass()
+{
+    base::Paint::setPass(base::Paint::Pass::All);
+}
+
 void Base::initAudio()
 {
     impl_->audio.init();
@@ -111,6 +145,7 @@ void Base::initAudio()
 
 void Base::shutdown()
 {
+    impl_->threads.shutdown();
     impl_->audio.shutdown();
     impl_->music.shutdown();
 }

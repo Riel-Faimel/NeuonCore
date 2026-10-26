@@ -49,6 +49,8 @@ public:
     void beginWave();
     void update(float dt);
     void draw(QPainter &world, QPainter &glow) const;
+    // 飘字层（字体渲染）由 Renderer 在主线程单独绘制。
+    void drawTexts(QPainter &world) const { Entities::drawTexts(world); }
 
     void spawnPortal(const QString &kind, int wave);
     void placeMine(const Math::Vec2 &position);

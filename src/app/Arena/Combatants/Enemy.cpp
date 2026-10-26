@@ -18,6 +18,8 @@
 #include <array>
 #include <cmath>
 
+#include <QHash>
+
 namespace arena {
 
 EnemyRegistry &enemyRegistry()
@@ -84,21 +86,26 @@ const EnemyStats &Enemy::statsFor(const QString &kind)
         }
         return result;
     }();
-    for (int i = 0; i < data::kEnemies.count; ++i) {
-        if (kind == toQString(data::kEnemies.items[size_t(i)].kind)) {
-            return table[size_t(i)];
+    // kind -> 下标查表，避免每次生敌都线性扫描并分配 QString。
+    static const QHash<QString, int> indices = [] {
+        QHash<QString, int> result;
+        for (int i = 0; i < data::kEnemies.count; ++i) {
+            result.insert(toQString(data::kEnemies.items[size_t(i)].kind), i);
         }
-    }
-    return table[0];
+        return result;
+    }();
+    const auto it = indices.constFind(kind);
+    return table[size_t(it != indices.constEnd() ? it.value() : 0)];
 }
 
-Enemy::Enemy(std::string_view kindName, Role role,
+Enemy::Enemy(std::string_view kindName, Role role, Archetype archetype,
              const Math::Vec2 &position, int waveNumber)
     : kind(toQString(kindName)),
       eid(sNextId++),
       pos(position),
       wave(waveNumber),
-      role_(role)
+      role_(role),
+      archetype_(archetype)
 {
     const EnemyStats &stats = statsFor(kind);
     radius = stats.radius;
@@ -200,6 +207,10 @@ void Enemy::takeDamage(const Context &ctx, const Damage &damage)
         for (const auto &other : ctx.combatants.enemies()) {
             Enemy *linker = other.get();
             if (linker == this || !linker->alive) {
+                continue;
+            }
+            // 只有防御型（linker）会分担伤害，先按缓存类别过滤，避免每次命中的虚调用。
+            if (linker->archetype() != Archetype::Defensive) {
                 continue;
             }
             const float shareRadius = linker->damageShareRadius();

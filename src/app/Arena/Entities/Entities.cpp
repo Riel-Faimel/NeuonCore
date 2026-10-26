@@ -131,6 +131,10 @@ void Entities::drawForeground(QPainter &world, QPainter &glow) const
             particle.draw(world, glow);
         }
     }
+}
+
+void Entities::drawTexts(QPainter &world) const
+{
     for (const FloatingText &text : floatingTexts_) {
         text.draw(world);
     }

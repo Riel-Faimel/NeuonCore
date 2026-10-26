@@ -18,6 +18,15 @@ class Paint {
 public:
     static void initialize();
 
+    // 渲染通道：世界层与辉光层写不同的目标，可以并行绘制。
+    // 原语只在自己所属的通道生效（All 为普通 UI/菜单绘制）。
+    enum class Pass {
+        All,
+        World,
+        Glow,
+    };
+    static void setPass(Pass pass);
+
     static const QColor Ink;
     static const QColor Text;
     static const QColor Muted;

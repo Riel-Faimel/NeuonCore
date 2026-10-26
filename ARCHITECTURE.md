@@ -38,7 +38,8 @@ cpp/src/
 │  │  ├─ Audio/Audio.h/.cpp
 │  │  ├─ Audio/Music.h/.cpp
 │  │  ├─ Pointer/Pointer.h/.cpp   全局鼠标指针
-│  │  └─ Paint/Paint.h/.cpp
+│  │  ├─ Paint/Paint.h/.cpp
+│  │  └─ ThreadPool/ThreadPool.h/.cpp 帧内并行任务池
 │  ├─ Arena/
 │  │  ├─ Arena.h / Arena.cpp      私有继承组件 + 编排
 │  │  ├─ Context.h                组件之间共享的引用（Arena 注入，模块内部）
@@ -121,7 +122,7 @@ cpp/src/
 
 ### Base
 
-`Base` 是全局模块类，组合 5 个 `namespace base` 组件（`Input / Audio / Music / Pointer` 由 `Impl` 持有，`Paint` 是全静态）：
+`Base` 是全局模块类，组合 6 个 `namespace base` 组件（`Input / Audio / Music / Pointer / ThreadPool` 由 `Impl` 持有，`Paint` 是全静态）：
 
 | 组件 | 职责 |
 | --- | --- |
@@ -129,11 +130,12 @@ cpp/src/
 | `Audio` | 程序化 WAV 音效、QSoundEffect 池、设备重试、静音 |
 | `Music` | 背景音乐管理：固定目录轮转、设备等待、静音；播放器常驻，不随界面重建 |
 | `Pointer` | 全局鼠标指针：位置、独立时钟、可见性；准星画法转发 `Paint::reticle` |
-| `Paint` | 颜色、字体、文字排版、发光、条形/面板等绘制原语，鼠标准星、齿轮与应用图标 |
+| `Paint` | 颜色、字体、文字排版、发光、条形/面板等绘制原语；`Pass` 控制世界/辉光通道 |
+| `ThreadPool` | 帧内并行任务池：主线程也参与执行，用于世界层/辉光层并行渲染 |
 
-`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），所有模块直接调用 `BaseService.playSound(...)` / `BaseService.movementAxis()`，不再通过构造函数把 `Base&` 一层层传下去。`Base::Impl` 持有 `base::Input`、`base::Audio`、`base::Music`、`base::Pointer`；静态绘制/颜色/字体/准星接口转发给 `base::Paint`。`Base.h` 不暴露组件头，指针的对外接口是 `pointerMoveTo / pointerSetVisible / pointerUpdate / pointerDraw`。
+`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），所有模块直接调用 `BaseService.playSound(...)` / `BaseService.movementAxis()`，不再通过构造函数把 `Base&` 一层层传下去。`Base::Impl` 持有 `base::Input`、`base::Audio`、`base::Music`、`base::Pointer`、`base::ThreadPool`；静态绘制/颜色/字体/准星接口转发给 `base::Paint`。`Base.h` 不暴露组件头，指针的对外接口是 `pointerMoveTo / pointerSetVisible / pointerUpdate / pointerDraw`，并行接口是 `parallelEnabled / parallelWorkers / parallelFor`。
 
-单例的构造只分配组件对象（不创建 `QSoundEffect` / `QMediaPlayer`，也不要求 `QApplication` 已存在）；字体在 `main()` 里 `QApplication` 之后用 `Base::initialize()` 初始化；音频仍由 `BaseService.initAudio()` 按需初始化，`main()` 在退出前调用 `BaseService.shutdown()`，保证 Qt 音频对象在 `QApplication` 还活着时释放。
+单例的构造只分配组件对象（不创建 `QSoundEffect` / `QMediaPlayer`，也不要求 `QApplication` 已存在，不启动线程）；字体和工作线程在 `main()` 里 `QApplication` 之后用 `Base::initialize()` 初始化；音频仍由 `BaseService.initAudio()` 按需初始化；`main()` 在退出前调用 `BaseService.shutdown()`，先停线程池，再释放 Qt 音频对象。
 
 音频是进程级服务，拆成两个组件：`Audio` 在 `%TEMP%\neon_core_cpp_audio\<pid>` 下生成自己的 WAV（同时开两个实例不会互相覆盖），启动时设备还没就绪的话会在 `play()` 里节流重试初始化；`Music` 是独立的背景音乐管理器，只初始化一次、由主线程的定时器推进曲目，任何音频重试、界面切换、开局/结算都不会重建播放器。`QMediaPlayer` 自带解码线程，`Music` 只负责在主线程上做状态管理。
 
@@ -242,10 +244,10 @@ public:
 };
 ```
 
-- 发射方只做 `arena.submit(std::make_unique<StandardBullet>(...))`（`Arena` 继承了 `arena::Bullets`；组件接口不对外，见下面的封装说明），不自持子弹；
-- `arena::Bullets` 按 `standpoint()` 分流到玩家/敌方两组，用 `reserve` + 交换删除（swap-pop）回收，稳态不搬移整段数组；
+- 发射方只做 `ctx.bullets.spawnStandard(...)`（`Arena` 继承了 `arena::Bullets`；组件接口不对外），不自持子弹；
+- `arena::Bullets` 按 `standpoint()` 分流到玩家/敌方两组，用 `reserve` + 交换删除（swap-pop）回收；死亡的标准弹回到空闲池复用（`StandardBullet::reset`），稳态射击**不再产生堆分配**；
 - 碰撞仍由 `arena::Events` 做几何判定（`segmentCircle(bullet.prev(), bullet.position(), target, targetR + bullet.radius)`），命中后调 `bullet.hit(...)`，伤害、暴击、穿透全部由弹种自己结算；
-- 新弹种 = 在 `Arena/Bullets/` 加一个 `Bullet` 实现，提交即可，`Events`/`Renderer` 不用改。
+- 新弹种 = 在 `Arena/Bullets/` 加一个 `Bullet` 实现，提交即可，`Events`/`Renderer` 不用改；对象池目前只复用标准弹。
 
 ### Renderer
 
@@ -256,6 +258,16 @@ public:
 - 强化卡布局与命中测试；
 - 暂停界面；
 - 震屏、闪屏、横幅状态。
+
+**并行渲染管线**（帧内两通道）：
+
+| 通道 | 线程 | 写入 | 内容 |
+| --- | --- | --- | --- |
+| 世界 | `ThreadPool` 工作线程 | `frame_` | 背景、星空、实体、子弹、粒子、冲击波（全部是图形，无字体） |
+| 辉光 | 主线程 | `glow_` | 同一批绘制调用里的 `Paint::glow`（加法光晕） |
+| 字体 | 主线程（并行结束后） | `frame_` | 飘字 + HUD/横幅/卡片/暂停 |
+
+两条通道遍历同一批绘制调用，`base::Paint::Pass`（`World` / `Glow`）让每条通道只执行属于自己的原语：世界通道忽略 `glow`，辉光通道忽略世界图形。通道写不同 `QImage`，字体永远在主线程，因此不需要锁。并行结束后主线程把 `glow_` 以 `Plus` 叠到 `frame_`，再画暗角/闪屏/UI。单线程环境（或 `NEON_SINGLE_THREAD=1`）会自动退回一遍合并绘制。
 
 标题、失败/胜利结算、对局统计不在 Renderer 中，由 `Menu` 绘制；跨屏幕的鼠标指针在 `BaseService` 的 `base::Pointer` 组件里。`Renderer` 每局重建（`initialize()` 重新生成背景图和星空），所以切局时视觉动画从头开始。
 
@@ -282,7 +294,7 @@ src/json/*.json
 - 解析器：`src/lib/Json.h`，`constexpr` 递归下降，支持对象、数组、字符串、数字、true/false/null；
 - `build/generated/GameDataJson.h` 由 `tools/embed_json.cpp` 生成，Makefile 自动重建；JSON 改动会通过 `.d` 依赖触发包含它的 TU 重新编译；
 - 数据约束：字符串不使用转义、数字不使用指数；固定容量由 `GameData.h` 的 `Max*` 常量决定（超出会在编译期报错或截断）；
-- `GameData.h` 里每个文件都有 `static_assert`，JSON 写错会直接编译失败；
+- `GameData.h` 提供 `data::validationError()`：启动时由 `main` 显式检查，数据不合法会打印具体错误并以非零码退出；
 - 修改数值只改 `src/json/*.json` 后重新 `make`，不需要手工生成或提交任何中间文件。
 
 ## Fighter 接口
@@ -383,7 +395,7 @@ const EnemyRegistrar<DroneEnemy> kRegistration("drone", Base::Coral);
 main() ──► Base::initialize()（字体） + ShopService.load()
 GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
             │
-            ├─ BaseService ────────► base::Input / Audio / Music / Pointer / Paint（全局单例）
+            ├─ BaseService ────────► base::Input / Audio / Music / Pointer / Paint / ThreadPool（全局单例）
             ├─ RandomService ──────► 随机引擎（全局单例）
             ├─ ShopService ────────► shop::Score / Inventory（全局单例，注册表 / ini）
             └─ Menu（持有商店外的关卡表，组合 7 个界面组件）
@@ -462,7 +474,7 @@ GameWindow::paintEvent()
 | 地雷价格 / 伤害 / 感应与爆炸半径 / 引爆延迟 / 寿命 | `src/json/items.json` |
 | 星区地图节点位置 / 名称 / 是否解锁 | `src/json/levels.json` |
 
-改完直接 `make`：JSON 会重新嵌成 raw string，包含数值表的 TU 自动重编译；写错格式会在编译期由 `static_assert` 报错。
+改完直接 `make`：JSON 会重新嵌成 raw string，包含数值表的 TU 自动重编译；格式写错会退化成默认值/空表，启动时由 `data::validationError()` 返回错误，`main` 打印并退出。
 
 ### 加强化
 
@@ -528,10 +540,44 @@ GameWindow::paintEvent()
 ### 加 IO / 音频 / 绘制原语
 
 - 输入：`src/app/Base/Input/`。
+- 线程池：`src/app/Base/ThreadPool/`（帧内并行；`BaseService.parallelFor` 转发）。
 - 音效：`src/app/Base/Audio/Audio.*`；背景音乐：`src/app/Base/Audio/Music.*`。
 - 字体/颜色/绘制：`src/app/Base/Paint/`。
 - 鼠标指针：`src/app/Base/Pointer/`（位置 + 时钟 + 可见性，`BaseService` 转发）；准星画法在 `base::Paint::reticle()`。
 - `Base` 只保留转发接口。
+
+## 性能与并行
+
+帧内渲染拆成“世界 / 辉光”两通道并行（见 `### Renderer`）：世界通道在 `ThreadPool` 工作线程写 `frame_`，辉光通道在主线程写 `glow_`，字体统一留在主线程，然后主线程合成。`base::Paint::Pass` 让同一批绘制调用按通道裁剪，所以两条通道不需要复制绘制代码。
+
+可复现的基准（`--bench`，固定场景 + 300 帧 `render` + 600 帧 `update`）：
+
+| 版本 | render | update |
+| --- | --- | --- |
+| 优化前（HEAD） | 10.1–13.2 ms/帧（同机交替中位 12.4） | ~0.03 ms/帧 |
+| 优化后（并行） | **6.6–7.3 ms/帧（中位 7.0）** | ~0.006 ms/帧 |
+| 优化后（`NEON_SINGLE_THREAD=1`） | 12.0–12.4 ms/帧 | ~0.008 ms/帧 |
+
+同机交替 A/B 下渲染耗时 **−35% ~ −43%**（绝对值随机器负载浮动，以中位数为准）。逻辑更新本身只有 0.03 ms/帧，所以优化重点在渲染而非 AI/碰撞。
+
+优化项：
+
+- 世界/辉光双通道并行（线程池，主线程参与执行）；
+- 绘制原语去掉逐次 `save/restore`，`glow` 合并为一次画笔状态；`Paint::Pass` 提前跳过反通道原语；
+- 去掉多余的整帧图层：世界直接画进 `frame_`，字体单独在主线程补画；`background_` 不透明，省掉 `world_` 清屏/回贴；
+- 标准弹对象池复用（`Bullets::spawnStandard` + `StandardBullet::reset`），稳态射击零堆分配；
+- 敌人 `Archetype` 缓存替代每帧 `dynamic_cast`；`statsFor` 从线性扫描改为 `QHash` 下标表；`takeDamage` 先按 `Archetype::Defensive` 过滤 linker 扫描；
+- `Combatants::draw` 排序缓冲改为线程内 `thread_local`，两个渲染通道各自复用；
+- `QLocale` 等每帧构造的对象改为 `static`。
+
+并发调试开关：
+
+```text
+NEON_SINGLE_THREAD=1     关闭线程池，退回单遍合并绘制
+NEON_RENDER_THREADS=N    工作线程数（0–8，默认 min(核数-1, 3)）
+```
+
+GPU 加速没有采用：当前是 `QImage` + `QPainter` 光栅管线，走 GPU 需要重写为 `QRhi` / `QOpenGLWidget` 渲染器，并且会与 offscreen 截图/冒烟测试冲突；在本项目里多线程通道已经拿到主要收益。
 
 ## 测试与交付
 
@@ -547,6 +593,7 @@ GameWindow::paintEvent()
 - `mingw32-make -j12 test` → `-DDEBUG` 测试控制台。
 - `mingw32-make -j12 deploy` → 只复制 release GUI 到 `dist/NeonCore`。
 - `dist/NeonCore` 不包含测试逻辑。
+- `NeonCoreConsole.exe --bench` → 固定场景渲染/更新基准（只在 `-DDEBUG` 构建里）。
 
 ## 已知边界
 

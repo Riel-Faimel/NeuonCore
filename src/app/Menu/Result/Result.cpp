@@ -54,8 +54,9 @@ void Result::render(QPainter &painter, const Summary &summary) const
     const QString timeText = QStringLiteral("%1:%2")
                                  .arg(minutes, 2, 10, QChar('0'))
                                  .arg(seconds, 2, 10, QChar('0'));
+    static const QLocale english(QLocale::English);
     const std::array<std::pair<QString, QString>, 4> stats = {{
-        {QStringLiteral("本局获得"), QLocale(QLocale::English).toString(summary.score)},
+        {QStringLiteral("本局获得"), english.toString(summary.score)},
         {QStringLiteral("到达波次"),
          QStringLiteral("%1 / %2").arg(summary.wave).arg(summary.totalWaves)},
         {QStringLiteral("击破目标"), QString::number(summary.kills)},

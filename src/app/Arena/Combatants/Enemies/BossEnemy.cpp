@@ -23,7 +23,7 @@ const EnemyRegistrar<BossEnemy> kRegistration(
 }
 
 BossEnemy::BossEnemy(const Math::Vec2 &position, int wave)
-    : Enemy("boss", Role::Ranged, position, wave)
+    : Enemy("boss", Role::Ranged, Archetype::Boss, position, wave)
 {
     // Boss 不吃波次成长：数值直接用 JSON 基础值。
     boss = true;
@@ -69,11 +69,11 @@ void BossEnemy::updateSpecial(const Context &ctx, float dt)
         for (int i = 0; i < count; ++i) {
             const float angle = offset + Math::Tau * float(i) / float(count);
             const Math::Vec2 bulletDirection(std::cos(angle), std::sin(angle));
-            ctx.bullets.submit(std::make_unique<StandardBullet>(
+            ctx.bullets.spawnStandard(
                 pos + bulletDirection * 42.0f,
                 bulletDirection * data::kBossRadialBullet.speed,
                 data::kBossRadialBullet.damage * damageMultiplier(), Base::Magenta,
-                Bullet::Standpoint::Enemy, data::kBossRadialBullet.radius));
+                Bullet::Standpoint::Enemy, data::kBossRadialBullet.radius);
         }
         ctx.entities.addShockwave(pos, 92.0f, Base::Magenta, 0.36f, 2);
     }
@@ -93,11 +93,11 @@ void BossEnemy::fireAimed(const Context &ctx, int count, float spread)
     for (int i = 0; i < count; ++i) {
         const float offset = (float(i) - (count - 1) / 2.0f) * spread;
         const Math::Vec2 direction(std::cos(base + offset), std::sin(base + offset));
-        ctx.bullets.submit(std::make_unique<StandardBullet>(
+        ctx.bullets.spawnStandard(
             pos + direction * 46.0f, direction * data::kBossAimedBullet.speed,
             data::kBossAimedBullet.damage * damageMultiplier(),
             QColor(255, 112, 190), Bullet::Standpoint::Enemy,
-            data::kBossAimedBullet.radius));
+            data::kBossAimedBullet.radius);
     }
     ctx.entities.spawnBurst(ctx, pos, Base::Magenta, 8, 100.0f, 0.35f);
 }

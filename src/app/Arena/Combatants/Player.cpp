@@ -138,10 +138,10 @@ void Player::shoot(const Context &ctx)
         const Math::Vec2 direction = forward.rotated(offset);
         const Math::Vec2 origin = state.pos + forward * 20.0f
                                   + side * ((float(index) - (count - 1) / 2.0f) * 4.0f);
-        ctx.bullets.submit(std::make_unique<StandardBullet>(
+        ctx.bullets.spawnStandard(
             origin, direction * state.bulletSpeed, state.damage, Base::Cyan,
             Bullet::Standpoint::Player, data::kPlayer.bulletRadius, state.pierce,
-            state.critChance));
+            state.critChance);
     }
     state.muzzlePos = state.pos + forward * 22.0f;
     state.fireFlash = 0.07f;

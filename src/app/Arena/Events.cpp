@@ -26,17 +26,18 @@ namespace arena {
 
 void Events::resolvePlayerBullets(const Context &ctx)
 {
+    const auto &enemies = ctx.combatants.enemies();
     for (auto &owned : ctx.bullets.playerBullets()) {
         Bullet &bullet = *owned;
         if (!bullet.alive()) {
             continue;
         }
-        const size_t count = ctx.combatants.enemies().size();
+        const size_t count = enemies.size();
         for (size_t i = 0; i < count; ++i) {
-            if (i >= ctx.combatants.enemies().size()) {
+            if (i >= enemies.size()) {
                 break;
             }
-            Enemy *enemy = ctx.combatants.enemies()[i].get();
+            Enemy *enemy = enemies[i].get();
             Fighter &fighter = *enemy;
             if (!fighter.isAlive()) {
                 continue;

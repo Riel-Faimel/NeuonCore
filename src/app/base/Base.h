@@ -12,8 +12,9 @@
 #include <QStringList>
 
 #include <memory>
+#include <functional>
 
-// Base 是全局模块类，组合 namespace base 的 Input / Audio / Music / Pointer / Paint 组件。
+// Base 是全局模块类，组合 namespace base 的 Input / Audio / Music / Pointer / Paint / ThreadPool 组件。
 // 对外仍只暴露 Base 这一组接口，组件细节不泄露给业务模块。
 //
 // Base 是进程级单例：唯一实例是 Base.cpp 里的 BaseService，业务模块直接使用它，
@@ -46,6 +47,18 @@ public:
     void pointerSetVisible(bool visible);
     void pointerUpdate(float dt);
     void pointerDraw(QPainter &painter) const;
+
+    // ----- 帧内并行（转发 base::ThreadPool） -----
+    // 渲染层用它把互不重叠的图层分给工作线程；主线程也参与执行。
+    bool parallelEnabled() const;
+    int parallelWorkers() const;
+    void parallelFor(int taskCount, const std::function<void(int)> &task);
+
+    // ----- 渲染通道（转发 base::Paint::Pass） -----
+    // 世界层与辉光层写不同的目标，可并行绘制；结束时必须回到 endRenderPass()。
+    static void beginWorldPass();
+    static void beginGlowPass();
+    static void endRenderPass();
 
     // ----- 音频（转发 base::Audio / base::Music） -----
     void initAudio();

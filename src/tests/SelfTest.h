@@ -11,12 +11,15 @@
 #include "Arena/Combatants/Enemies/BossEnemy.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QTextStream>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
+#include <memory>
 
 #ifdef DEBUG
 
@@ -695,6 +698,23 @@ public:
             menu.returnToMenu();
         }
 
+        log(QStringLiteral("Bullet pool"));
+        menu.startLevel(0);
+        game = menu.match_.game();
+        if (game != nullptr) {
+            game->arena_.playerState().invuln = 999.0f;
+            const int beforePool = game->arena_.pooledBulletCount();
+            game->arena_.spawnStandard({100.0f, 100.0f}, {0.0f, 0.0f}, 1.0f,
+                                       Base::Cyan, Bullet::Standpoint::Player, 3.0f);
+            for (int i = 0; i < 160; ++i) {
+                game->arena_.playerState().invuln = 999.0f;
+                game->arena_.update(1.0f / 60.0f);
+            }
+            success &= require(game->arena_.pooledBulletCount() > beforePool,
+                               QStringLiteral("dead standard bullets return to the pool"));
+            menu.returnToMenu();
+        }
+
         log(QStringLiteral("Submitted script"));
         games::Script shortScript;
         shortScript.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("drone"), 2},
@@ -713,6 +733,97 @@ public:
                     : QStringLiteral("SMOKE TESTS FAILED"));
         logFile.close();
         return success ? 0 : 1;
+    }
+
+    // 性能基准（--bench）：固定场景下测 render / update 的每帧耗时。
+    // 用于对比优化前后（配合 NEON_SINGLE_THREAD=1 做单线程对照）。
+    static int bench()
+    {
+        Menu menu(false);
+        menu.startLevel(0);
+        Games *game = menu.match_.game();
+        if (game == nullptr) {
+            return 1;
+        }
+
+        Arena &arena = game->arena_;
+        auto ctx = arena.context();
+        game->state_ = Games::State::Playing;
+        game->runTime_ = 112.0f;
+        game->waves_.start(4);
+        game->waves_.queue_ = {QStringLiteral("drone"), QStringLiteral("spitter")};
+        game->waves_.waveTotal_ = 17;
+
+        arena.enemies().clear();
+        arena.portals().clear();
+        arena.pickups().clear();
+        arena.playerBullets().clear();
+        arena.clearEnemy();
+        arena.particles().clear();
+        arena.floatingTexts().clear();
+        arena.shockwaves().clear();
+
+        Arena::PlayerState &player = arena.playerState();
+        player.pos = {475.0f, 430.0f};
+        player.hp = 74.0f;
+        player.hpDisplay = 84.0f;
+        player.aim = -0.55f;
+        player.invuln = 99.0f;
+        BaseService.mouseMove({1010.0f, 265.0f});
+
+        const std::array<const char *, 12> kinds = {
+            "drone", "drone", "drone", "drone", "spitter", "spitter",
+            "tank", "splitter", "amplifier", "mender", "linker", "summoner"};
+        const std::array<Math::Vec2, 12> spots = {{
+            {820, 285}, {960, 520}, {700, 165}, {1080, 360},
+            {950, 210}, {1120, 470}, {760, 445}, {600, 210},
+            {860, 340}, {930, 470}, {790, 520}, {690, 300}}};
+        for (int i = 0; i < 12; ++i) {
+            arena.spawnEnemy(ctx, QString::fromLatin1(kinds[size_t(i)]), spots[size_t(i)], 4);
+        }
+        arena.portals().emplace_back(QStringLiteral("spitter"), Math::Vec2(1160, 615), 4);
+        arena.spawnPickup(ctx, {360, 315}, 16);
+        arena.player().shoot(ctx);
+        arena.spawnBurst(ctx, {860, 290}, Base::Coral, 14, 130.0f, 0.7f);
+        arena.spawnBurst(ctx, {715, 400}, Base::Cyan, 8, 100.0f, 0.5f);
+        arena.addShockwave({860, 290}, 48.0f, Base::Coral, 0.6f, 2);
+        for (int i = 0; i < 6; ++i) {
+            arena.submit(std::make_unique<arena::StandardBullet>(
+                Math::Vec2(650.0f + float(i) * 60.0f, 360.0f),
+                Math::Vec2(900.0f, -250.0f + float(i) * 40.0f), 12.5f, Base::Cyan,
+                Bullet::Standpoint::Player, 3.2f));
+        }
+        game->renderer_.showBanner(QStringLiteral("第 4 波"),
+                                   QStringLiteral("敌方信号正在接近"), 2.0f, Base::Cyan);
+        game->renderer_.bannerTimer_ = 1.6f;
+
+        for (int i = 0; i < 30; ++i) {
+            game->render();
+        }
+
+        QElapsedTimer timer;
+        constexpr int frames = 300;
+        timer.start();
+        for (int i = 0; i < frames; ++i) {
+            game->render();
+        }
+        const double renderMs = double(timer.nsecsElapsed()) / 1e6 / frames;
+
+        BaseService.mousePressLeft({1010.0f, 265.0f});
+        constexpr int steps = 600;
+        timer.restart();
+        for (int i = 0; i < steps; ++i) {
+            arena.playerState().invuln = 999.0f;
+            arena.update(1.0f / 60.0f);
+        }
+        const double updateMs = double(timer.nsecsElapsed()) / 1e6 / steps;
+        BaseService.mouseReleaseLeft();
+
+        std::printf("BENCH frames=%d render=%.3f ms/frame update=%.3f ms/frame workers=%d pooled=%d\n",
+                    frames, renderMs, updateMs, BaseService.parallelWorkers(),
+                    arena.pooledBulletCount());
+        std::fflush(stdout);
+        return 0;
     }
 
     static int capture(const QString &directory)

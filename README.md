@@ -128,7 +128,7 @@ src/json/*.json
 | `bullets.json` | 敌方子弹速度 / 伤害 / 半径 |
 | `items.json` | 商店道具（地雷）价格 / 伤害 / 范围 / 引爆延迟 |
 
-- 改完直接 `make`：JSON 会重新嵌入，包含数值表的 TU 自动重编译；格式写错会在编译期由 `static_assert` 报错；
+- 改完直接 `make`：JSON 会重新嵌入，包含数值表的 TU 自动重编译；格式写错会退化成默认值/空表，启动时由 `data::validationError()` 返回错误，`main` 打印并退出；
 - 解析器限制：字符串不使用转义、数字不使用指数；表项数量上限见 `GameData.h` 的 `Max*` 常量；
 - 运行时开销为零：`data::*` 都是 `inline constexpr`，游戏里没有 JSON 解析逻辑；
 - 生成的头文件在 `build/generated/`，不进版本库。
@@ -162,12 +162,13 @@ cpp/
 │  │  │     ├─ Portal / Pickup
 │  │  │     └─ Particle / FloatingText / Shockwave
 │  │  ├─ Base/
-│  │  │  ├─ Base.h / Base.cpp     模块入口：组合 Input / Audio / Music / Pointer / Paint；含全局单例 BaseService
+│  │  │  ├─ Base.h / Base.cpp     模块入口：组合 Input / Audio / Music / Pointer / Paint / ThreadPool；含全局单例 BaseService
 │  │  │  ├─ Input/Input.h/.cpp    组件：键鼠状态
 │  │  │  ├─ Audio/Audio.h/.cpp    组件：程序化 WAV 音效
 │  │  │  ├─ Audio/Music.h/.cpp    组件：背景音乐管理器（常驻）
 │  │  │  ├─ Pointer/Pointer.h/.cpp 组件：全局鼠标指针（窗口每帧通过 BaseService 叠加）
-│  │  │  └─ Paint/Paint.h/.cpp    组件：颜色/字体/绘制原语
+│  │  │  ├─ Paint/Paint.h/.cpp    组件：颜色/字体/绘制原语（Pass：世界/辉光通道）
+│  │  │  └─ ThreadPool/ThreadPool.h/.cpp 组件：帧内并行任务池
 │  │  ├─ Games/
 │  │  │  ├─ Games.h / Games.cpp   模块入口：局内状态机与组件编排
 │  │  │  ├─ Waves/Waves.h/.cpp    组件：按提交的台本出生敌人
@@ -219,9 +220,9 @@ cpp/
 └─ dist/NeonCore/                 交付用 release GUI + 运行库
 ```
 
-`src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Music`、`Pointer`、`Paint` 五个 `namespace base` 组件。`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），Menu / Games / Arena / Renderer / Shop 都直接调用 `BaseService`，不再通过构造函数传递 `Base&`。`Base.h` 仍只暴露 Base 的输入/音频/指针/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Music` 的 QMediaPlayer、`Pointer` 的位置/时钟/准星、`Paint` 的 QFontDatabase 细节都在各自组件内。字体由 `main()` 在 `QApplication` 之后调 `Base::initialize()`；音频由 `BaseService.initAudio()` 按需初始化，`main()` 退出前调 `BaseService.shutdown()` 释放 Qt 音频对象。窗口通过 `BaseService.pointerMoveTo/pointerSetVisible/pointerUpdate/pointerDraw` 驱动全局指针。
+`src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Music`、`Pointer`、`Paint`、`ThreadPool` 六个 `namespace base` 组件。`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），Menu / Games / Arena / Renderer / Shop 都直接调用 `BaseService`，不再通过构造函数传递 `Base&`。`Base.h` 仍只暴露 Base 的输入/音频/指针/并行/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Music` 的 QMediaPlayer、`Pointer` 的位置/时钟/准星、`Paint` 的 QFontDatabase 细节、`ThreadPool` 的线程管理都在各自组件内。字体与工作线程由 `main()` 在 `QApplication` 之后调 `Base::initialize()` 初始化；音频由 `BaseService.initAudio()` 按需初始化，`main()` 退出前调 `BaseService.shutdown()`（先停线程池，再释放 Qt 音频对象）。窗口通过 `BaseService.pointerMoveTo/pointerSetVisible/pointerUpdate/pointerDraw` 驱动全局指针。
 
-`src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades`、`Renderer` 三个 `namespace games` 组件，并拥有 `Arena`。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Renderer` 只负责这一局的画面与特效（标题/结算在 `menu::*`，鼠标指针在 `BaseService` 的 `base::Pointer`），`Games` 负责局内状态机和调用顺序。随机数走全局 `RandomService`，不再作为构造参数传入。
+`src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades`、`Renderer` 三个 `namespace games` 组件，并拥有 `Arena`。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Renderer` 只负责这一局的画面与特效（标题/结算在 `menu::*`，鼠标指针在 `BaseService` 的 `base::Pointer`）。`Renderer` 把世界层放到 `ThreadPool` 工作线程、辉光层留在主线程并行绘制，字体仍在主线程；`Games` 负责局内状态机和调用顺序。随机数走全局 `RandomService`，不再作为构造参数传入。
 
 积分和库存由进程级单例 `ShopService` 持有（`extern Shop ShopService;`）：`Shop` 组合 `shop::Score`（跨局钱包，键 `score/total`）和 `shop::Inventory`（地雷库存，键 `inventory/mines`），Windows 写注册表、其他平台写 `settings.ini`。`main()` 启动时调 `ShopService.load()`、退出前调 `ShopService.save()`；`arena::Events::handleKill()` 击杀上报积分；HUD 显示全局钱包，结算显示本局获得（`runScore()`）；`Shop::buyMine()` 负责扣款入库。
 
@@ -322,6 +323,31 @@ mingw32-make -j12 test
 ```
 
 `NeonCoreConsole.exe` 和 `src/tests/SelfTest.h` 只存在于 debug/test 构建；`dist\NeonCore` 只交付 release `NeonCore.exe`，不包含测试逻辑。
+
+## 性能
+
+局内渲染拆成两条并行通道：世界层（背景/星空/实体/子弹/粒子）在 `ThreadPool` 工作线程写 `frame_`，辉光层在主线程写 `glow_`，字体统一留在主线程，最后主线程合成。`base::Paint::Pass` 让同一批绘制调用按通道裁剪，不需要复制一套绘制代码。
+
+固定场景基准（`--bench`：300 帧 `render` + 600 帧 `update`，同机交替 A/B）：
+
+| 版本 | render | update |
+| --- | --- | --- |
+| 优化前 | 10.1–13.2 ms/帧（中位 12.4） | ~0.03 ms/帧 |
+| 并行渲染 | **6.6–7.3 ms/帧（中位 7.0，−35% ~ −43%）** | ~0.006 ms/帧 |
+| `NEON_SINGLE_THREAD=1` | 12.0–12.4 ms/帧 | ~0.008 ms/帧 |
+
+其他改动：绘制原语去掉逐次 `save/restore`；世界层直接画进最终帧、去掉多余整图；标准弹对象池复用（稳态零堆分配）；敌人 `Archetype` 缓存替代 `dynamic_cast`；`Combatants::draw` 使用线程内排序缓冲。
+
+```powershell
+# 基准（debug/test 构建）
+.\build\NeonCoreConsole.exe --bench
+
+# 关闭并行 / 指定工作线程数（0–8，默认 min(核数-1, 3)）
+$env:NEON_SINGLE_THREAD=1
+$env:NEON_RENDER_THREADS=2
+```
+
+没有走 GPU：当前是 `QImage` + `QPainter` 光栅管线，GPU 化需要重写为 `QRhi`/`QOpenGLWidget` 渲染器，并且会破坏 offscreen 截图与冒烟测试；多线程通道已经拿到主要收益。
 
 ## 说明
 

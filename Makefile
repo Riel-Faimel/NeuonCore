@@ -41,7 +41,7 @@ MENU_COMPONENTS := Menu Main/Main Map/Map Match/Match Result/Result Editor/Edito
 MENU_OBJS := $(addprefix $(BUILD)/app/Menu/,$(addsuffix .o,$(MENU_COMPONENTS)))
 LIB_SRC := Math Random
 LIB_OBJS := $(addprefix $(BUILD)/lib/,$(addsuffix .o,$(LIB_SRC)))
-BASE_COMPONENTS := Base Input/Input Audio/Audio Audio/Music Paint/Paint Pointer/Pointer
+BASE_COMPONENTS := Base Input/Input Audio/Audio Audio/Music Paint/Paint Pointer/Pointer ThreadPool/ThreadPool
 SHOP_COMPONENTS := Shop Score/Score Inventory/Inventory
 SHOP_OBJS := $(addprefix $(BUILD)/app/Shop/,$(addsuffix .o,$(SHOP_COMPONENTS)))
 BASE_OBJS := $(addprefix $(BUILD)/app/Base/,$(addsuffix .o,$(BASE_COMPONENTS)))
@@ -96,6 +96,7 @@ $(BUILD):
 	@if not exist "$(BUILD_WIN)\app\Base\Audio" mkdir "$(BUILD_WIN)\app\Base\Audio"
 	@if not exist "$(BUILD_WIN)\app\Base\Paint" mkdir "$(BUILD_WIN)\app\Base\Paint"
 	@if not exist "$(BUILD_WIN)\app\Base\Pointer" mkdir "$(BUILD_WIN)\app\Base\Pointer"
+	@if not exist "$(BUILD_WIN)\app\Base\ThreadPool" mkdir "$(BUILD_WIN)\app\Base\ThreadPool"
 	@if not exist "$(BUILD_WIN)\app\Games" mkdir "$(BUILD_WIN)\app\Games"
 	@if not exist "$(BUILD_WIN)\app\Games\Waves" mkdir "$(BUILD_WIN)\app\Games\Waves"
 	@if not exist "$(BUILD_WIN)\app\Games\Upgrades" mkdir "$(BUILD_WIN)\app\Games\Upgrades"

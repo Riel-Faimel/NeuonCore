@@ -29,6 +29,8 @@ public:
 
     void drawBackground(QPainter &world, QPainter &glow) const;
     void drawForeground(QPainter &world, QPainter &glow) const;
+    // 飘字单独一层：字体渲染留在主线程，世界层可以放到工作线程。
+    void drawTexts(QPainter &world) const;
 
     void spawnPortal(const Context &ctx, const QString &kind, int wave);
     void spawnPickup(const Context &ctx, const Math::Vec2 &pos, int amount);

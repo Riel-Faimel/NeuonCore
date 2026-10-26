@@ -10,7 +10,7 @@ class OffensiveEnemy : public Enemy {
 protected:
     OffensiveEnemy(std::string_view kindName, Role role,
                    const Math::Vec2 &position, int wave)
-        : Enemy(kindName, role, position, wave)
+        : Enemy(kindName, role, Archetype::Offensive, position, wave)
     {
     }
 
@@ -23,7 +23,7 @@ class RangedEnemy : public Enemy {
 protected:
     RangedEnemy(std::string_view kindName, Role role,
                 const Math::Vec2 &position, int wave)
-        : Enemy(kindName, role, position, wave)
+        : Enemy(kindName, role, Archetype::Ranged, position, wave)
     {
     }
 
@@ -37,7 +37,7 @@ class DefensiveEnemy : public Enemy {
 protected:
     DefensiveEnemy(std::string_view kindName, Role role,
                    const Math::Vec2 &position, int wave)
-        : Enemy(kindName, role, position, wave)
+        : Enemy(kindName, role, Archetype::Defensive, position, wave)
     {
     }
 
@@ -48,7 +48,7 @@ class SupportEnemy : public Enemy {
 protected:
     SupportEnemy(std::string_view kindName, Role role,
                  const Math::Vec2 &position, int wave)
-        : Enemy(kindName, role, position, wave)
+        : Enemy(kindName, role, Archetype::Support, position, wave)
     {
     }
 
@@ -63,7 +63,7 @@ class SelfDestructEnemy : public Enemy {
 protected:
     SelfDestructEnemy(std::string_view kindName, Role role,
                       const Math::Vec2 &position, int wave)
-        : Enemy(kindName, role, position, wave)
+        : Enemy(kindName, role, Archetype::SelfDestruct, position, wave)
     {
     }
 

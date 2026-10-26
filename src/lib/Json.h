@@ -329,7 +329,8 @@ struct Parser {
     }
 };
 
-// 编译期入口：解析失败时返回空 Document，调用方用 static_assert 兜底。
+// 编译期入口：解析失败时返回空 Document，调用方在启动时用
+// data::validationError() 显式检查并转到非零退出码。
 constexpr Document parse(std::string_view text)
 {
     Parser parser;

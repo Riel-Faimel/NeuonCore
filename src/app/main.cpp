@@ -1,5 +1,6 @@
 #include "Menu/Menu.h"
 #include "Base/Base.h"
+#include "Data/GameData.h"
 #include "Shop/Shop.h"
 
 #include <QApplication>
@@ -210,11 +211,18 @@ private:
 
 int main(int argc, char *argv[])
 {
+    // 编译期常量来自 src/json；解析异常会退化为默认值/空表，入口显式拒绝启动。
+    if (const char *dataError = data::validationError(); dataError != nullptr) {
+        std::fprintf(stderr, "DATA ERROR: %s\n", dataError);
+        return 1;
+    }
+
 #ifdef DEBUG
     bool headless = false;
     bool smoke = false;
     bool capture = false;
     bool windowTest = false;
+    bool bench = false;
     QString captureDirectory = QStringLiteral("screenshots");
     QString windowShot = QStringLiteral("screenshots/window.png");
     for (int i = 1; i < argc; ++i) {
@@ -233,6 +241,9 @@ int main(int argc, char *argv[])
             if (i + 1 < argc) {
                 windowShot = QString::fromLocal8Bit(argv[++i]);
             }
+        } else if (argument == QStringLiteral("--bench")) {
+            bench = true;
+            headless = true;
         }
     }
 
@@ -263,6 +274,12 @@ int main(int argc, char *argv[])
     }
     if (capture) {
         const int code = SelfTest::capture(captureDirectory);
+        ShopService.save();
+        BaseService.shutdown();
+        return code;
+    }
+    if (bench) {
+        const int code = SelfTest::bench();
         ShopService.save();
         BaseService.shutdown();
         return code;

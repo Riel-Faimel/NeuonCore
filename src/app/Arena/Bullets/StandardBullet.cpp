@@ -14,10 +14,26 @@ StandardBullet::StandardBullet(const Math::Vec2 &position, const Math::Vec2 &vel
                                float damage, const QColor &color,
                                Standpoint standpoint, float radiusValue,
                                int pierce, float critChance)
-    : pos_(position), prev_(position), vel_(velocity), damage_(damage), color_(color),
-      standpoint_(standpoint), radius_(radiusValue), pierce_(pierce),
-      critChance_(critChance), life_(standpoint == Standpoint::Player ? 1.6f : 4.5f)
 {
+    reset(position, velocity, damage, color, standpoint, radiusValue, pierce, critChance);
+}
+
+void StandardBullet::reset(const Math::Vec2 &position, const Math::Vec2 &velocity,
+                           float damage, const QColor &color, Standpoint standpoint,
+                           float radiusValue, int pierce, float critChance)
+{
+    pos_ = position;
+    prev_ = position;
+    vel_ = velocity;
+    damage_ = damage;
+    color_ = color;
+    standpoint_ = standpoint;
+    radius_ = radiusValue;
+    pierce_ = pierce;
+    critChance_ = critChance;
+    life_ = standpoint == Standpoint::Player ? 1.6f : 4.5f;
+    alive_ = true;
+    hitTargetCount_ = 0;
 }
 
 void StandardBullet::advance(float dt)

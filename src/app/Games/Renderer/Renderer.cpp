@@ -19,6 +19,7 @@
 
 namespace games {
 
+
 Renderer::Renderer() = default;
 
 void Renderer::initialize()
@@ -27,12 +28,14 @@ void Renderer::initialize()
                          QImage::Format_ARGB32_Premultiplied);
     vignette_ = QImage(GameConfig::ScreenWidth, GameConfig::ScreenHeight,
                        QImage::Format_ARGB32_Premultiplied);
-    world_ = QImage(GameConfig::ScreenWidth, GameConfig::ScreenHeight,
-                    QImage::Format_ARGB32_Premultiplied);
     glow_ = QImage(GameConfig::ScreenWidth, GameConfig::ScreenHeight,
                    QImage::Format_ARGB32_Premultiplied);
     frame_ = QImage(GameConfig::ScreenWidth, GameConfig::ScreenHeight,
                     QImage::Format_ARGB32_Premultiplied);
+    dummyWorld_ = QImage(1, 1, QImage::Format_ARGB32_Premultiplied);
+    dummyGlow_ = QImage(1, 1, QImage::Format_ARGB32_Premultiplied);
+    dummyWorld_.fill(Qt::transparent);
+    dummyGlow_.fill(Qt::transparent);
     flashColor_ = Base::White;
 
     buildBackground();
@@ -236,22 +239,10 @@ void Renderer::drawSparks(QPainter &world, QPainter &glow) const
     }
 }
 
-void Renderer::render(const Games &game, const Arena &arena, const games::Waves &waves,
-                      const games::Upgrades &upgrades)
+void Renderer::render(const Games &game, const Arena &arena, const Waves &waves,
+                      const Upgrades &upgrades)
 {
     glow_.fill(Qt::transparent);
-
-    {
-        QPainter worldPainter(&world_);
-        QPainter glowPainter(&glow_);
-        worldPainter.setRenderHint(QPainter::Antialiasing, true);
-        glowPainter.setRenderHint(QPainter::Antialiasing, true);
-        // background_ 不透明且整幅覆盖，world_ 不需要先清成透明。
-        worldPainter.drawImage(0, 0, background_);
-        drawStars(worldPainter, glowPainter);
-        arena.draw(worldPainter, glowPainter);
-        drawSparks(worldPainter, glowPainter);
-    }
 
     int offsetX = 0;
     int offsetY = 0;
@@ -259,26 +250,89 @@ void Renderer::render(const Games &game, const Arena &arena, const games::Waves 
         offsetX = int(std::lround(RandomService.real(-shake_, shake_)));
         offsetY = int(std::lround(RandomService.real(-shake_, shake_)));
     }
-    // 没有震屏偏移时 world_ 会整幅覆盖 frame_，省掉一次整图填充。
-    if (offsetX != 0 || offsetY != 0) {
-        frame_.fill(QColor(2, 3, 9));
+
+    // 主线程跑辉光通道（写 glow_），工作线程跑世界通道（写 frame_）。
+    // 两条通道写不同 QImage、覆盖同一批绘制调用但互不重叠；字体绘制被排除在通道外。
+    if (BaseService.parallelEnabled() && BaseService.parallelWorkers() > 0) {
+        BaseService.parallelFor(2, [&](int task) {
+            if (task == 0) {
+                Base::beginGlowPass();
+                drawGlowPass(arena);
+                Base::endRenderPass();
+            } else {
+                Base::beginWorldPass();
+                drawWorldPass(arena, offsetX, offsetY);
+                Base::endRenderPass();
+            }
+        });
+    } else {
+        // 单线程回退：一次遍历同时画世界层和辉光层，避免两遍绘制的重复开销。
+        Base::endRenderPass();
+        drawCombinedPass(arena, offsetX, offsetY);
     }
+
+    // 飘字留在主线程：画在世界层上、辉光叠加之前，与拆分前的顺序一致。
+    {
+        QPainter painter(&frame_);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
+        painter.translate(float(offsetX), float(offsetY));
+        arena.drawTexts(painter);
+    }
+
+    compositeFrame(offsetX, offsetY);
 
     QPainter painter(&frame_);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
+    drawUi(painter, game, arena, waves, upgrades);
+}
 
-    painter.drawImage(QPoint(offsetX, offsetY), world_);
-    painter.setCompositionMode(QPainter::CompositionMode_Plus);
-    painter.drawImage(QPoint(offsetX, offsetY), glow_);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-    painter.drawImage(0, 0, vignette_);
-
-    if (flashAlpha_ > 0.0f) {
-        painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
-                         Base::withAlpha(flashColor_, int(flashAlpha_)));
+void Renderer::drawWorldPass(const Arena &arena, int offsetX, int offsetY)
+{
+    if (offsetX != 0 || offsetY != 0) {
+        frame_.fill(QColor(2, 3, 9));
     }
+    QPainter worldPainter(&frame_);
+    QPainter dummy(&dummyGlow_);
+    worldPainter.setRenderHint(QPainter::Antialiasing, true);
+    worldPainter.translate(float(offsetX), float(offsetY));
+    // background_ 不透明且整幅覆盖，不需要先清 frame。
+    worldPainter.drawImage(0, 0, background_);
+    drawStars(worldPainter, dummy);
+    arena.draw(worldPainter, dummy);
+    drawSparks(worldPainter, dummy);
+}
 
+void Renderer::drawCombinedPass(const Arena &arena, int offsetX, int offsetY)
+{
+    if (offsetX != 0 || offsetY != 0) {
+        frame_.fill(QColor(2, 3, 9));
+    }
+    QPainter worldPainter(&frame_);
+    QPainter glowPainter(&glow_);
+    worldPainter.setRenderHint(QPainter::Antialiasing, true);
+    glowPainter.setRenderHint(QPainter::Antialiasing, true);
+    worldPainter.translate(float(offsetX), float(offsetY));
+    worldPainter.drawImage(0, 0, background_);
+    drawStars(worldPainter, glowPainter);
+    arena.draw(worldPainter, glowPainter);
+    drawSparks(worldPainter, glowPainter);
+}
+
+void Renderer::drawGlowPass(const Arena &arena)
+{
+    QPainter glowPainter(&glow_);
+    QPainter dummy(&dummyWorld_);
+    glowPainter.setRenderHint(QPainter::Antialiasing, true);
+    drawStars(dummy, glowPainter);
+    arena.draw(dummy, glowPainter);
+    drawSparks(dummy, glowPainter);
+}
+
+void Renderer::drawUi(QPainter &painter, const Games &game, const Arena &arena,
+                      const Waves &waves, const Upgrades &upgrades)
+{
     switch (game.state()) {
     case Games::State::Playing:
         drawHUD(painter, arena, waves);
@@ -298,6 +352,23 @@ void Renderer::render(const Games &game, const Arena &arena, const games::Waves 
     case Games::State::Victory:
     case Games::State::Defeat:
         break;
+    }
+}
+
+void Renderer::compositeFrame(int offsetX, int offsetY)
+{
+    QPainter painter(&frame_);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+
+    painter.setCompositionMode(QPainter::CompositionMode_Plus);
+    painter.drawImage(QPoint(offsetX, offsetY), glow_);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    painter.drawImage(0, 0, vignette_);
+
+    if (flashAlpha_ > 0.0f) {
+        painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
+                         Base::withAlpha(flashColor_, int(flashAlpha_)));
     }
 }
 
@@ -354,8 +425,9 @@ void Renderer::drawHUD(QPainter &painter, const Arena &arena, const games::Waves
 
     Base::text(painter, Base::tinyFont(), QStringLiteral("积分 / SCORE"), Base::Muted,
                 {GameConfig::ScreenWidth - 30.0f, 17}, QStringLiteral("topright"), 220);
+    static const QLocale english(QLocale::English);
     Base::text(painter, Base::largeFont(),
-                QLocale(QLocale::English).toString(arena.score()), Base::White,
+                english.toString(arena.score()), Base::White,
                 {GameConfig::ScreenWidth - 30.0f, 35}, QStringLiteral("topright"));
     Base::text(painter, Base::tinyFont(),
                 QStringLiteral("击破  %1").arg(arena.kills(), 3, 10, QChar('0')),

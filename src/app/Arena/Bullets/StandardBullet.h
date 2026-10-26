@@ -15,6 +15,11 @@ public:
                    const QColor &color, Standpoint standpoint, float radius = 3.0f,
                    int pierce = 0, float critChance = 0.0f);
 
+    // 对象池复用：重置全部状态，供 Bullets 回收后再发射。
+    void reset(const Math::Vec2 &position, const Math::Vec2 &velocity, float damage,
+               const QColor &color, Standpoint standpoint, float radius = 3.0f,
+               int pierce = 0, float critChance = 0.0f);
+
     void advance(float dt) override;
     void draw(QPainter &world, QPainter &glow) const override;
     bool hit(const Context &ctx, Fighter &target) override;
