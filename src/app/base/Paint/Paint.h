@@ -41,11 +41,9 @@ public:
     static const QFont &largeFont();
     static const QFont &bigFont();
     static const QFont &titleFont();
-    static const QFont &hugeFont();
     static const QFont &techTinyFont();
     static const QFont &techSmallFont();
     static const QFont &techFont();
-    static const QFont &techLargeFont();
 
     static QColor shade(const QColor &color, float factor);
     static QColor withAlpha(const QColor &color, int alpha);
@@ -74,15 +72,9 @@ public:
     static void glow(QPainter &glowPainter, const Math::Vec2 &pos, float radius,
                      const QColor &color, float intensity = 1.0f);
 
-    static QRectF textBounds(const QFont &font, const QString &value,
-                             const Math::Vec2 &pos, const QString &anchor = "topleft");
     static void text(QPainter &painter, const QFont &font, const QString &value,
                      const QColor &color, const Math::Vec2 &pos,
                      const QString &anchor = "topleft", int alpha = 255);
-    static void shadowText(QPainter &painter, const QFont &font, const QString &value,
-                           const QColor &color, const Math::Vec2 &pos,
-                           const QString &anchor = "center", int alpha = 255,
-                           const QColor &shadow = QColor(0, 0, 0));
     static void glowText(QPainter &painter, const QFont &font, const QString &value,
                          const QColor &color, const Math::Vec2 &pos,
                          const QString &anchor = "center", int alpha = 255);
@@ -104,11 +96,9 @@ private:
     static QFont sLarge;
     static QFont sBig;
     static QFont sTitle;
-    static QFont sHuge;
     static QFont sTechTiny;
     static QFont sTechSmall;
     static QFont sTech;
-    static QFont sTechLarge;
 };
 
 } // namespace base

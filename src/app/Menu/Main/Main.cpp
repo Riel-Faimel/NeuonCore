@@ -13,12 +13,6 @@
 
 namespace menu {
 
-void Main::reset()
-{
-    selected_ = 0;
-    time_ = 0.0f;
-}
-
 void Main::update(float dt, const std::vector<Card> &cards,
                   const Math::Vec2 &mouse, bool mouseActive)
 {

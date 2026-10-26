@@ -72,11 +72,6 @@ bool Input::shootingHeld() const
     return mouseDown_ || keys_.contains(Qt::Key_J);
 }
 
-bool Input::mouseDown() const
-{
-    return mouseDown_;
-}
-
 bool Input::mouseActive() const
 {
     return mouseActive_;

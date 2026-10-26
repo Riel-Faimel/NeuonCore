@@ -15,7 +15,6 @@ class Pointer {
 public:
     void moveTo(const Math::Vec2 &position);
     void setVisible(bool visible) { visible_ = visible; }
-    bool visible() const { return visible_; }
 
     void update(float dt) { time_ += dt; }
     void draw(QPainter &painter) const;

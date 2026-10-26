@@ -4,7 +4,7 @@
 
 #include <QColor>
 
-#include <unordered_set>
+#include <array>
 
 namespace arena {
 
@@ -26,6 +26,9 @@ public:
     Standpoint standpoint() const override { return standpoint_; }
 
 private:
+    // 穿透上限 5 级 ⇒ 一颗弹最多命中 6 个目标；固定数组避免每颗弹都分配哈希表。
+    static constexpr int MaxHitTargets = 8;
+
     Math::Vec2 pos_;
     Math::Vec2 prev_;
     Math::Vec2 vel_;
@@ -37,7 +40,8 @@ private:
     int pierce_ = 0;
     float critChance_ = 0.0f;
     float life_ = 1.6f;
-    std::unordered_set<int> hits_;
+    std::array<int, MaxHitTargets> hitTargets_{};
+    int hitTargetCount_ = 0;
 };
 
 } // namespace arena

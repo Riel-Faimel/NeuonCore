@@ -20,7 +20,6 @@ public:
 
     Math::Vec2 movementAxis() const;
     bool shootingHeld() const;
-    bool mouseDown() const;
     bool mouseActive() const;
     Math::Vec2 mousePosition() const;
     void setMouseActive(bool active);

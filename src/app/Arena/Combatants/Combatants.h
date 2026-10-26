@@ -52,6 +52,8 @@ private:
     Player player_;
     std::vector<std::unique_ptr<Enemy>> enemies_;
     Enemy *boss_ = nullptr;
+    // 绘制排序用的暂存缓冲：每帧复用，避免反复分配。
+    mutable std::vector<const Fighter *> drawOrder_;
 };
 
 } // namespace arena

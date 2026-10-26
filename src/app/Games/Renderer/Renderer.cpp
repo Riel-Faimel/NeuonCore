@@ -95,7 +95,6 @@ void Renderer::burstConfetti()
 void Renderer::update(float dt)
 {
     time_ += dt;
-    uiTime_ += dt;
     updateStars(dt);
     updateSparks(dt);
 
@@ -240,7 +239,6 @@ void Renderer::drawSparks(QPainter &world, QPainter &glow) const
 void Renderer::render(const Games &game, const Arena &arena, const games::Waves &waves,
                       const games::Upgrades &upgrades)
 {
-    world_.fill(Qt::transparent);
     glow_.fill(Qt::transparent);
 
     {
@@ -248,16 +246,12 @@ void Renderer::render(const Games &game, const Arena &arena, const games::Waves 
         QPainter glowPainter(&glow_);
         worldPainter.setRenderHint(QPainter::Antialiasing, true);
         glowPainter.setRenderHint(QPainter::Antialiasing, true);
+        // background_ 不透明且整幅覆盖，world_ 不需要先清成透明。
         worldPainter.drawImage(0, 0, background_);
         drawStars(worldPainter, glowPainter);
         arena.draw(worldPainter, glowPainter);
         drawSparks(worldPainter, glowPainter);
     }
-
-    frame_.fill(QColor(2, 3, 9));
-    QPainter painter(&frame_);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
 
     int offsetX = 0;
     int offsetY = 0;
@@ -265,6 +259,15 @@ void Renderer::render(const Games &game, const Arena &arena, const games::Waves 
         offsetX = int(std::lround(RandomService.real(-shake_, shake_)));
         offsetY = int(std::lround(RandomService.real(-shake_, shake_)));
     }
+    // 没有震屏偏移时 world_ 会整幅覆盖 frame_，省掉一次整图填充。
+    if (offsetX != 0 || offsetY != 0) {
+        frame_.fill(QColor(2, 3, 9));
+    }
+
+    QPainter painter(&frame_);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+
     painter.drawImage(QPoint(offsetX, offsetY), world_);
     painter.setCompositionMode(QPainter::CompositionMode_Plus);
     painter.drawImage(QPoint(offsetX, offsetY), glow_);

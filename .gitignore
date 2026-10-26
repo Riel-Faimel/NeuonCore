@@ -1,4 +1,6 @@
 dist/
 screenshots/
 build/
-*_output.txtsettings.ini
+*_output.txt
+settings.ini
+smoke.log

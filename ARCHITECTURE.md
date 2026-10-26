@@ -411,7 +411,7 @@ GameWindow::paintEvent()
 改 `src/app/Menu/Menu.cpp` 的 `levels_`：
 
 ```cpp
-{id, name, subtitle, startWave, script}
+{name, subtitle, startWave, script}
 ```
 
 `Menu::startLevel()` 把这条 `Level` 交给 `menu::Match`，由 `Match` 构造 `Games`；`Games` 接收后即开局，并只在内部使用它。

@@ -30,13 +30,10 @@ public:
 
     Upgrades(Arena &arena);
 
-    void reset();
     bool open();
     bool apply(int index);
 
     const std::vector<Offer> &offers() const { return offers_; }
-    int levelOf(const QString &key) const { return counts_.value(key); }
-    bool isOpen() const { return open_; }
 
 private:
     friend class ::SelfTest;

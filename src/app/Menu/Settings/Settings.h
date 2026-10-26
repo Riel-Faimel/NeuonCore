@@ -27,7 +27,6 @@ public:
     void mouseRelease();
     void render(QPainter &painter) const;
 
-    int row() const { return row_; }
     QRectF rowRect(int row) const;
     QRectF trackRect(int row) const;
     QRectF backRect() const;

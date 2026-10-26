@@ -17,7 +17,6 @@ public:
         Back,
     };
 
-    void reset();
     Action keyPress(int key);
     Action mousePress(const Math::Vec2 &position);
     void render(QPainter &painter) const;
@@ -25,9 +24,6 @@ public:
     QRectF itemRect() const;
     QRectF buyRect() const;
     QRectF backRect() const;
-
-private:
-    int purchases_ = 0;
 };
 
 } // namespace menu

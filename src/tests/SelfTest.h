@@ -266,7 +266,7 @@ public:
         bossMid.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("drone"), 1}}});
         bossMid.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("boss"), 1}}});
         bossMid.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("drone"), 1}}});
-        menu.levels_.push_back({QStringLiteral("boss-mid"), QStringLiteral("中局 Boss"),
+        menu.levels_.push_back({QStringLiteral("中局 Boss"),
                                 QStringLiteral("测试台本"), 2, bossMid});
         menu.startLevel(int(menu.levels_.size()) - 1);
         game = menu.match_.game();
@@ -472,7 +472,7 @@ public:
         shortScript.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("drone"), 2},
                                            games::EnemySpawn{QStringLiteral("tank"), 1}}});
         shortScript.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("spitter"), 3}}});
-        menu.levels_.push_back({QStringLiteral("script-test"), QStringLiteral("测试台本"),
+        menu.levels_.push_back({QStringLiteral("测试台本"),
                                 QStringLiteral("运行时提交"), 1, shortScript});
         menu.startLevel(int(menu.levels_.size()) - 1);
         game = menu.match_.game();

@@ -92,7 +92,6 @@ void Arena::update(float dt)
     Entities::updateMines(dt);
     Events::resolveMines(ctx);
     Combatants::cleanup();
-    Bullets::cleanup();
     Entities::cleanup();
     Entities::updateEffects(ctx, dt);
 }

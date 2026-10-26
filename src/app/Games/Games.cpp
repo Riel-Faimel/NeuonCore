@@ -71,10 +71,6 @@ void Games::selectUpgrade(int index)
         return;
     }
     renderer_.flash(color, 35);
-    if (waves_.isFinalWave()) {
-        finishVictory();
-        return;
-    }
     state_ = State::Playing;
     startWave(waves_.currentWave() + 1);
 }

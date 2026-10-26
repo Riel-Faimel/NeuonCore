@@ -53,14 +53,18 @@ void StandardBullet::draw(QPainter &world, QPainter &glow) const
 bool StandardBullet::hit(const Context &ctx, Fighter &target)
 {
     const int targetId = target.id();
-    if (hits_.count(targetId) != 0) {
-        // 穿透弹在同一个目标上不重复结算。
-        return true;
+    for (int i = 0; i < hitTargetCount_; ++i) {
+        if (hitTargets_[i] == targetId) {
+            // 穿透弹在同一个目标上不重复结算。
+            return true;
+        }
     }
     const bool critical = RandomService.real(0.0f, 1.0f) < critChance_;
     target.takeDamage(ctx, Damage{damage_ * (critical ? 2.0f : 1.0f), critical,
                                     DamageSource::Bullet});
-    hits_.insert(targetId);
+    if (hitTargetCount_ < MaxHitTargets) {
+        hitTargets_[hitTargetCount_++] = targetId;
+    }
     if (pierce_ <= 0) {
         alive_ = false;
         return false;

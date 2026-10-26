@@ -126,17 +126,17 @@ void Events::detonateMine(const Context &ctx, Mine &mine)
 
 void Events::separateEnemies(const Context &ctx)
 {
-    std::vector<Enemy *> alive;
-    alive.reserve(ctx.combatants.enemies().size());
-    for (const auto &enemy : ctx.combatants.enemies()) {
-        if (enemy->isAlive()) {
-            alive.push_back(enemy.get());
+    auto &enemies = ctx.combatants.enemies();
+    for (size_t i = 0; i < enemies.size(); ++i) {
+        Enemy *first = enemies[i].get();
+        if (!first->isAlive()) {
+            continue;
         }
-    }
-    for (size_t i = 0; i < alive.size(); ++i) {
-        for (size_t j = i + 1; j < alive.size(); ++j) {
-            Enemy *first = alive[i];
-            Enemy *second = alive[j];
+        for (size_t j = i + 1; j < enemies.size(); ++j) {
+            Enemy *second = enemies[j].get();
+            if (!second->isAlive()) {
+                continue;
+            }
             const Math::Vec2 delta = first->pos - second->pos;
             const float minimum = first->radius + second->radius;
             const float distanceSquared = delta.lengthSquared();

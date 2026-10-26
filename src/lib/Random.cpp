@@ -3,7 +3,7 @@
 // 进程内唯一的随机引擎（声明见 Random.h）。
 Random RandomService;
 
-Random::Random(unsigned int seed) : engine_(seed), seed_(seed) {}
+Random::Random(unsigned int seed) : engine_(seed) {}
 
 float Random::real(float low, float high)
 {

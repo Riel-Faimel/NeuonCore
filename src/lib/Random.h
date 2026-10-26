@@ -18,11 +18,8 @@ public:
         std::shuffle(values.begin(), values.end(), engine_);
     }
 
-    unsigned int seed() const { return seed_; }
-
 private:
     std::mt19937 engine_;
-    unsigned int seed_ = 0;
 };
 
 // 进程内唯一的随机引擎：开局、掉落、强化、画面抖动都从它取数。

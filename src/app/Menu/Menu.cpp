@@ -20,9 +20,9 @@ Menu::Menu(bool enableAudio) : settings_(enableAudio)
     frame_ = QImage(GameConfig::ScreenWidth, GameConfig::ScreenHeight,
                     QImage::Format_ARGB32_Premultiplied);
     levels_ = {
-        {QStringLiteral("standard"), QStringLiteral("标准协议"),
+        {QStringLiteral("标准协议"),
          QStringLiteral("八波战役 · 守住星核"), 1, standardScript()},
-        {QStringLiteral("custom"), QStringLiteral("自定义协议"),
+        {QStringLiteral("自定义协议"),
          QStringLiteral("点击编辑台本"), 1, editor_.script()},
     };
 }
@@ -179,7 +179,6 @@ void Menu::keyPress(int key, bool autoRepeat)
             openEditor();
             break;
         case menu::Main::Action::OpenShop:
-            depot_.reset();
             screen_ = Screen::Shop;
             BaseService.playSound(QStringLiteral("ui"));
             break;
@@ -272,7 +271,6 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
             openEditor();
             break;
         case menu::Main::Action::OpenShop:
-            depot_.reset();
             screen_ = Screen::Shop;
             BaseService.playSound(QStringLiteral("ui"));
             break;

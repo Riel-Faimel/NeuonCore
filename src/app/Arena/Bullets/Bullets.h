@@ -23,9 +23,6 @@ public:
     void clear();
     void clearEnemy();
 
-    int playerCount() const { return int(player_.size()); }
-    int enemyCount() const { return int(enemy_.size()); }
-
     // 名字不能叫 player()/enemy()：Arena 同时继承 Combatants，
     // 而 Combatants::player() 返回 Player&，会形成二义性。
     std::vector<std::unique_ptr<Bullet>> &playerBullets() { return player_; }

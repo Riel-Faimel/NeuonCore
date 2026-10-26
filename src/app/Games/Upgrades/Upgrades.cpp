@@ -15,13 +15,6 @@ Upgrades::Upgrades(Arena &arena)
 {
 }
 
-void Upgrades::reset()
-{
-    counts_.clear();
-    offers_.clear();
-    open_ = false;
-}
-
 // 名称/标签/颜色属于表现，留在代码；数值区间来自 src/json/upgrades.json。
 const std::vector<Upgrades::Definition> &Upgrades::catalog()
 {

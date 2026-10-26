@@ -54,18 +54,20 @@ void Combatants::cleanup()
 
 void Combatants::draw(QPainter &world, QPainter &glow, const Context &ctx) const
 {
-    std::vector<const Fighter *> sorted;
-    sorted.reserve(enemies_.size());
+    drawOrder_.clear();
+    if (drawOrder_.capacity() < enemies_.size()) {
+        drawOrder_.reserve(enemies_.size());
+    }
     for (const auto &enemy : enemies_) {
         if (enemy->isAlive()) {
-            sorted.push_back(enemy.get());
+            drawOrder_.push_back(enemy.get());
         }
     }
-    std::sort(sorted.begin(), sorted.end(),
+    std::sort(drawOrder_.begin(), drawOrder_.end(),
               [](const Fighter *a, const Fighter *b) {
                   return a->position().y < b->position().y;
               });
-    for (const Fighter *fighter : sorted) {
+    for (const Fighter *fighter : drawOrder_) {
         fighter->draw(world, glow, ctx);
     }
     player_.draw(world, glow, ctx);

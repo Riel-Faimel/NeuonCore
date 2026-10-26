@@ -21,7 +21,19 @@ struct EnemyStats {
 // 敌人战斗者组件。一个实例代表一只敌人；Boss 也是其中一种 kind。
 class Enemy : public Fighter {
 public:
+    // 热路径（update/draw）用枚举分支，避免每帧对 QString 做多次比较。
+    enum class Kind {
+        Drone,
+        Spitter,
+        Tank,
+        Splitter,
+        Mini,
+        Boss,
+        Other,
+    };
+
     QString kind;
+    Kind kindId = Kind::Other;
     int eid = 0;
     Math::Vec2 pos;
     Math::Vec2 vel;
@@ -41,7 +53,6 @@ public:
     float radialTimer = 2.0f;
     int strafe = 1;
     float phase = 0.0f;
-    float spawnAnim = 0.28f;
     bool boss = false;
 
     Enemy(const QString &enemyKind, const Math::Vec2 &position, int waveNumber);
@@ -61,6 +72,8 @@ public:
     static const EnemyStats &statsFor(const QString &kind);
 
 private:
+    static Kind kindOf(const QString &kind);
+
     void fireAimed(const Context &ctx, int count, float spread);
     void drawBody(QPainter &world, QPainter &glow, float facing) const;
     void drawBoss(QPainter &world, QPainter &glow, float facing) const;

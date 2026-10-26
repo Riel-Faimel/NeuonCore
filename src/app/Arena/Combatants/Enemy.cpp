@@ -54,6 +54,29 @@ QColor colorForKind(std::string_view kind)
 
 int Enemy::sNextId = 1;
 
+Enemy::Kind Enemy::kindOf(const QString &kind)
+{
+    if (kind == QStringLiteral("drone")) {
+        return Kind::Drone;
+    }
+    if (kind == QStringLiteral("spitter")) {
+        return Kind::Spitter;
+    }
+    if (kind == QStringLiteral("tank")) {
+        return Kind::Tank;
+    }
+    if (kind == QStringLiteral("splitter")) {
+        return Kind::Splitter;
+    }
+    if (kind == QStringLiteral("mini")) {
+        return Kind::Mini;
+    }
+    if (kind == QStringLiteral("boss")) {
+        return Kind::Boss;
+    }
+    return Kind::Other;
+}
+
 const EnemyStats &Enemy::statsFor(const QString &kind)
 {
     // 数值来自 src/json/enemies.json（编译期常量），颜色属于表现，留在代码里。
@@ -88,7 +111,8 @@ Enemy::Enemy(const QString &enemyKind, const Math::Vec2 &position, int waveNumbe
     score = stats.score;
     speed = stats.speed * (1.0f + data::kWaveScaling.speed * (wave - 1));
     damage = stats.damage * (1.0f + data::kWaveScaling.damage * (wave - 1));
-    boss = kind == QStringLiteral("boss");
+    kindId = kindOf(kind);
+    boss = kindId == Kind::Boss;
     if (boss) {
         maxHp = stats.hp;
         speed = stats.speed;
@@ -112,7 +136,6 @@ void Enemy::update(const Context &ctx, float dt)
 
     age += dt;
     hitFlash = std::max(0.0f, hitFlash - dt);
-    spawnAnim = std::max(0.0f, spawnAnim - dt);
     attackTimer -= dt;
     radialTimer -= dt;
     hpDisplay += (hp - hpDisplay) * std::min(1.0f, dt * 5.0f);
@@ -123,7 +146,7 @@ void Enemy::update(const Context &ctx, float dt)
     const Math::Vec2 perpendicular(-direction.y, direction.x);
     Math::Vec2 desired;
 
-    if (kind == QStringLiteral("boss")) {
+    if (kindId == Kind::Boss) {
         if (distance > 265.0f) {
             desired = direction * speed;
         } else if (distance < 185.0f) {
@@ -153,7 +176,7 @@ void Enemy::update(const Context &ctx, float dt)
                 ctx.entities.addShockwave(pos, 92.0f, Base::Magenta, 0.36f, 2);
             }
         }
-    } else if (kind == QStringLiteral("spitter")) {
+    } else if (kindId == Kind::Spitter) {
         if (distance > 315.0f) {
             desired = direction * speed;
         } else if (distance < 205.0f) {
@@ -167,7 +190,7 @@ void Enemy::update(const Context &ctx, float dt)
         }
     } else {
         float weave = 0.0f;
-        if (kind == QStringLiteral("drone") || kind == QStringLiteral("mini")) {
+        if (kindId == Kind::Drone || kindId == Kind::Mini) {
             weave = std::sin(age * 3.1f + phase) * 0.32f;
         }
         desired = direction.rotated(weave) * speed;
@@ -183,13 +206,13 @@ void Enemy::update(const Context &ctx, float dt)
 
 void Enemy::shoot(const Context &ctx)
 {
-    if (kind == QStringLiteral("boss")) {
+    if (kindId == Kind::Boss) {
         const bool enraged = hp < maxHp * 0.48f;
         fireAimed(ctx, enraged ? 3 : 2, 0.11f);
         BaseService.playSound(QStringLiteral("shoot_enemy"));
         return;
     }
-    if (kind == QStringLiteral("spitter")) {
+    if (kindId == Kind::Spitter) {
         const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
         const float base = std::atan2(toPlayer.y, toPlayer.x);
         const Math::Vec2 aim = Math::Vec2(std::cos(base), std::sin(base))
@@ -287,7 +310,7 @@ void Enemy::drawBody(QPainter &world, QPainter &glow, float facing) const
     const float r = radius;
     Base::glow(glow, pos, r * 1.25f, color, 0.9f);
 
-    if (kind == QStringLiteral("drone")) {
+    if (kindId == Kind::Drone) {
         const Math::Vec2 tip = pos + forward * (r * 1.2f);
         const Math::Vec2 left = pos - forward * (r * 0.78f) + side * (r * 0.72f);
         const Math::Vec2 notch = pos - forward * (r * 0.32f);
@@ -298,7 +321,7 @@ void Enemy::drawBody(QPainter &world, QPainter &glow, float facing) const
         Base::polygon(world, body, Base::shade(color, 0.18f), color, 2.0f);
         Base::fillCircle(world, pos, 3.0f, color);
         Base::strokeLine(world, left, right, Base::shade(color, 0.55f), 1.0f);
-    } else if (kind == QStringLiteral("spitter")) {
+    } else if (kindId == Kind::Spitter) {
         QPolygonF body;
         const float rotation = age * 0.8f;
         for (int i = 0; i < 6; ++i) {
@@ -317,7 +340,7 @@ void Enemy::drawBody(QPainter &world, QPainter &glow, float facing) const
         Base::strokeCircle(world, pos, 7.0f, color, 1.0f);
         Base::strokeLine(world, pos + forward * 8.0f, pos + forward * (r + 6.0f),
                          Base::shade(color, 0.8f), 2.0f);
-    } else if (kind == QStringLiteral("tank")) {
+    } else if (kindId == Kind::Tank) {
         QPolygonF body;
         const float rotation = age * 0.25f;
         for (int i = 0; i < 8; ++i) {
@@ -333,7 +356,7 @@ void Enemy::drawBody(QPainter &world, QPainter &glow, float facing) const
         }
         Base::polygon(world, inner, Base::shade(color, 0.34f), color, 1.0f);
         Base::fillCircle(world, pos, 4.0f, QColor(255, 220, 160));
-    } else if (kind == QStringLiteral("splitter")) {
+    } else if (kindId == Kind::Splitter) {
         Base::fillCircle(world, pos, r, Base::shade(color, 0.18f));
         Base::strokeCircle(world, pos, r, color, 2.0f);
         Base::strokeLine(world, pos - side * r, pos + side * r,
@@ -342,7 +365,7 @@ void Enemy::drawBody(QPainter &world, QPainter &glow, float facing) const
         Base::fillCircle(world, pos + offset, 3.0f, color);
         Base::fillCircle(world, pos - offset, 3.0f, color);
         Base::strokeCircle(world, pos, r + 5.0f, Base::withAlpha(color, 70), 1.0f);
-    } else if (kind == QStringLiteral("mini")) {
+    } else if (kindId == Kind::Mini) {
         QPolygonF body;
         body << QPointF(pos.x + forward.x * 9.0f, pos.y + forward.y * 9.0f)
              << QPointF(pos.x + side.x * 6.0f, pos.y + side.y * 6.0f)
@@ -350,7 +373,7 @@ void Enemy::drawBody(QPainter &world, QPainter &glow, float facing) const
              << QPointF(pos.x - side.x * 6.0f, pos.y - side.y * 6.0f);
         Base::polygon(world, body, Base::shade(color, 0.18f), color, 1.0f);
         Base::fillCircle(world, pos, 2.0f, Base::White);
-    } else if (kind == QStringLiteral("boss")) {
+    } else if (kindId == Kind::Boss) {
         drawBoss(world, glow, facing);
     }
 }

@@ -68,11 +68,6 @@ bool Base::shootingHeld() const
     return impl_->input.shootingHeld();
 }
 
-bool Base::mouseDown() const
-{
-    return impl_->input.mouseDown();
-}
-
 bool Base::mouseActive() const
 {
     return impl_->input.mouseActive();
@@ -96,11 +91,6 @@ void Base::pointerMoveTo(const Math::Vec2 &position)
 void Base::pointerSetVisible(bool visible)
 {
     impl_->pointer.setVisible(visible);
-}
-
-bool Base::pointerVisible() const
-{
-    return impl_->pointer.visible();
 }
 
 void Base::pointerUpdate(float dt)
@@ -195,11 +185,9 @@ const QFont &Base::mediumFont() { return base::Paint::mediumFont(); }
 const QFont &Base::largeFont() { return base::Paint::largeFont(); }
 const QFont &Base::bigFont() { return base::Paint::bigFont(); }
 const QFont &Base::titleFont() { return base::Paint::titleFont(); }
-const QFont &Base::hugeFont() { return base::Paint::hugeFont(); }
 const QFont &Base::techTinyFont() { return base::Paint::techTinyFont(); }
 const QFont &Base::techSmallFont() { return base::Paint::techSmallFont(); }
 const QFont &Base::techFont() { return base::Paint::techFont(); }
-const QFont &Base::techLargeFont() { return base::Paint::techLargeFont(); }
 
 void Base::reticle(QPainter &painter, const Math::Vec2 &center, float time)
 {
@@ -266,24 +254,11 @@ void Base::glow(QPainter &glowPainter, const Math::Vec2 &pos, float radius,
     base::Paint::glow(glowPainter, pos, radius, color, intensity);
 }
 
-QRectF Base::textBounds(const QFont &font, const QString &value,
-                        const Math::Vec2 &pos, const QString &anchor)
-{
-    return base::Paint::textBounds(font, value, pos, anchor);
-}
-
 void Base::text(QPainter &painter, const QFont &font, const QString &value,
                 const QColor &color, const Math::Vec2 &pos,
                 const QString &anchor, int alpha)
 {
     base::Paint::text(painter, font, value, color, pos, anchor, alpha);
-}
-
-void Base::shadowText(QPainter &painter, const QFont &font, const QString &value,
-                      const QColor &color, const Math::Vec2 &pos,
-                      const QString &anchor, int alpha, const QColor &shadow)
-{
-    base::Paint::shadowText(painter, font, value, color, pos, anchor, alpha, shadow);
 }
 
 void Base::glowText(QPainter &painter, const QFont &font, const QString &value,

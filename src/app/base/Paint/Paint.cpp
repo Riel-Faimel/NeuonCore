@@ -20,11 +20,9 @@ QFont Paint::sMedium;
 QFont Paint::sLarge;
 QFont Paint::sBig;
 QFont Paint::sTitle;
-QFont Paint::sHuge;
 QFont Paint::sTechTiny;
 QFont Paint::sTechSmall;
 QFont Paint::sTech;
-QFont Paint::sTechLarge;
 
 const QColor Paint::Ink{233, 246, 255};
 const QColor Paint::Text{207, 226, 242};
@@ -91,11 +89,9 @@ void Paint::initialize()
     sLarge = make(32, true, false);
     sBig = make(44, true, false);
     sTitle = make(92, true, false);
-    sHuge = make(108, true, false);
     sTechTiny = make(12, false, true);
     sTechSmall = make(14, false, true);
     sTech = make(18, false, true);
-    sTechLarge = make(28, true, true);
 }
 
 const QFont &Paint::tinyFont() { return sTiny; }
@@ -105,11 +101,9 @@ const QFont &Paint::mediumFont() { return sMedium; }
 const QFont &Paint::largeFont() { return sLarge; }
 const QFont &Paint::bigFont() { return sBig; }
 const QFont &Paint::titleFont() { return sTitle; }
-const QFont &Paint::hugeFont() { return sHuge; }
 const QFont &Paint::techTinyFont() { return sTechTiny; }
 const QFont &Paint::techSmallFont() { return sTechSmall; }
 const QFont &Paint::techFont() { return sTech; }
-const QFont &Paint::techLargeFont() { return sTechLarge; }
 
 QColor Paint::shade(const QColor &color, float factor)
 {
@@ -346,15 +340,18 @@ void Paint::glow(QPainter &glowPainter, const Math::Vec2 &pos, float radius,
     }
 }
 
-QRectF Paint::textBounds(const QFont &font, const QString &value,
-                        const Math::Vec2 &pos, const QString &anchor)
+void Paint::text(QPainter &painter, const QFont &font, const QString &value,
+                const QColor &color, const Math::Vec2 &pos,
+                const QString &anchor, int alpha)
 {
+    if (alpha <= 2 || value.isEmpty()) {
+        return;
+    }
     const QFontMetricsF metrics(font);
     const float width = float(metrics.horizontalAdvance(value));
     const float height = float(metrics.height());
     float x = pos.x;
     float y = pos.y;
-
     if (anchor == QStringLiteral("center")) {
         x -= width * 0.5f;
         y -= height * 0.5f;
@@ -373,33 +370,12 @@ QRectF Paint::textBounds(const QFont &font, const QString &value,
         x -= width * 0.5f;
         y -= height;
     }
-    return QRectF(x, y, width, height);
-}
-
-void Paint::text(QPainter &painter, const QFont &font, const QString &value,
-                const QColor &color, const Math::Vec2 &pos,
-                const QString &anchor, int alpha)
-{
-    if (alpha <= 2 || value.isEmpty()) {
-        return;
-    }
-    const QRectF rect = textBounds(font, value, pos, anchor);
-    const QFontMetricsF metrics(font);
     painter.save();
     painter.setOpacity(Math::clamp(alpha / 255.0f, 0.0f, 1.0f));
     painter.setFont(font);
     painter.setPen(QColor(color.red(), color.green(), color.blue()));
-    painter.drawText(QPointF(rect.left(), rect.top() + metrics.ascent()), value);
+    painter.drawText(QPointF(x, y + metrics.ascent()), value);
     painter.restore();
-}
-
-void Paint::shadowText(QPainter &painter, const QFont &font, const QString &value,
-                      const QColor &color, const Math::Vec2 &pos,
-                      const QString &anchor, int alpha, const QColor &shadow)
-{
-    text(painter, font, value, shadow, {pos.x + 2.0f, pos.y + 3.0f},
-         anchor, int(alpha * 0.75f));
-    text(painter, font, value, color, pos, anchor, alpha);
 }
 
 void Paint::glowText(QPainter &painter, const QFont &font, const QString &value,

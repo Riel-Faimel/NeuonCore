@@ -5,7 +5,6 @@ class GameConfig {
 public:
     static constexpr int ScreenWidth = 1280;
     static constexpr int ScreenHeight = 720;
-    static constexpr int FrameRate = 60;
 
     static constexpr float FieldLeft = 26.0f;
     static constexpr float FieldRight = ScreenWidth - 26.0f;

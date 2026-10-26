@@ -92,7 +92,6 @@ private:
     std::vector<Star> stars_;
     std::vector<Spark> sparks_;
     float time_ = 0.0f;
-    float uiTime_ = 0.0f;
 
     float shake_ = 0.0f;
     QColor flashColor_;

@@ -36,7 +36,6 @@ public:
     void clear();
     Math::Vec2 movementAxis() const;
     bool shootingHeld() const;
-    bool mouseDown() const;
     bool mouseActive() const;
     Math::Vec2 mousePosition() const;
     void setMouseActive(bool active);
@@ -45,7 +44,6 @@ public:
     // 指针是全局元素：窗口每帧在画面之上调用 pointerDraw()，切屏/暂停都连续。
     void pointerMoveTo(const Math::Vec2 &position);
     void pointerSetVisible(bool visible);
-    bool pointerVisible() const;
     void pointerUpdate(float dt);
     void pointerDraw(QPainter &painter) const;
 
@@ -91,11 +89,9 @@ public:
     static const QFont &largeFont();
     static const QFont &bigFont();
     static const QFont &titleFont();
-    static const QFont &hugeFont();
     static const QFont &techTinyFont();
     static const QFont &techSmallFont();
     static const QFont &techFont();
-    static const QFont &techLargeFont();
 
     // 鼠标准星：全应用唯一的指针画法（局内、主菜单、结算都调用它）。
     static void reticle(QPainter &painter, const Math::Vec2 &center, float time);
@@ -123,15 +119,9 @@ public:
     static void glow(QPainter &glowPainter, const Math::Vec2 &pos, float radius,
                      const QColor &color, float intensity = 1.0f);
 
-    static QRectF textBounds(const QFont &font, const QString &value,
-                             const Math::Vec2 &pos, const QString &anchor = "topleft");
     static void text(QPainter &painter, const QFont &font, const QString &value,
                      const QColor &color, const Math::Vec2 &pos,
                      const QString &anchor = "topleft", int alpha = 255);
-    static void shadowText(QPainter &painter, const QFont &font, const QString &value,
-                           const QColor &color, const Math::Vec2 &pos,
-                           const QString &anchor = "center", int alpha = 255,
-                           const QColor &shadow = QColor(0, 0, 0));
     static void glowText(QPainter &painter, const QFont &font, const QString &value,
                          const QColor &color, const Math::Vec2 &pos,
                          const QString &anchor = "center", int alpha = 255);

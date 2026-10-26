@@ -34,7 +34,6 @@ public:
         int level = 0;
     };
 
-    void reset();
     void update(float dt, const std::vector<Card> &cards,
                 const Math::Vec2 &mouse, bool mouseActive);
     void render(QPainter &painter, const std::vector<Card> &cards,
@@ -44,7 +43,6 @@ public:
     Command keyPress(int key, const std::vector<Card> &cards);
     Command mousePress(const Math::Vec2 &position, const std::vector<Card> &cards);
 
-    int selected() const { return selected_; }
     QRectF levelRect(int index, int cardCount) const;
     QRectF settingsButtonRect() const;
     QRectF shopButtonRect() const;

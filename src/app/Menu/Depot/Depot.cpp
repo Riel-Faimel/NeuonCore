@@ -14,11 +14,6 @@
 
 namespace menu {
 
-void Depot::reset()
-{
-    purchases_ = 0;
-}
-
 QRectF Depot::itemRect() const
 {
     return QRectF(300.0f, 214.0f, 680.0f, 290.0f);
@@ -37,9 +32,7 @@ QRectF Depot::backRect() const
 Depot::Action Depot::keyPress(int key)
 {
     if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Space) {
-        if (ShopService.buyMine()) {
-            ++purchases_;
-        }
+        ShopService.buyMine();
         return Action::None;
     }
     if (key == Qt::Key_Escape || key == Qt::Key_Q) {
@@ -55,9 +48,7 @@ Depot::Action Depot::mousePress(const Math::Vec2 &position)
         return Action::Back;
     }
     if (buyRect().contains(point)) {
-        if (ShopService.buyMine()) {
-            ++purchases_;
-        }
+        ShopService.buyMine();
     }
     return Action::None;
 }

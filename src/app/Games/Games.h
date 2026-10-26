@@ -18,7 +18,6 @@ class Games {
 public:
     // 一局的安排：展示信息 + 起始波次 + 运行时提交的台本。
     struct Level {
-        QString id;
         QString name;
         QString subtitle;
         int startWave = 1;
@@ -44,7 +43,6 @@ public:
 
     State state() const { return state_; }
     float runTime() const { return runTime_; }
-    int score() const { return ShopService.score().total(); }
     int runScore() const { return ShopService.score().run(); }
     int kills() const { return ShopService.score().kills(); }
     int currentWave() const { return waves_.currentWave(); }
