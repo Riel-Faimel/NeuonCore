@@ -38,6 +38,7 @@ void Arena::reset()
 void Arena::beginWave()
 {
     bullets_.clear();
+    entities_.clearMines();
     combatants_.beginWave();
     state_.beginWave();
     entities_.spawnBurst(*this, combatants_.player().state.pos, Base::Cyan,
@@ -80,6 +81,8 @@ void Arena::update(float dt)
     }
 
     entities_.updatePickups(*this, dt);
+    entities_.updateMines(dt);
+    events_.resolveMines(*this);
     combatants_.cleanup();
     bullets_.cleanup();
     entities_.cleanup();
@@ -100,6 +103,16 @@ void Arena::spawnPortal(const QString &kind, int wave)
     entities_.spawnPortal(*this, kind, wave);
 }
 
+void Arena::placeMine(const Math::Vec2 &position)
+{
+    const Math::Vec2 clamped(
+        Math::clamp(position.x, GameConfig::FieldLeft + 16.0f,
+                    GameConfig::FieldRight - 16.0f),
+        Math::clamp(position.y, GameConfig::FieldTop + 16.0f,
+                    GameConfig::FieldBottom - 16.0f));
+    entities_.spawnMine(*this, clamped);
+}
+
 void Arena::updateVisuals(float dt)
 {
     entities_.updateEffects(*this, dt);
@@ -118,6 +131,7 @@ void Arena::clearProjectiles()
 void Arena::clearForVictory()
 {
     bullets_.clearEnemy();
+    entities_.clearMines();
     combatants_.clearForVictory(*this);
 }
 

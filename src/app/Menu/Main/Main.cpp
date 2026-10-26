@@ -49,6 +49,11 @@ QRectF Main::settingsButtonRect() const
     return QRectF(GameConfig::ScreenWidth - 152.0f, 26.0f, 122.0f, 38.0f);
 }
 
+QRectF Main::shopButtonRect() const
+{
+    return QRectF(GameConfig::ScreenWidth - 286.0f, 26.0f, 122.0f, 38.0f);
+}
+
 void Main::render(QPainter &painter, const std::vector<Card> &cards,
                   const Math::Vec2 &mouse, bool mouseActive, bool muted,
                   bool audioUnavailable)
@@ -148,6 +153,22 @@ void Main::render(QPainter &painter, const std::vector<Card> &cards,
                    QStringLiteral("midright"), 210);
     }
 
+    const QRectF shopButton = shopButtonRect();
+    const bool shopHover = mouseActive
+                           && shopButton.contains(QPointF(mouse.x, mouse.y));
+    Base::panel(painter, shopButton,
+                shopHover ? Base::Amber : QColor(48, 91, 112),
+                shopHover ? 235 : 195, 10, QColor(6, 14, 25));
+    Base::crate(painter,
+                {float(shopButton.left()) + 26.0f,
+                 float(shopButton.center().y())},
+                9.0f, shopHover ? Base::Amber : QColor(196, 178, 140));
+    Base::text(painter, Base::smallFont(), QStringLiteral("商店"),
+               shopHover ? Base::White : QColor(191, 216, 230),
+               {float(shopButton.left()) + 46.0f,
+                float(shopButton.center().y())},
+               QStringLiteral("midleft"), 220);
+
     const QRectF settingsButton = settingsButtonRect();
     const bool settingsHover = mouseActive
                                && settingsButton.contains(
@@ -219,6 +240,10 @@ Main::Command Main::mousePress(const Math::Vec2 &position,
 {
     Command command;
     const QPointF point(position.x, position.y);
+    if (shopButtonRect().contains(point)) {
+        command.action = Action::OpenShop;
+        return command;
+    }
     if (settingsButtonRect().contains(point)) {
         command.action = Action::OpenSettings;
         return command;

@@ -1,10 +1,12 @@
 #include "Menu/Match/Match.h"
 
+#include "Inventory.h"
+
 namespace menu {
 
-void Match::start(const Games::Level &level, Base &base, Score &score)
+void Match::start(const Games::Level &level, Base &base, Score &score, Inventory &inventory)
 {
-    games_ = std::make_unique<Games>(level, base, score);
+    games_ = std::make_unique<Games>(level, base, score, inventory);
 }
 
 void Match::stop()
@@ -95,6 +97,13 @@ void Match::mousePressLeft(const Math::Vec2 &position)
 {
     if (games_) {
         games_->mousePressLeft(position);
+    }
+}
+
+void Match::mousePressRight(const Math::Vec2 &position)
+{
+    if (games_) {
+        games_->mousePressRight(position);
     }
 }
 

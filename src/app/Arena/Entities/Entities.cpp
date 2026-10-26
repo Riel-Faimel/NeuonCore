@@ -3,6 +3,7 @@
 #include "Arena/Arena.h"
 #include "Arena/Combatants/Combatants.h"
 #include "Arena/Combatants/Enemy.h"
+#include "Data/GameData.h"
 #include "GameConfig.h"
 #include "Random.h"
 #include "Base/Base.h"
@@ -16,6 +17,7 @@ void Entities::reset()
 {
     portals_.clear();
     pickups_.clear();
+    mines_.clear();
     particles_.clear();
     floatingTexts_.clear();
     shockwaves_.clear();
@@ -83,12 +85,30 @@ void Entities::cleanup()
     std::erase_if(pickups_, [](const Pickup &pickup) {
         return !pickup.alive;
     });
+    std::erase_if(mines_, [](const Mine &mine) {
+        return !mine.alive;
+    });
+}
+
+void Entities::updateMines(float dt)
+{
+    for (Mine &mine : mines_) {
+        mine.update(dt);
+    }
+}
+
+void Entities::clearMines()
+{
+    mines_.clear();
 }
 
 void Entities::drawBackground(QPainter &world, QPainter &glow) const
 {
     for (const Portal &portal : portals_) {
         portal.draw(world, glow);
+    }
+    for (const Mine &mine : mines_) {
+        mine.draw(world, glow);
     }
     for (const Pickup &pickup : pickups_) {
         pickup.draw(world, glow);
@@ -132,6 +152,20 @@ void Entities::spawnPickup(Arena &arena, const Math::Vec2 &pos, int amount)
                             arena.random_.real(-25.0f, 25.0f));
     pickup.phase = arena.random_.real(0.0f, Math::Tau);
     pickups_.push_back(pickup);
+}
+
+void Entities::spawnMine(Arena &arena, const Math::Vec2 &pos)
+{
+    Mine mine;
+    mine.pos = pos;
+    mine.triggerRadius = data::kMine.triggerRadius;
+    mine.blastRadius = data::kMine.blastRadius;
+    mine.damage = data::kMine.damage;
+    mine.armTime = data::kMine.armTime;
+    mine.life = data::kMine.lifetime;
+    mines_.push_back(mine);
+    spawnBurst(arena, pos, Base::Amber, 8, 55.0f, 0.3f);
+    arena.base_.playSound(QStringLiteral("ui"));
 }
 
 void Entities::spawnBurst(Arena &arena, const Math::Vec2 &pos,

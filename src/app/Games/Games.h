@@ -11,6 +11,7 @@
 #include <QImage>
 #include <QString>
 
+class Inventory;
 class SelfTest;
 
 // Games 模块：一局游戏的全部内容。
@@ -35,7 +36,7 @@ public:
         Defeat,
     };
 
-    Games(const Level &level, Base &base, Score &score);
+    Games(const Level &level, Base &base, Score &score, Inventory &inventory);
     ~Games();
 
     Games(const Games &) = delete;
@@ -57,6 +58,7 @@ public:
     void keyRelease(int key);
     void mouseMove(const Math::Vec2 &position);
     void mousePressLeft(const Math::Vec2 &position);
+    void mousePressRight(const Math::Vec2 &position);
     void mouseReleaseLeft();
 
 private:
@@ -76,6 +78,7 @@ private:
     Random random_;
     Base &base_;
     Score &score_;
+    Inventory &inventory_;
     Arena arena_;
     games::Waves waves_;
     games::Upgrades upgrades_;

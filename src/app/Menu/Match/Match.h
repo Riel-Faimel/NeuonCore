@@ -7,6 +7,7 @@
 #include <memory>
 
 class Base;
+class Inventory;
 class Score;
 class SelfTest;
 
@@ -16,7 +17,7 @@ namespace menu {
 // 只活一局：Menu 开局时 start()，回主菜单时 stop()。
 class Match {
 public:
-    void start(const Games::Level &level, Base &base, Score &score);
+    void start(const Games::Level &level, Base &base, Score &score, Inventory &inventory);
     void stop();
     bool active() const { return games_ != nullptr; }
 
@@ -35,6 +36,7 @@ public:
     void keyRelease(int key);
     void mouseMove(const Math::Vec2 &position);
     void mousePressLeft(const Math::Vec2 &position);
+    void mousePressRight(const Math::Vec2 &position);
     void mouseReleaseLeft();
 
     // 测试 / 调试用；正常流程不需要直接拿 Games。

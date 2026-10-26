@@ -6,6 +6,7 @@
 #include "Menu/Menu.h"
 #include "Base/Base.h"
 #include "Pointer.h"
+#include "Data/GameData.h"
 #include "Arena/Bullets/StandardBullet.h"
 
 #include <QDir>
@@ -419,6 +420,54 @@ public:
                            QStringLiteral("beginRun resets only the run stats"));
         menu.score_.total_ = wallet;   // 还原，避免测试改动持久化余额
 
+        log(QStringLiteral("Shop"));
+        menu.score_.total_ = 500;
+        const int startMines = menu.inventory_.mines();
+        const QRectF shopButton = menu.main_.shopButtonRect();
+        menu.mousePressLeft({float(shopButton.center().x()),
+                             float(shopButton.center().y())});
+        success &= require(menu.screen() == Menu::Screen::Shop,
+                           QStringLiteral("shop button opens shop"));
+        const QRectF buyButton = menu.shop_.buyRect();
+        menu.mousePressLeft({float(buyButton.center().x()),
+                             float(buyButton.center().y())});
+        success &= require(menu.score_.total() == 500 - data::kMine.price
+                               && menu.inventory_.mines() == startMines + 1,
+                           QStringLiteral("buying a mine spends score and adds stock"));
+        menu.keyPress(Qt::Key_Escape);
+        success &= require(menu.screen() == Menu::Screen::Main,
+                           QStringLiteral("escape leaves shop"));
+
+        log(QStringLiteral("Mine"));
+        menu.startLevel(0);
+        Games *mineGame = menu.match_.game();
+        success &= require(mineGame != nullptr, QStringLiteral("mine test starts a run"));
+        if (mineGame != nullptr) {
+            for (int i = 0; i < 240 && mineGame->arena_.combatants_.enemies().empty(); ++i) {
+                mineGame->update(1.0f / 60.0f);
+            }
+            success &= require(!mineGame->arena_.combatants_.enemies().empty(),
+                               QStringLiteral("wave spawns enemies for the mine test"));
+            if (!mineGame->arena_.combatants_.enemies().empty()) {
+                arena::Enemy *victim = mineGame->arena_.combatants_.enemies().front().get();
+                const Math::Vec2 spot = victim->pos;
+                const int stockBefore = menu.inventory_.mines();
+                menu.mousePressRight(spot);
+                success &= require(mineGame->arena_.mineCount() == 1
+                                       && menu.inventory_.mines() == stockBefore - 1,
+                                   QStringLiteral("right click places a mine"));
+                const int killsBefore = mineGame->kills();
+                for (int i = 0; i < 60 && mineGame->arena_.mineCount() > 0; ++i) {
+                    victim->pos = spot;
+                    mineGame->update(1.0f / 60.0f);
+                }
+                success &= require(mineGame->arena_.mineCount() == 0
+                                       && mineGame->kills() > killsBefore,
+                                   QStringLiteral("enemy contact detonates the mine"));
+            }
+            menu.returnToMenu();
+        }
+
         log(QStringLiteral("Submitted script"));
         games::Script shortScript;
         shortScript.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("drone"), 2},
@@ -473,6 +522,16 @@ public:
         }
         movePointer({GameConfig::ScreenWidth / 2.0f, 454.0f});
         save(QStringLiteral("title.png"));
+
+        // 商店
+        menu.score_.total_ = 2400;
+        menu.inventory_.addMine(2);
+        const QRectF shopEntry = menu.main_.shopButtonRect();
+        movePointer({float(shopEntry.center().x()), float(shopEntry.center().y())});
+        menu.mousePressLeft({float(shopEntry.center().x()),
+                             float(shopEntry.center().y())});
+        save(QStringLiteral("shop.png"));
+        menu.keyPress(Qt::Key_Escape);
 
         // 应用图标（程序化绘制）
         Base::appIcon(256).save(dir.filePath(QStringLiteral("icon.png")));
@@ -557,6 +616,7 @@ public:
         game->renderer_.showBanner(QStringLiteral("第 4 波"),
                                   QStringLiteral("敌方信号正在接近"), 1.8f, Base::Cyan);
         game->renderer_.bannerTimer_ = 1.3f;
+        game->arena_.placeMine(Math::Vec2(520, 430));
         save(QStringLiteral("gameplay.png"));
 
         game->arena_.combatants_.enemies().clear();

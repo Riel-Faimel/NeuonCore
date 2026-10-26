@@ -6,8 +6,10 @@
 #include "Arena/Entities/Entities.h"
 #include "Arena/Combatants/Enemy.h"
 #include "Arena/Combatants/Player.h"
+#include "Arena/Entities/Mine.h"
 #include "Arena/State.h"
 #include "Bullet.h"
+#include "Data/GameData.h"
 #include "GameConfig.h"
 #include "Random.h"
 #include "Score.h"
@@ -81,6 +83,44 @@ void Events::resolveEnemyBullets(Arena &arena)
         }
     }
     arena.bullets_.cleanup();
+}
+
+void Events::resolveMines(Arena &arena)
+{
+    for (Mine &mine : arena.entities_.mines()) {
+        if (!mine.alive || mine.age < mine.armTime) {
+            continue;
+        }
+        for (const auto &enemy : arena.combatants_.enemies()) {
+            if (!enemy->alive) {
+                continue;
+            }
+            if (mine.pos.distanceTo(enemy->pos) > mine.triggerRadius + enemy->radius) {
+                continue;
+            }
+            detonateMine(arena, mine);
+            break;
+        }
+    }
+    arena.entities_.cleanup();
+}
+
+void Events::detonateMine(Arena &arena, Mine &mine)
+{
+    mine.alive = false;
+    for (const auto &enemy : arena.combatants_.enemies()) {
+        if (!enemy->alive) {
+            continue;
+        }
+        if (mine.pos.distanceTo(enemy->pos) > mine.blastRadius + enemy->radius) {
+            continue;
+        }
+        enemy->takeDamage(arena, Damage{data::kMine.damage, false, DamageSource::Shock});
+    }
+    arena.entities_.spawnBurst(arena, mine.pos, Base::Amber, 30, 230.0f, 0.7f);
+    arena.entities_.addShockwave(mine.pos, mine.blastRadius, Base::Amber, 0.5f, 3);
+    arena.addFeedback(Base::Amber, 42, 8.0f);
+    arena.base_.playSound(QStringLiteral("explode"));
 }
 
 void Events::separateEnemies(Arena &arena)

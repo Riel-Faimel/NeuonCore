@@ -109,9 +109,14 @@ protected:
 
     void mousePressEvent(QMouseEvent *event) override
     {
-        if (event->button() == Qt::LeftButton) {
+        if (event->button() == Qt::LeftButton
+            || event->button() == Qt::RightButton) {
             const Math::Vec2 position = toGamePos(event->position());
-            menu_.mousePressLeft(position);
+            if (event->button() == Qt::LeftButton) {
+                menu_.mousePressLeft(position);
+            } else {
+                menu_.mousePressRight(position);
+            }
             pointer_.moveTo(position);
             event->accept();
         }

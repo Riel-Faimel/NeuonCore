@@ -1,0 +1,10 @@
+{
+  "mine": {
+    "price": 120,
+    "damage": 240,
+    "trigger_radius": 26,
+    "blast_radius": 110,
+    "arm_time": 0.35,
+    "lifetime": 22
+  }
+}

@@ -266,4 +266,37 @@ inline constexpr BulletSpec kBossRadialBullet = loadBullet("boss_radial");
 inline constexpr BulletSpec kSpitterBullet = loadBullet("spitter");
 static_assert(kBossAimedBullet.speed > 0.0f, "src/json/bullets.json 解析失败");
 
+// ----- 商店道具（items.json） -----
+struct MineSpec {
+    int price = 120;
+    float damage = 240.0f;
+    float triggerRadius = 26.0f;
+    float blastRadius = 110.0f;
+    float armTime = 0.35f;
+    float lifetime = 22.0f;
+};
+
+inline constexpr json::Document kItemsDoc = json::parse(game_data::items_json);
+
+constexpr MineSpec loadMine()
+{
+    MineSpec spec;
+    const json::Node *node = kItemsDoc.member(kItemsDoc.root(), "mine");
+    if (node == nullptr) {
+        return spec;
+    }
+    spec.price = kItemsDoc.integer(kItemsDoc.member(*node, "price"), spec.price);
+    spec.damage = float(kItemsDoc.number(kItemsDoc.member(*node, "damage"), spec.damage));
+    spec.triggerRadius = float(
+        kItemsDoc.number(kItemsDoc.member(*node, "trigger_radius"), spec.triggerRadius));
+    spec.blastRadius = float(
+        kItemsDoc.number(kItemsDoc.member(*node, "blast_radius"), spec.blastRadius));
+    spec.armTime = float(kItemsDoc.number(kItemsDoc.member(*node, "arm_time"), spec.armTime));
+    spec.lifetime = float(kItemsDoc.number(kItemsDoc.member(*node, "lifetime"), spec.lifetime));
+    return spec;
+}
+
+inline constexpr MineSpec kMine = loadMine();
+static_assert(kMine.price > 0, "src/json/items.json 解析失败");
+
 } // namespace data

@@ -31,6 +31,7 @@ cpp\dist\NeonCore\NeonCore.exe
 | 鼠标 | 瞄准 |
 | 鼠标左键 / `J` | 持续射击 |
 | `SPACE` | 相位冲刺，短暂无敌 |
+| 鼠标右键 | 在光标处布置地雷（消耗库存） |
 | `P` / `ESC` | 暂停 / 继续 |
 | `M` | 静音 / 恢复音效 |
 | `1` `2` `3` | 选择强化协议 |
@@ -48,7 +49,16 @@ cpp\dist\NeonCore\NeonCore.exe
 - `↑` `↓` 选择行，`←` `→` 调整（每次 5%），也可以直接点/拖进度条；
 - `ESC` 返回主菜单；调整立即生效；
 - 音量保存到 **exe 同级的 `settings.ini`**（`QSettings` 的 INI 格式），下次启动自动恢复；
-- 同一个 `settings.ini` 还保存 `[score] total`（全局积分钱包，跨局累计）。
+- 同一个 `settings.ini` 还保存 `[score] total`（全局积分钱包）和 `[inventory] mines`（地雷库存）。
+
+## 商店
+
+主菜单右上角的补给箱按钮进入商店，目前售卖 **震荡地雷**（120 积分）：
+
+- 点击 / `ENTER` 购买，从全局积分扣款，库存 +1（写入 `settings.ini`）；
+- 局内 **右键** 在光标处布置，敌人进入感应范围即引爆，对爆炸范围内敌人造成大量伤害；
+- 地雷是一次性消耗品：布置即扣库存，每局开始（新一波）会清掉场上未引爆的地雷；
+- 价格、伤害、感应/爆炸半径、引爆延迟都在 `src/json/items.json`。
 
 ## 构建
 
@@ -116,6 +126,7 @@ src/json/*.json
 | `waves.json` | 战役每波组成、出怪节奏、波次成长系数 |
 | `upgrades.json` | 强化每轮随机区间（`min` / `max`） |
 | `bullets.json` | 敌方子弹速度 / 伤害 / 半径 |
+| `items.json` | 商店道具（地雷）价格 / 伤害 / 范围 / 引爆延迟 |
 
 - 改完直接 `make`：JSON 会重新嵌入，包含数值表的 TU 自动重编译；格式写错会在编译期由 `static_assert` 报错；
 - 解析器限制：字符串不使用转义、数字不使用指数；表项数量上限见 `GameData.h` 的 `Max*` 常量；
@@ -141,6 +152,7 @@ cpp/
 │  │  │  │  └─ Enemy.h/.cpp       敌人类型、Boss
 │  │  │  └─ Entities/
 │  │  │     ├─ Entities.h/.cpp    组件：实体容器
+│  │  │     ├─ Mine                   地雷（商店道具）
 │  │  │     ├─ Portal / Pickup
 │  │  │     └─ Particle / FloatingText / Shockwave
 │  │  ├─ Base/
@@ -158,8 +170,10 @@ cpp/
 │  │  ├─ Menu/Match/Match.h/.cpp   组件：当前对局（持有 Games）
 │  │  ├─ Menu/Result/Result.h/.cpp 组件：结算覆盖层
 │  │  ├─ Menu/Editor/Editor.h/.cpp 组件：自定义台本编辑器
+│  │  ├─ Menu/Shop/Shop.h/.cpp     组件：补给站（地雷商店）
 │  │  ├─ Menu/Settings/Settings.h/.cpp 组件：音量设置
 │  │  ├─ Renderer.h / Renderer.cpp 局内背景、发光、HUD、卡片、暂停
+│  │  ├─ Inventory.h / Inventory.cpp 全局库存（地雷，持久化）
 │  │  ├─ Score.h / Score.cpp      全局模块：一局积分与击杀累计
 │  │  ├─ Pointer.h / Pointer.cpp  全局鼠标指针（窗口每帧叠加）
 │  │  ├─ app.rc                   Windows 资源：嵌入应用图标
@@ -177,6 +191,7 @@ cpp/
 │  │  ├─ player.json              玩家基础数值
 │  │  ├─ enemies.json             敌人基础数值
 │  │  ├─ waves.json               战役台本 + 出怪节奏
+│  │  ├─ items.json               商店道具数值
 │  │  ├─ upgrades.json            强化数值区间
 │  │  └─ bullets.json             敌方子弹数值
 │  └─ tests/
@@ -252,6 +267,8 @@ mingw32-make -j12 test
 - 音频初始化（可选：设置 `NEON_AUDIO_TEST=1`）
 - 设置页：齿轮按钮进入、音效/背景音乐音量增减、点击进度条设值、Esc 返回
 - 积分：击杀累计到全局钱包、消费扣减、余额不足拒绝、开新局只重置本局统计
+- 商店：补给箱按钮进入、购买地雷扣积分并加库存、Esc 返回
+- 地雷：右键布置扣库存、敌人接触即引爆并造成击杀
 - 输出到当前目录的 `smoke.log`
 
 重新生成离屏截图：
@@ -275,4 +292,4 @@ mingw32-make -j12 test
 - 鼠标指针是全局元素（`src/app/Pointer.*`）：窗口每帧把它叠在画面最上层，`Base::reticle()` 是唯一画法，所有界面共用同一个指针和同一个时钟（局内暂停时外弧也照常旋转）；窗口内隐藏系统光标，指针移出窗口时恢复系统箭头。
 - 第三方运行库：Qt 6（LGPLv3）与 FFmpeg（LGPLv2.1+）。分发时请保留相应的许可证信息，见 [`THIRD_PARTY.txt`](THIRD_PARTY.txt)。
 
-更多画面：[标题](screenshots/title.png) · [设置](screenshots/settings.png) · [台本编辑器](screenshots/editor.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)
+更多画面：[标题](screenshots/title.png) · [商店](screenshots/shop.png) · [设置](screenshots/settings.png) · [台本编辑器](screenshots/editor.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)

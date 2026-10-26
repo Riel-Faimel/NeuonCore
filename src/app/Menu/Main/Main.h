@@ -11,7 +11,7 @@ class QPainter;
 
 namespace menu {
 
-// Main 组件：标题页。绘制标题、关卡卡和设置入口，只做导航与命中测试，
+// Main 组件：标题页。绘制标题、关卡卡、商店和设置入口，只做导航与命中测试，
 // 不启动对局、不持有 Games —— 它把玩家意图作为 Command 交回 Menu。
 class Main {
 public:
@@ -25,6 +25,7 @@ public:
         None,
         StartLevel,
         OpenEditor,
+        OpenShop,
         OpenSettings,
     };
 
@@ -46,6 +47,7 @@ public:
     int selected() const { return selected_; }
     QRectF levelRect(int index, int cardCount) const;
     QRectF settingsButtonRect() const;
+    QRectF shopButtonRect() const;
 
 private:
     int selected_ = 0;

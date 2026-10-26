@@ -50,6 +50,7 @@ cpp/src/
 │  │  │  └─ Enemy.h/.cpp
 │  │  └─ Entities/
 │  │     ├─ Entities.h/.cpp
+│  │     ├─ Mine.h/.cpp
 │  │     ├─ Portal.h/.cpp
 │  │     ├─ Pickup.h/.cpp
 │  │     ├─ Particle.h/.cpp
@@ -65,9 +66,11 @@ cpp/src/
 │  │  ├─ Match/Match.h/.cpp       当前对局组件
 │  │  ├─ Result/Result.h/.cpp     结算覆盖层组件
 │  │  ├─ Editor/Editor.h/.cpp     台本编辑器组件
+│  │  ├─ Shop/Shop.h/.cpp         补给站组件
 │  │  └─ Settings/Settings.h/.cpp 音量设置组件
 │  ├─ Renderer.h / Renderer.cpp
 │  ├─ Score.h / Score.cpp
+│  ├─ Inventory.h / Inventory.cpp
 │  ├─ Pointer.h / Pointer.cpp
 │  ├─ app.rc
 │  └─ main.cpp
@@ -84,6 +87,7 @@ cpp/src/
 │  ├─ enemies.json                  敌人基础数值
 │  ├─ waves.json                    战役台本 + 出怪节奏
 │  ├─ upgrades.json                 强化数值区间
+│  ├─ items.json                    商店道具（地雷）
 │  └─ bullets.json                  敌方子弹数值
 ├─ tools/
 │  └─ embed_json.cpp                构建期把 JSON 嵌成 raw string
@@ -134,24 +138,25 @@ cpp/src/
 
 ### Menu
 
-`Menu` 是顶层界面模块入口，结构和 `Arena` 一样：自己只持有进程级的 `Base`、关卡表、当前屏幕和输入路由，把五个界面拆成 `namespace menu` 组件：
+`Menu` 是顶层界面模块入口，结构和 `Arena` 一样：自己只持有进程级的 `Base`、`Score`、`Inventory`、关卡表、当前屏幕和输入路由，把六个界面拆成 `namespace menu` 组件：
 
 | 组件 | 职责 |
 | --- | --- |
-| `Main` | 标题页：标题、关卡卡、设置入口；选中状态和命中测试 |
+| `Main` | 标题页：标题、关卡卡、商店/设置入口；选中状态和命中测试 |
 | `Match` | 持有当前这一局 `Games`：开局、推进、渲染、局内输入转发 |
 | `Result` | 结算覆盖层：只接收一份只读 `Summary`，不读取 `Games` |
 | `Editor` | 自定义台本编辑器：持有 `customScript_`，逐波表格编辑 |
+| `Shop` | 补给站：地雷购买（扣 `Score`、加 `Inventory`），读写 `settings.ini` |
 | `Settings` | 音效 / 背景音乐音量，读写 `settings.ini` |
 
 `Menu` 自己只负责：
 
-- 屏幕状态机（`Main / Match / Result / Editor / Settings`）和输入路由；
-- 把 `Main` / `Editor` / `Settings` 的意图（`StartLevel / OpenEditor / Deploy / Back` 等 `Action`）翻译成开局、进编辑器、回主菜单；
+- 屏幕状态机（`Main / Match / Result / Editor / Shop / Settings`）和输入路由；
+- 把 `Main` / `Editor` / `Shop` / `Settings` 的意图（`StartLevel / OpenEditor / OpenShop / Deploy / Back` 等 `Action`）翻译成开局、进编辑器、进商店、回主菜单；
 - 开局时把 `Games::Level`（展示信息 + 台本 + 起始波）交给 `Match`；回主菜单时让 `Match` 销毁这一局；
 - 给 `Result` 组装 `Summary`（胜负、得分、击杀、波次、时间）；
 - 管理关卡表 `levels_`：标准协议与自定义协议的展示信息，自定义协议部署时用 `Editor::script()` 覆盖台本、固定从第 1 波开始；
-- 启动时初始化 `Base`（音频/输入/字体）并按 `settings.ini` 恢复音量。
+- 启动时初始化 `Base`（音频/输入/字体）、加载钱包与库存，并按 `settings.ini` 恢复音量。
 
 `Games` 一旦构造就由 `Match` 持有，`Menu` 不再直接访问；`Menu` 不参与战斗、波次或强化计算，也不直接画任何屏幕（组件的 `render()` 才画）。
 
@@ -163,11 +168,13 @@ cpp/src/
 | --- | --- |
 | `Bullets` | 子弹池：持有 `Bullet*`（纯虚接口），统一推进、回收、绘制；按阵营分两组 |
 | `Combatants` | 玩家、敌人容器、Boss 指针；推进/绘制战斗者 |
-| `Entities` | 传送门、掉落、粒子、飘字、冲击波 |
+| `Entities` | 地雷、传送门、掉落、粒子、飘字、冲击波 |
 | `Events` | 碰撞、接触伤害、敌人分离、击杀 |
 | `State` | Boss 阶段、Boss 击败、玩家失败 |
 
 `Arena` 只编排顺序并汇总 `Feedback`。
+
+地雷是 `Entities` 里的实体：局内右键 → `Games::mousePressRight()` 扣 `Inventory` → `Arena::placeMine()`（位置夹到战场内）；`Events::resolveMines()` 在敌人进入感应半径后引爆，对爆炸半径内的敌人结算 `DamageSource::Shock`，并播放爆炸音效/冲击波。
 
 ### 子弹
 
@@ -272,19 +279,21 @@ public:
 ```text
 GameWindow
 ├─ Pointer ────────────► Base（准星画法）
-└─ Menu（持有 Base、Score、关卡表，组合 5 个界面组件）
-   ├─ menu::Main ─────────► 关卡卡 / 设置入口（数据由 Menu 提供）
-   ├─ menu::Match ────────► Games(Level, Base&, Score&)   ← 一局一个实例
+└─ Menu（持有 Base、Score、Inventory、关卡表，组合 6 个界面组件）
+   ├─ menu::Main ─────────► 关卡卡 / 商店与设置入口（数据由 Menu 提供）
+   ├─ menu::Match ────────► Games(Level, Base&, Score&, Inventory&)   ← 一局一个实例
    │  └─ Games
    │     ├─ Base ─────► base::Input / Audio / Music / Paint（引用，由 Menu 持有）
    │     ├─ Arena ────► arena::Bullets / Combatants / Entities / Events / State
    │     ├─ Score ────► 全局钱包 / 本局统计（Menu 持有，Arena 以引用上报）
+   │     ├─ Inventory ─► 地雷库存（Menu 持有，右键布置时扣减）
    │     ├─ games::Waves ─────► Arena, Random
    │     ├─ games::Upgrades ──► Arena, Base, Random
    │     ├─ Renderer ─────────► Games/Arena/Waves/Upgrades(只读), Base, Random
    │     └─ Random
    ├─ menu::Result ───────► 只读 Summary
    ├─ menu::Editor ───────► games::Script（自己持有）
+   ├─ menu::Shop ─────────► Score（扣款）+ Inventory（库存）+ settings.ini
    └─ menu::Settings ─────► Base 音量接口 + settings.ini
 ```
 
@@ -308,6 +317,7 @@ GameWindow::tick()
 ├─ Menu::update(dt)
 │  ├─ Main:   菜单动画（menu::Main 自己推进时间）
 │  ├─ Editor: 输入自处理（menu::Editor），Menu 不更新
+│  ├─ Shop:   输入自处理（menu::Shop），Menu 不更新
 │  ├─ Match:  menu::Match → Games::update(dt)
 │  │          ├─ Renderer::update(dt)
 │  │          ├─ Playing: Arena→Waves→Feedback→胜负/波次判断
@@ -319,6 +329,7 @@ GameWindow::tick()
 ├─ Menu::render()
 │  ├─ Main:    menu::Main   绘制菜单
 │  ├─ Editor:  menu::Editor 绘制台本表格
+│  ├─ Shop:    menu::Shop   绘制补给站
 │  ├─ Settings: menu::Settings 绘制设置页
 │  ├─ Match:  menu::Match → Games::render() → Renderer
 │  └─ Result: menu::Match 画面 + menu::Result 结算覆盖层
@@ -340,6 +351,7 @@ GameWindow::paintEvent()
 | 战役波次组成、出怪节奏、波次成长系数 | `src/json/waves.json` |
 | 强化每轮的随机区间 | `src/json/upgrades.json` |
 | 敌方子弹速度 / 伤害 / 半径 | `src/json/bullets.json` |
+| 地雷价格 / 伤害 / 感应与爆炸半径 / 引爆延迟 / 寿命 | `src/json/items.json` |
 
 改完直接 `make`：JSON 会重新嵌成 raw string，包含数值表的 TU 自动重编译；写错格式会在编译期由 `static_assert` 报错。
 

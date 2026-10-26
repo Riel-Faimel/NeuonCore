@@ -35,11 +35,11 @@ LIBS := -L$(QTDIR)/lib \
         -luser32 -lkernel32 -lgdi32 -lwinmm -limm32 -lversion \
         -ldwmapi -luxtheme -lmsimg32 -static-libgcc -static-libstdc++
 
-APP_SRC := Renderer Pointer Score
+APP_SRC := Renderer Pointer Score Inventory
 APP_OBJS := $(addprefix $(BUILD)/app/,$(addsuffix .o,$(APP_SRC)))
 GAMES_COMPONENTS := Games Waves/Waves Upgrades/Upgrades
 GAMES_OBJS := $(addprefix $(BUILD)/app/Games/,$(addsuffix .o,$(GAMES_COMPONENTS)))
-MENU_COMPONENTS := Menu Main/Main Match/Match Result/Result Editor/Editor Settings/Settings
+MENU_COMPONENTS := Menu Main/Main Match/Match Result/Result Editor/Editor Shop/Shop Settings/Settings
 MENU_OBJS := $(addprefix $(BUILD)/app/Menu/,$(addsuffix .o,$(MENU_COMPONENTS)))
 LIB_SRC := Math Random
 LIB_OBJS := $(addprefix $(BUILD)/lib/,$(addsuffix .o,$(LIB_SRC)))
@@ -58,7 +58,7 @@ GENERATED_JSON := $(BUILD)/generated/GameDataJson.h
 ARENA_COMPONENTS := Arena Bullets/Bullets Bullets/StandardBullet \
                     Combatants/Combatants Entities/Entities Events State \
                     Combatants/Player Combatants/Enemy \
-                    Entities/Portal Entities/Pickup \
+                    Entities/Mine Entities/Portal Entities/Pickup \
                     Entities/Particle Entities/FloatingText Entities/Shockwave
 ARENA_OBJS := $(addprefix $(BUILD)/app/Arena/,$(addsuffix .o,$(ARENA_COMPONENTS)))
 
@@ -142,7 +142,7 @@ $(EMBED_TOOL): tools/embed_json.cpp | $(BUILD)
 $(GENERATED_JSON): $(EMBED_TOOL) $(JSON_FILES) | $(BUILD)
 	@if not exist "$(BUILD_WIN)\generated" mkdir "$(BUILD_WIN)\generated"
 	@echo [JSON] $@
-	@$(EMBED_TOOL) $@ player_json src/json/player.json enemies_json src/json/enemies.json waves_json src/json/waves.json upgrades_json src/json/upgrades.json bullets_json src/json/bullets.json
+	@$(EMBED_TOOL) $@ player_json src/json/player.json enemies_json src/json/enemies.json waves_json src/json/waves.json upgrades_json src/json/upgrades.json bullets_json src/json/bullets.json items_json src/json/items.json
 
 $(BUILD)/NeonCoreConsole.exe: $(TEST_OBJS)
 	@echo [LD] $@ (debug/tests)

@@ -88,6 +88,9 @@ public:
     // 齿轮图标（设置入口用）。
     static void gear(QPainter &painter, const Math::Vec2 &center, float radius,
                      const QColor &color);
+    // 补给箱图标（商店入口用）。
+    static void crate(QPainter &painter, const Math::Vec2 &center, float radius,
+                      const QColor &color);
 
     static QColor shade(const QColor &color, float factor);
     static QColor withAlpha(const QColor &color, int alpha);

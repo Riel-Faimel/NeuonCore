@@ -175,6 +175,12 @@ void Base::gear(QPainter &painter, const Math::Vec2 &center, float radius,
     base::Paint::gear(painter, center, radius, color);
 }
 
+void Base::crate(QPainter &painter, const Math::Vec2 &center, float radius,
+                 const QColor &color)
+{
+    base::Paint::crate(painter, center, radius, color);
+}
+
 QColor Base::shade(const QColor &color, float factor)
 {
     return base::Paint::shade(color, factor);

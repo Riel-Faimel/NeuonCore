@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Arena/Entities/FloatingText.h"
+#include "Arena/Entities/Mine.h"
 #include "Arena/Entities/Particle.h"
 #include "Arena/Entities/Pickup.h"
 #include "Arena/Entities/Portal.h"
@@ -15,13 +16,14 @@ class Arena;
 
 namespace arena {
 
-// 实体组件：传送门、掉落、粒子、飘字、冲击波（子弹在 arena::Bullets）。
+// 实体组件：地雷、传送门、掉落、粒子、飘字、冲击波（子弹在 arena::Bullets）。
 class Entities {
 public:
     void reset();
 
     void updatePortals(Arena &arena, float dt);
     void updatePickups(Arena &arena, float dt);
+    void updateMines(float dt);
     void updateEffects(Arena &arena, float dt);
     void cleanup();
 
@@ -30,16 +32,20 @@ public:
 
     void spawnPortal(Arena &arena, const QString &kind, int wave);
     void spawnPickup(Arena &arena, const Math::Vec2 &pos, int amount);
+    void spawnMine(Arena &arena, const Math::Vec2 &pos);
+    void clearMines();
     void spawnBurst(Arena &arena, const Math::Vec2 &pos, const QColor &color,
                     int count, float speed, float life);
     void addShockwave(const Math::Vec2 &pos, float radius, const QColor &color,
                       float duration = 0.4f, int width = 2);
 
     int portalCount() const { return int(portals_.size()); }
+    int mineCount() const { return int(mines_.size()); }
     float &effectsTimer() { return effectsTimer_; }
 
     std::vector<Portal> &portals() { return portals_; }
     std::vector<Pickup> &pickups() { return pickups_; }
+    std::vector<Mine> &mines() { return mines_; }
     std::vector<Particle> &particles() { return particles_; }
     std::vector<FloatingText> &floatingTexts() { return floatingTexts_; }
     std::vector<Shockwave> &shockwaves() { return shockwaves_; }
@@ -49,6 +55,7 @@ private:
 
     std::vector<Portal> portals_;
     std::vector<Pickup> pickups_;
+    std::vector<Mine> mines_;
     std::vector<Particle> particles_;
     std::vector<FloatingText> floatingTexts_;
     std::vector<Shockwave> shockwaves_;

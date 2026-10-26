@@ -64,6 +64,9 @@ public:
     // 齿轮图标（设置按钮用）：八个齿 + 中间的圆环。
     static void gear(QPainter &painter, const Math::Vec2 &center, float radius,
                      const QColor &color);
+    // 补给箱图标（商店入口用）。
+    static void crate(QPainter &painter, const Math::Vec2 &center, float radius,
+                      const QColor &color);
     // 应用图标：程序化绘制的“星核”，按 size 直接渲染（不加载外部图片）。
     static QPixmap appIcon(int size);
     static void polygon(QPainter &painter, const QPolygonF &points,

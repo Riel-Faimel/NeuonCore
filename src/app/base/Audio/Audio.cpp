@@ -199,6 +199,7 @@ void Audio::init()
         {QStringLiteral("boss"), 0.85f, 90.0f, 42.0f, QStringLiteral("saw"), 0.28f, 0.42f},
         {QStringLiteral("victory"), 1.50f, 260.0f, 980.0f, QStringLiteral("sine"), 0.34f, 0.02f},
         {QStringLiteral("defeat"), 1.20f, 210.0f, 48.0f, QStringLiteral("saw"), 0.34f, 0.24f},
+        {QStringLiteral("explode"), 0.45f, 150.0f, 38.0f, QStringLiteral("noise"), 0.36f, 0.85f},
     };
 
     for (const SoundDef &def : defs) {

@@ -13,6 +13,7 @@ Menu::Menu(bool enableAudio) : settings_(enableAudio)
     Base::initialize();
     audioRequested_ = enableAudio;
     score_.load();
+    inventory_.load();
     if (enableAudio) {
         base_.initAudio();
         settings_.load(base_);
@@ -30,6 +31,7 @@ Menu::Menu(bool enableAudio) : settings_(enableAudio)
 Menu::~Menu()
 {
     score_.save();
+    inventory_.save();
 }
 
 // 台本是数据：src/json/waves.json 的 campaign 在编译期展开成常量，
@@ -124,6 +126,8 @@ void Menu::render()
     QPainter painter(&frame_);
     if (screen_ == Screen::Editor) {
         editor_.render(painter, base_.muted());
+    } else if (screen_ == Screen::Shop) {
+        shop_.render(painter, score_, inventory_);
     } else if (screen_ == Screen::Settings) {
         settings_.render(painter, base_);
     } else {
@@ -144,7 +148,7 @@ void Menu::startLevel(int index)
         level.script = editor_.script();
         level.startWave = 1;
     }
-    match_.start(level, base_, score_);
+    match_.start(level, base_, score_, inventory_);
     screen_ = Screen::Match;
     base_.keyRelease(Qt::Key_Escape);
 }
@@ -154,6 +158,7 @@ void Menu::returnToMenu()
     screen_ = Screen::Main;
     match_.stop();
     score_.save();
+    inventory_.save();
     base_.clear();
 }
 
@@ -179,6 +184,11 @@ void Menu::keyPress(int key, bool autoRepeat)
             break;
         case menu::Main::Action::OpenEditor:
             openEditor();
+            break;
+        case menu::Main::Action::OpenShop:
+            shop_.reset();
+            screen_ = Screen::Shop;
+            base_.playSound(QStringLiteral("ui"));
             break;
         case menu::Main::Action::OpenSettings:
             settings_.reset();
@@ -214,6 +224,14 @@ void Menu::keyPress(int key, bool autoRepeat)
             startLevel(CustomLevelIndex);
         } else if (action == menu::Editor::Action::Back) {
             returnToMenu();
+        }
+        break;
+    }
+    case Screen::Shop: {
+        const menu::Shop::Action action = shop_.keyPress(key, score_, inventory_, base_);
+        if (action == menu::Shop::Action::Back) {
+            screen_ = Screen::Main;
+            base_.playSound(QStringLiteral("ui"));
         }
         break;
     }
@@ -260,6 +278,11 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
         case menu::Main::Action::OpenEditor:
             openEditor();
             break;
+        case menu::Main::Action::OpenShop:
+            shop_.reset();
+            screen_ = Screen::Shop;
+            base_.playSound(QStringLiteral("ui"));
+            break;
         case menu::Main::Action::OpenSettings:
             settings_.reset();
             screen_ = Screen::Settings;
@@ -291,6 +314,15 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
         }
         break;
     }
+    case Screen::Shop: {
+        const menu::Shop::Action action =
+            shop_.mousePress(position, score_, inventory_, base_);
+        if (action == menu::Shop::Action::Back) {
+            screen_ = Screen::Main;
+            base_.playSound(QStringLiteral("ui"));
+        }
+        break;
+    }
     case Screen::Settings: {
         const menu::Settings::Action action = settings_.mousePress(position, base_);
         if (action == menu::Settings::Action::Back) {
@@ -299,6 +331,13 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
         }
         break;
     }
+    }
+}
+
+void Menu::mousePressRight(const Math::Vec2 &position)
+{
+    if (screen_ == Screen::Match && match_.active()) {
+        match_.mousePressRight(position);
     }
 }
 

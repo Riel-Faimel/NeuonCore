@@ -44,6 +44,8 @@ public:
     void draw(QPainter &world, QPainter &glow) const;
 
     void spawnPortal(const QString &kind, int wave);
+    void placeMine(const Math::Vec2 &position);
+    int mineCount() const { return entities_.mineCount(); }
 
     const PlayerState &player() const { return combatants_.player().state; }
     int score() const;

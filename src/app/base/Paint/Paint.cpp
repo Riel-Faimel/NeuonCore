@@ -227,6 +227,24 @@ void Paint::gear(QPainter &painter, const Math::Vec2 &center, float radius,
     painter.restore();
 }
 
+void Paint::crate(QPainter &painter, const Math::Vec2 &center, float radius,
+                  const QColor &color)
+{
+    painter.save();
+    QPen pen(color);
+    pen.setWidthF(1.6f);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+    const QRectF box(center.x - radius, center.y - radius * 0.8f, radius * 2.0f,
+                     radius * 1.6f);
+    painter.drawRoundedRect(box, 2.0f, 2.0f);
+    painter.drawLine(box.topLeft(), box.bottomRight());
+    painter.drawLine(box.topRight(), box.bottomLeft());
+    painter.drawLine(QPointF(box.left(), box.center().y()),
+                     QPointF(box.right(), box.center().y()));
+    painter.restore();
+}
+
 QPixmap Paint::appIcon(int size)
 {
     constexpr int canvas = 256;
