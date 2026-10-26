@@ -92,21 +92,9 @@ const EnemyStats &Enemy::statsFor(const QString &kind)
     return table[0];
 }
 
-Enemy::Role Enemy::roleOf(Kind kind)
-{
-    const EnemyRegistry &registry = enemyRegistry();
-    for (const auto &entry : registry) {
-        if (entry.second.kindId == kind) {
-            return entry.second.role;
-        }
-    }
-    return Role::Melee;
-}
-
-Enemy::Enemy(Kind kindId, std::string_view kindName, Role role,
+Enemy::Enemy(std::string_view kindName, Role role,
              const Math::Vec2 &position, int waveNumber)
     : kind(toQString(kindName)),
-      kindId(kindId),
       eid(sNextId++),
       pos(position),
       wave(waveNumber),
@@ -118,14 +106,7 @@ Enemy::Enemy(Kind kindId, std::string_view kindName, Role role,
     score = stats.score;
     speed = stats.speed * (1.0f + data::kWaveScaling.speed * (wave - 1));
     damage = stats.damage * (1.0f + data::kWaveScaling.damage * (wave - 1));
-    boss = kindId == Kind::Boss;
-    if (boss) {
-        maxHp = stats.hp;
-        speed = stats.speed;
-        damage = stats.damage;
-    } else {
-        maxHp = stats.hp * (1.0f + data::kWaveScaling.hp * (wave - 1));
-    }
+    maxHp = stats.hp * (1.0f + data::kWaveScaling.hp * (wave - 1));
     hp = maxHp;
     hpDisplay = maxHp;
     attackTimer = RandomService.real(1.2f, 2.0f);

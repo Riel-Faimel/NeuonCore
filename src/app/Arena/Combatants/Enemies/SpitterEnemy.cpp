@@ -20,11 +20,11 @@ namespace arena {
 
 namespace {
 const EnemyRegistrar<SpitterEnemy> kRegistration(
-    Enemy::Kind::Spitter, "spitter", Enemy::Role::Ranged, Base::Magenta);
+    "spitter", Base::Magenta);
 }
 
 SpitterEnemy::SpitterEnemy(const Math::Vec2 &position, int wave)
-    : RangedEnemy(Kind::Spitter, "spitter", Role::Ranged, position, wave)
+    : RangedEnemy("spitter", Role::Ranged, position, wave)
 {
 }
 

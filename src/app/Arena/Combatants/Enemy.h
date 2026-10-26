@@ -38,22 +38,6 @@ struct EnemyStats {
 // Enemy.cpp 只负责基类和“kind -> 工厂”的注册表。
 class Enemy : public Fighter {
 public:
-    enum class Kind {
-        Drone,
-        Spitter,
-        Tank,
-        Splitter,
-        Mini,
-        Boss,
-        Amplifier,
-        Linker,
-        Mender,
-        Rusher,
-        Necromancer,
-        Summoner,
-        Other,
-    };
-
     // 寻路/走位类别：近战贴人、远程躲弹幕、增益向友军集群靠拢。
     enum class Role {
         Melee,
@@ -62,7 +46,6 @@ public:
     };
 
     QString kind;
-    Kind kindId = Kind::Other;
     int eid = 0;
     Math::Vec2 pos;
     Math::Vec2 vel;
@@ -110,7 +93,6 @@ public:
     static std::unique_ptr<Enemy> create(const QString &kind,
                                          const Math::Vec2 &position, int wave);
     static const EnemyStats &statsFor(const QString &kind);
-    static Role roleOf(Kind kind);
     Role role() const { return role_; }
 
     // ----- 接口 -----
@@ -137,7 +119,7 @@ public:
     virtual float damageShareRatio() const { return 0.0f; }
 
 protected:
-    Enemy(Kind kindId, std::string_view kindName, Role role,
+    Enemy(std::string_view kindName, Role role,
           const Math::Vec2 &position, int waveNumber);
 
     // 具体敌人只需返回期望速度，积分、边界、闪避由基类统一处理。

@@ -9,11 +9,11 @@ namespace arena {
 
 namespace {
 const EnemyRegistrar<MenderEnemy> kRegistration(
-    Enemy::Kind::Mender, "mender", Enemy::Role::Support, QColor(120, 255, 178));
+    "mender", QColor(120, 255, 178));
 }
 
 MenderEnemy::MenderEnemy(const Math::Vec2 &position, int wave)
-    : SupportEnemy(Kind::Mender, "mender", Role::Support, position, wave)
+    : SupportEnemy("mender", Role::Support, position, wave)
 {
     const EnemyStats &stats = statsFor(kind);
     supportRadius = stats.healRadius;

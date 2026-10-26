@@ -15,11 +15,11 @@ namespace arena {
 
 namespace {
 const EnemyRegistrar<SummonerEnemy> kRegistration(
-    Enemy::Kind::Summoner, "summoner", Enemy::Role::Ranged, QColor(255, 200, 90));
+    "summoner", QColor(255, 200, 90));
 }
 
 SummonerEnemy::SummonerEnemy(const Math::Vec2 &position, int wave)
-    : RangedEnemy(Kind::Summoner, "summoner", Role::Ranged, position, wave)
+    : RangedEnemy("summoner", Role::Ranged, position, wave)
 {
     const EnemyStats &stats = statsFor(kind);
     chargeRequired = std::max(1, stats.chargeRequired);

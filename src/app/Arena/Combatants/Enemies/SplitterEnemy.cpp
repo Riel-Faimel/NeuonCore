@@ -15,11 +15,11 @@ namespace arena {
 
 namespace {
 const EnemyRegistrar<SplitterEnemy> kRegistration(
-    Enemy::Kind::Splitter, "splitter", Enemy::Role::Melee, Base::Violet);
+    "splitter", Base::Violet);
 }
 
 SplitterEnemy::SplitterEnemy(const Math::Vec2 &position, int wave)
-    : SelfDestructEnemy(Kind::Splitter, "splitter", Role::Melee, position, wave)
+    : SelfDestructEnemy("splitter", Role::Melee, position, wave)
 {
 }
 

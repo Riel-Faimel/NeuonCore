@@ -16,11 +16,11 @@ namespace arena {
 
 namespace {
 const EnemyRegistrar<RusherEnemy> kRegistration(
-    Enemy::Kind::Rusher, "rusher", Enemy::Role::Melee, QColor(255, 140, 80));
+    "rusher", QColor(255, 140, 80));
 }
 
 RusherEnemy::RusherEnemy(const Math::Vec2 &position, int wave)
-    : OffensiveEnemy(Kind::Rusher, "rusher", Role::Melee, position, wave)
+    : OffensiveEnemy("rusher", Role::Melee, position, wave)
 {
     const EnemyStats &stats = statsFor(kind);
     lungeInterval = std::max(0.4f, stats.lungeInterval);

@@ -11,11 +11,11 @@ namespace arena {
 
 namespace {
 const EnemyRegistrar<DroneEnemy> kRegistration(
-    Enemy::Kind::Drone, "drone", Enemy::Role::Melee, Base::Coral);
+    "drone", Base::Coral);
 }
 
 DroneEnemy::DroneEnemy(const Math::Vec2 &position, int wave)
-    : OffensiveEnemy(Kind::Drone, "drone", Role::Melee, position, wave)
+    : OffensiveEnemy("drone", Role::Melee, position, wave)
 {
 }
 

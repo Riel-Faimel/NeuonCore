@@ -15,12 +15,11 @@ namespace arena {
 
 namespace {
 const EnemyRegistrar<NecromancerEnemy> kRegistration(
-    Enemy::Kind::Necromancer, "necromancer", Enemy::Role::Support,
-    QColor(190, 120, 255));
+    "necromancer", QColor(190, 120, 255));
 }
 
 NecromancerEnemy::NecromancerEnemy(const Math::Vec2 &position, int wave)
-    : SupportEnemy(Kind::Necromancer, "necromancer", Role::Support, position, wave)
+    : SupportEnemy("necromancer", Role::Support, position, wave)
 {
     const EnemyStats &stats = statsFor(kind);
     supportRadius = stats.reviveRadius;

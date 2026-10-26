@@ -19,12 +19,20 @@ namespace arena {
 
 namespace {
 const EnemyRegistrar<BossEnemy> kRegistration(
-    Enemy::Kind::Boss, "boss", Enemy::Role::Ranged, QColor(255, 74, 160));
+    "boss", QColor(255, 74, 160));
 }
 
 BossEnemy::BossEnemy(const Math::Vec2 &position, int wave)
-    : Enemy(Kind::Boss, "boss", Role::Ranged, position, wave)
+    : Enemy("boss", Role::Ranged, position, wave)
 {
+    // Boss 不吃波次成长：数值直接用 JSON 基础值。
+    boss = true;
+    const EnemyStats &stats = statsFor(kind);
+    maxHp = stats.hp;
+    speed = stats.speed;
+    damage = stats.damage;
+    hp = maxHp;
+    hpDisplay = hp;
 }
 
 Math::Vec2 BossEnemy::desiredVelocity(const Context &ctx, float dt)

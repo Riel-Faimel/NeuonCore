@@ -11,11 +11,11 @@ namespace arena {
 
 namespace {
 const EnemyRegistrar<AmplifierEnemy> kRegistration(
-    Enemy::Kind::Amplifier, "amplifier", Enemy::Role::Support, QColor(120, 220, 255));
+    "amplifier", QColor(120, 220, 255));
 }
 
 AmplifierEnemy::AmplifierEnemy(const Math::Vec2 &position, int wave)
-    : SupportEnemy(Kind::Amplifier, "amplifier", Role::Support, position, wave)
+    : SupportEnemy("amplifier", Role::Support, position, wave)
 {
     const EnemyStats &stats = statsFor(kind);
     supportRadius = stats.auraRadius;

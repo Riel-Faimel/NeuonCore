@@ -11,11 +11,11 @@ namespace arena {
 
 namespace {
 const EnemyRegistrar<TankEnemy> kRegistration(
-    Enemy::Kind::Tank, "tank", Enemy::Role::Melee, Base::Amber);
+    "tank", Base::Amber);
 }
 
 TankEnemy::TankEnemy(const Math::Vec2 &position, int wave)
-    : DefensiveEnemy(Kind::Tank, "tank", Role::Melee, position, wave)
+    : DefensiveEnemy("tank", Role::Melee, position, wave)
 {
 }
 

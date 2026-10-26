@@ -334,7 +334,7 @@ public:
 | `SelfDestructEnemy` | splitter（死亡分裂） |
 | `BossEnemy` | boss |
 
-`Enemy::Kind` 目前覆盖 11 种，数值（含光环参数）全部来自 `src/json/enemies.json`；击杀触发在 `Events::handleKill()`，由各敌人虚函数 `onKilled()` / `onAllyKilled()` 接管：
+目前有 11 个 kind 字符串（**没有 Kind 枚举**），具体类型由 vtable 区分、测试/外部判断用 `dynamic_cast`；数值（含光环参数）全部来自 `src/json/enemies.json`。击杀触发在 `Events::handleKill()`，由各敌人虚函数 `onKilled()` / `onAllyKilled()` 接管：
 
 | kind | 机制 |
 | --- | --- |
@@ -349,7 +349,7 @@ public:
 
 ### 寻路角色
 
-`Enemy::Role` 决定基础走位，`roleOf()` 是唯一分类入口：
+`Enemy::Role` 字段决定基础走位；类别归属直接用虚基类（`dynamic_cast<SupportEnemy*>` 等）判断：
 
 | Role | 成员 | 走位 |
 | --- | --- | --- |
@@ -365,8 +365,7 @@ public:
 
 ```cpp
 namespace {
-const EnemyRegistrar<DroneEnemy> kRegistration(
-    Enemy::Kind::Drone, "drone", Enemy::Role::Melee, Base::Coral);
+const EnemyRegistrar<DroneEnemy> kRegistration("drone", Base::Coral);
 }
 ```
 

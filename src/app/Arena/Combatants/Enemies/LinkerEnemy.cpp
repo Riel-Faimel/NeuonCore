@@ -14,11 +14,11 @@ namespace arena {
 
 namespace {
 const EnemyRegistrar<LinkerEnemy> kRegistration(
-    Enemy::Kind::Linker, "linker", Enemy::Role::Support, QColor(150, 160, 255));
+    "linker", QColor(150, 160, 255));
 }
 
 LinkerEnemy::LinkerEnemy(const Math::Vec2 &position, int wave)
-    : DefensiveEnemy(Kind::Linker, "linker", Role::Support, position, wave)
+    : DefensiveEnemy("linker", Role::Support, position, wave)
 {
     const EnemyStats &stats = statsFor(kind);
     supportRadius = stats.shareRadius;

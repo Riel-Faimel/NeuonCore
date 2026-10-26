@@ -11,11 +11,11 @@ namespace arena {
 
 namespace {
 const EnemyRegistrar<MiniEnemy> kRegistration(
-    Enemy::Kind::Mini, "mini", Enemy::Role::Melee, QColor(218, 154, 255));
+    "mini", QColor(218, 154, 255));
 }
 
 MiniEnemy::MiniEnemy(const Math::Vec2 &position, int wave)
-    : OffensiveEnemy(Kind::Mini, "mini", Role::Melee, position, wave)
+    : OffensiveEnemy("mini", Role::Melee, position, wave)
 {
 }
 

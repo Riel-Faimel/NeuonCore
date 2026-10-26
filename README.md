@@ -250,7 +250,7 @@ cpp/
 - 远程与召唤（spitter / boss / summoner）：保持中远距离，玩家弹幕逼近时短促侧闪（0.12s，冷却 1.6s）；
 - 增益（amplifier / linker / mender / necromancer）：朝“邻居最多”的友军位置靠拢，让光环覆盖更密集的队形。
 
-敌人实现按 `Enemy` → 进攻 / 远程 / 防御 / 辅助 / 自毁 / Boss 六个虚基类拆分（`Enemies/EnemyTypes.h`），每个 kind 一个 `*Enemy.cpp`。各文件用 `EnemyRegistrar<T>`（CRTP）在静态初始化时登记到 `Enemy.cpp` 的 kind→工厂表，运行时 `Enemy::create()` 查表构造；`Enemy.cpp` 里不再有按 kind 的 `switch`。
+敌人实现按 `Enemy` → 进攻 / 远程 / 防御 / 辅助 / 自毁 / Boss 六个虚基类拆分（`Enemies/EnemyTypes.h`），每个 kind 一个 `*Enemy.cpp`。各文件用 `EnemyRegistrar<T>`（CRTP）在静态初始化时登记到 `Enemy.cpp` 的 kind→工厂表，运行时 `Enemy::create()` 查表构造；没有 Kind 枚举，具体类型由 vtable / `dynamic_cast` 判断，`Enemy.cpp` 里不再有按 kind 的 `switch`。
 
 `src/lib/` 放不依赖应用层的通用模块：`Math`（向量/几何）和 `Random`（可注入随机数，并提供全局 `RandomService`）。
 

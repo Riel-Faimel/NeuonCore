@@ -7,6 +7,8 @@
 #include "Base/Base.h"
 #include "Data/GameData.h"
 #include "Arena/Bullets/StandardBullet.h"
+#include "Arena/Combatants/Enemies/EnemyTypes.h"
+#include "Arena/Combatants/Enemies/BossEnemy.h"
 
 #include <QDir>
 #include <QFile>
@@ -371,21 +373,34 @@ public:
                            QStringLiteral("minion deaths do not charge the summoner"));
 
         success &= require(
-            arena::Enemy::roleOf(arena::Enemy::Kind::Drone) == arena::Enemy::Role::Melee
-                && arena::Enemy::roleOf(arena::Enemy::Kind::Tank) == arena::Enemy::Role::Melee
-                && arena::Enemy::roleOf(arena::Enemy::Kind::Rusher) == arena::Enemy::Role::Melee,
-            QStringLiteral("melee enemies seek contact"));
+            dynamic_cast<arena::OffensiveEnemy *>(
+                arena::Enemy::create(QStringLiteral("drone"), {0, 0}, 1).get())
+                    != nullptr
+                && dynamic_cast<arena::DefensiveEnemy *>(
+                       arena::Enemy::create(QStringLiteral("tank"), {0, 0}, 1).get())
+                       != nullptr,
+            QStringLiteral("vtable: offensive and defensive enemies"));
         success &= require(
-            arena::Enemy::roleOf(arena::Enemy::Kind::Spitter) == arena::Enemy::Role::Ranged
-                && arena::Enemy::roleOf(arena::Enemy::Kind::Boss) == arena::Enemy::Role::Ranged
-                && arena::Enemy::roleOf(arena::Enemy::Kind::Summoner) == arena::Enemy::Role::Ranged,
-            QStringLiteral("ranged and summoner enemies keep range and dodge"));
+            dynamic_cast<arena::RangedEnemy *>(
+                arena::Enemy::create(QStringLiteral("spitter"), {0, 0}, 1).get())
+                    != nullptr
+                && dynamic_cast<arena::BossEnemy *>(
+                       arena::Enemy::create(QStringLiteral("boss"), {0, 0}, 1).get())
+                       != nullptr,
+            QStringLiteral("vtable: ranged enemies and boss"));
         success &= require(
-            arena::Enemy::roleOf(arena::Enemy::Kind::Amplifier) == arena::Enemy::Role::Support
-                && arena::Enemy::roleOf(arena::Enemy::Kind::Linker) == arena::Enemy::Role::Support
-                && arena::Enemy::roleOf(arena::Enemy::Kind::Mender) == arena::Enemy::Role::Support
-                && arena::Enemy::roleOf(arena::Enemy::Kind::Necromancer) == arena::Enemy::Role::Support,
-            QStringLiteral("support enemies seek ally clusters"));
+            dynamic_cast<arena::SupportEnemy *>(
+                arena::Enemy::create(QStringLiteral("amplifier"), {0, 0}, 1).get())
+                    != nullptr
+                && dynamic_cast<arena::SupportEnemy *>(
+                       arena::Enemy::create(QStringLiteral("necromancer"), {0, 0}, 1).get())
+                       != nullptr,
+            QStringLiteral("vtable: support enemies"));
+        success &= require(
+            dynamic_cast<arena::SelfDestructEnemy *>(
+                arena::Enemy::create(QStringLiteral("splitter"), {0, 0}, 1).get())
+                != nullptr,
+            QStringLiteral("vtable: self-destruct enemies"));
 
         game->arena_.enemies().clear();
         game->arena_.portals().clear();
