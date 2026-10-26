@@ -47,7 +47,8 @@ cpp\dist\NeonCore\NeonCore.exe
 
 - `↑` `↓` 选择行，`←` `→` 调整（每次 5%），也可以直接点/拖进度条；
 - `ESC` 返回主菜单；调整立即生效；
-- 音量保存到 **exe 同级的 `settings.ini`**（`QSettings` 的 INI 格式），下次启动自动恢复。
+- 音量保存到 **exe 同级的 `settings.ini`**（`QSettings` 的 INI 格式），下次启动自动恢复；
+- 同一个 `settings.ini` 还保存 `[score] total`（全局积分钱包，跨局累计）。
 
 ## 构建
 
@@ -160,7 +161,9 @@ cpp/
 
 `src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Music`、`Paint` 四个 `namespace base` 组件。`Base.h` 仍只暴露 Base 的输入/音频/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Music` 的 QMediaPlayer、`Paint` 的 QFontDatabase 细节都在各自组件内。
 
-`src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades` 两个 `namespace games` 组件，并拥有 `Random`、`Arena`、`Renderer`、`Score`。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Games` 负责局内状态机和调用顺序。一局的积分/击杀由全局模块 `Score` 累计，`arena::Events::handleKill()` 击杀时上报；HUD 和结算只读 `Games::score()/kills()`。
+`src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades` 两个 `namespace games` 组件，并拥有 `Random`、`Arena`、`Renderer`。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Games` 负责局内状态机和调用顺序。
+
+积分由全局模块 `Score` 持有（`Menu` 进程级成员，`Games` 以引用拿到）：跨局累计并写入 exe 同级的 `settings.ini`（`[score] total`），`arena::Events::handleKill()` 击杀时上报；HUD 显示全局钱包，结算显示本局获得（`runScore()`），`Score::spend()` 留给商店系统。
 
 `src/app/Menu/` 和 `Arena/` 同构：`Menu` 只持有进程级的 `Base`、关卡表、当前屏幕和输入路由，五个界面是 `namespace menu` 组件——`Main`（标题/关卡卡/设置入口）、`Match`（持有这一局的 `Games`）、`Result`（只读 `Summary` 的结算层）、`Editor`（持有自定义台本）、`Settings`（音量 + `settings.ini`）。组件把玩家意图作为 `Action` 交回 `Menu`，`Menu` 负责开局、进编辑器和回主菜单；“自定义协议”点开即进编辑器，逐波编辑台本（1–12 波、四种敌人数量、单 Boss），部署时由 `Menu` 把 `Editor::script()` 写进 `Level.script` 交给 `Match`。
 
@@ -213,6 +216,7 @@ mingw32-make -j12 test
 - 完整 8 波自动游玩，直到击败 Boss
 - 音频初始化（可选：设置 `NEON_AUDIO_TEST=1`）
 - 设置页：齿轮按钮进入、音效/背景音乐音量增减、点击进度条设值、Esc 返回
+- 积分：击杀累计到全局钱包、消费扣减、余额不足拒绝、开新局只重置本局统计
 - 输出到当前目录的 `smoke.log`
 
 重新生成离屏截图：

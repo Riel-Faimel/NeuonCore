@@ -117,7 +117,7 @@ cpp/src/
 - 把 `Arena::Feedback` 转发给 `Renderer`；
 - 把胜负结果交给 `Menu`，自己不再画标题或结算。
 
-一局内的积分与击杀数由全局模块 `Score`（`src/app/Score.h/.cpp`）累计：`Games` 持有它，`Arena` 以引用拿到它，`arena::Events::handleKill()` 击杀时调用 `addKill(enemy.score)`；HUD 与结算只读 `Games::score()/kills()`。
+积分由全局模块 `Score`（`src/app/Score.h/.cpp`）统一持有：`Menu` 进程级持有它，`Games` 构造时拿到引用并调用 `beginRun()`（只重置本局统计），`Arena` / `arena::Events::handleKill()` 击杀时调用 `addKill(enemy.score)`。全局余额跨局累计并写入 exe 同级的 `settings.ini`（`[score] total`），HUD 显示钱包，结算显示本局获得（`Games::runScore()`）；`Score::spend()` 已预留给商店系统。
 
 一局的结束条件只由台本决定：清空最后一波即胜利。`Boss` 只是一个带阶段的强敌，击杀它不会结束对局，只触发表现反馈（目标摧毁横幅、震屏、音效），所以它可以被放在任意一波。
 
@@ -243,13 +243,13 @@ public:
 ```text
 GameWindow
 ├─ Pointer ────────────► Base（准星画法）
-└─ Menu（持有 Base、关卡表，组合 5 个界面组件）
+└─ Menu（持有 Base、Score、关卡表，组合 5 个界面组件）
    ├─ menu::Main ─────────► 关卡卡 / 设置入口（数据由 Menu 提供）
-   ├─ menu::Match ────────► Games(Level, Base&)   ← 一局一个实例
+   ├─ menu::Match ────────► Games(Level, Base&, Score&)   ← 一局一个实例
    │  └─ Games
    │     ├─ Base ─────► base::Input / Audio / Music / Paint（引用，由 Menu 持有）
    │     ├─ Arena ────► arena::Bullets / Combatants / Entities / Events / State
-   │     ├─ Score ────► 一局积分/击杀（Arena 以引用上报）
+   │     ├─ Score ────► 全局钱包 / 本局统计（Menu 持有，Arena 以引用上报）
    │     ├─ games::Waves ─────► Arena, Random
    │     ├─ games::Upgrades ──► Arena, Base, Random
    │     ├─ Renderer ─────────► Games/Arena/Waves/Upgrades(只读), Base, Random

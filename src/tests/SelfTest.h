@@ -402,6 +402,23 @@ public:
         success &= require(menu.screen() == Menu::Screen::Main,
                            QStringLiteral("escape leaves settings"));
 
+        log(QStringLiteral("Score"));
+        const int wallet = menu.score_.total();
+        menu.score_.beginRun();
+        menu.score_.addKill(120);
+        success &= require(menu.score_.total() == wallet + 120
+                               && menu.score_.run() == 120 && menu.score_.kills() == 1,
+                           QStringLiteral("kill adds to global wallet and run total"));
+        success &= require(menu.score_.spend(50) && menu.score_.total() == wallet + 70,
+                           QStringLiteral("spend deducts from the wallet"));
+        success &= require(!menu.score_.spend(999999),
+                           QStringLiteral("overdraft is rejected"));
+        menu.score_.beginRun();
+        success &= require(menu.score_.kills() == 0 && menu.score_.run() == 0
+                               && menu.score_.total() == wallet + 70,
+                           QStringLiteral("beginRun resets only the run stats"));
+        menu.score_.total_ = wallet;   // 还原，避免测试改动持久化余额
+
         log(QStringLiteral("Submitted script"));
         games::Script shortScript;
         shortScript.push_back(games::Wave{{games::EnemySpawn{QStringLiteral("drone"), 2},
@@ -498,8 +515,8 @@ public:
         game->arena_.entities_.particles().clear();
         game->arena_.entities_.floatingTexts().clear();
         game->arena_.entities_.shockwaves().clear();
-        game->score_.total_ = 2840;
-        game->score_.kills_ = 31;
+        menu.score_.total_ = 2840;
+        menu.score_.kills_ = 31;
         Arena::PlayerState &player = game->arena_.combatants_.player().state;
         player.pos = {475, 430};
         player.hp = 74;
@@ -566,8 +583,8 @@ public:
         game->waves_.waveTotal_ = 16;
         game->arena_.beginWave();
         game->runTime_ = 304.0f;
-        game->score_.total_ = 9870;
-        game->score_.kills_ = 63;
+        menu.score_.total_ = 9870;
+        menu.score_.kills_ = 63;
         game->arena_.combatants_.enemies().clear();
         game->arena_.bullets_.player().clear();
         game->arena_.bullets_.clearEnemy();
@@ -625,8 +642,8 @@ public:
         game->waves_.queue_.clear();
         game->waves_.waveTotal_ = 12;
         game->runTime_ = 86.0f;
-        game->score_.total_ = 1240;
-        game->score_.kills_ = 17;
+        menu.score_.total_ = 1240;
+        menu.score_.kills_ = 17;
         game->arena_.combatants_.player().state.hp = 8;
         game->arena_.combatants_.player().state.invuln = 0.0f;
         game->arena_.combatants_.player().takeDamage(

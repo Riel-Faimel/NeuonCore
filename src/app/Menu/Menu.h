@@ -2,6 +2,7 @@
 
 #include "Base/Base.h"
 #include "Games/Games.h"
+#include "Score.h"
 
 #include "Menu/Editor/Editor.h"
 #include "Menu/Main/Main.h"
@@ -64,6 +65,7 @@ private:
     void openEditor();
 
     Base base_;
+    Score score_;
     std::vector<Games::Level> levels_;
 
     menu::Main main_;

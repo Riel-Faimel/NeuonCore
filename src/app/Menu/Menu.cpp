@@ -12,6 +12,7 @@ Menu::Menu(bool enableAudio) : settings_(enableAudio)
 {
     Base::initialize();
     audioRequested_ = enableAudio;
+    score_.load();
     if (enableAudio) {
         base_.initAudio();
         settings_.load(base_);
@@ -26,7 +27,10 @@ Menu::Menu(bool enableAudio) : settings_(enableAudio)
     };
 }
 
-Menu::~Menu() = default;
+Menu::~Menu()
+{
+    score_.save();
+}
 
 // 台本是数据：每波列出敌人种类和数量，最后一波带 Boss。
 // 想改战役节奏只改这里，Waves / Games 不需要动。
@@ -81,7 +85,7 @@ menu::Result::Summary Menu::summary() const
     summary.levelName = level_ >= 0 && level_ < int(levels_.size())
                             ? levels_[size_t(level_)].name
                             : QString();
-    summary.score = match_.score();
+    summary.score = match_.runScore();
     summary.kills = match_.kills();
     summary.wave = match_.wave();
     summary.totalWaves = match_.totalWaves();
@@ -148,7 +152,7 @@ void Menu::startLevel(int index)
         level.script = editor_.script();
         level.startWave = 1;
     }
-    match_.start(level, base_);
+    match_.start(level, base_, score_);
     screen_ = Screen::Match;
     base_.keyRelease(Qt::Key_Escape);
 }
@@ -157,6 +161,7 @@ void Menu::returnToMenu()
 {
     screen_ = Screen::Main;
     match_.stop();
+    score_.save();
     base_.clear();
 }
 

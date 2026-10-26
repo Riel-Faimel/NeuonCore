@@ -7,6 +7,7 @@
 #include <memory>
 
 class Base;
+class Score;
 class SelfTest;
 
 namespace menu {
@@ -15,7 +16,7 @@ namespace menu {
 // 只活一局：Menu 开局时 start()，回主菜单时 stop()。
 class Match {
 public:
-    void start(const Games::Level &level, Base &base);
+    void start(const Games::Level &level, Base &base, Score &score);
     void stop();
     bool active() const { return games_ != nullptr; }
 
@@ -24,7 +25,7 @@ public:
     const QImage &frame() const;
     Games::State state() const;
     bool finished() const;
-    int score() const;
+    int runScore() const;
     int kills() const;
     int wave() const;
     int totalWaves() const;

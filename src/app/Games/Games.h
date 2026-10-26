@@ -35,7 +35,7 @@ public:
         Defeat,
     };
 
-    Games(const Level &level, Base &base);
+    Games(const Level &level, Base &base, Score &score);
     ~Games();
 
     Games(const Games &) = delete;
@@ -47,6 +47,7 @@ public:
     State state() const { return state_; }
     float runTime() const { return runTime_; }
     int score() const { return score_.total(); }
+    int runScore() const { return score_.run(); }
     int kills() const { return score_.kills(); }
     int currentWave() const { return waves_.currentWave(); }
     int totalWaves() const { return waves_.totalWaves(); }
@@ -74,7 +75,7 @@ private:
     Level level_;
     Random random_;
     Base &base_;
-    Score score_;
+    Score &score_;
     Arena arena_;
     games::Waves waves_;
     games::Upgrades upgrades_;

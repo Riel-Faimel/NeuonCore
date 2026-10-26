@@ -347,7 +347,7 @@ void Renderer::drawHUD(QPainter &painter, const Arena &arena, const games::Waves
                 Base::Muted, {GameConfig::ScreenWidth / 2.0f, 70},
                 QStringLiteral("center"), 220);
 
-    Base::text(painter, Base::tinyFont(), QStringLiteral("得分 / SCORE"), Base::Muted,
+    Base::text(painter, Base::tinyFont(), QStringLiteral("积分 / SCORE"), Base::Muted,
                 {GameConfig::ScreenWidth - 30.0f, 17}, QStringLiteral("topright"), 220);
     Base::text(painter, Base::largeFont(),
                 QLocale(QLocale::English).toString(arena.score()), Base::White,

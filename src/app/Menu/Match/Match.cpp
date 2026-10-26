@@ -2,9 +2,9 @@
 
 namespace menu {
 
-void Match::start(const Games::Level &level, Base &base)
+void Match::start(const Games::Level &level, Base &base, Score &score)
 {
-    games_ = std::make_unique<Games>(level, base);
+    games_ = std::make_unique<Games>(level, base, score);
 }
 
 void Match::stop()
@@ -45,9 +45,9 @@ bool Match::finished() const
            || games_->state() == Games::State::Defeat;
 }
 
-int Match::score() const
+int Match::runScore() const
 {
-    return games_ ? games_->score() : 0;
+    return games_ ? games_->runScore() : 0;
 }
 
 int Match::kills() const
