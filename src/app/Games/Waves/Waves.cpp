@@ -1,6 +1,7 @@
 #include "Games/Waves/Waves.h"
 
 #include "Arena/Arena.h"
+#include "Data/GameData.h"
 #include "Random.h"
 
 #include <algorithm>
@@ -17,7 +18,7 @@ void Waves::start(int wave)
     currentWave_ = wave;
     queue_ = buildQueue(wave);
     waveTotal_ = int(queue_.size());
-    spawnTimer_ = wave > 1 ? 1.15f : 0.95f;
+    spawnTimer_ = wave > 1 ? data::kWaveTiming.laterSpawn : data::kWaveTiming.firstSpawn;
 }
 
 void Waves::update(float dt)
@@ -33,7 +34,7 @@ void Waves::update(float dt)
     queue_.erase(queue_.begin());
     arena_.spawnPortal(kind, currentWave_);
     if (!queue_.empty()) {
-        spawnTimer_ = random_.real(0.38f, 0.68f);
+        spawnTimer_ = random_.real(data::kWaveTiming.gapMin, data::kWaveTiming.gapMax);
     }
 }
 

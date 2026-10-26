@@ -59,6 +59,7 @@ cpp/src/
 │  │  ├─ Games.h / Games.cpp
 │  │  ├─ Waves/Waves.h/.cpp
 │  │  └─ Upgrades/Upgrades.h/.cpp
+│  ├─ Data/GameData.h              编译期数值表（展开自 src/json）
 │  ├─ Menu/Menu.h / Menu.cpp
 │  │  ├─ Main/Main.h/.cpp         标题页组件
 │  │  ├─ Match/Match.h/.cpp       当前对局组件
@@ -72,10 +73,20 @@ cpp/src/
 │  └─ main.cpp
 ├─ lib/
 │  ├─ Math.h / Math.cpp
+│  ├─ Json.h                        constexpr JSON 解析器
 │  └─ Random.h / Random.cpp
 ├─ include/
 │  ├─ GameConfig.h
+│  ├─ Bullet.h
 │  └─ Fighter.h
+├─ json/
+│  ├─ player.json                   玩家基础数值
+│  ├─ enemies.json                  敌人基础数值
+│  ├─ waves.json                    战役台本 + 出怪节奏
+│  ├─ upgrades.json                 强化数值区间
+│  └─ bullets.json                  敌方子弹数值
+├─ tools/
+│  └─ embed_json.cpp                构建期把 JSON 嵌成 raw string
 └─ tests/
    └─ SelfTest.h
 ```
@@ -203,6 +214,24 @@ public:
 - `src/include/Bullet.h`：子弹的全局纯虚接口（`advance / draw / hit / alive / prev / position / radius / standpoint`）。
 - `src/tests/SelfTest.h`：只在 `-DDEBUG` 构建中由 `main.cpp` 包含。
 
+## 数值数据（src/json）
+
+所有可调数值放在 `src/json/`，**编译期**展开，运行时不读文件、不解析 JSON：
+
+```text
+src/json/*.json
+  └─ tools/embed_json.cpp（构建期）→ build/generated/GameDataJson.h（原样 raw string）
+       └─ src/app/Data/GameData.h：inline constexpr auto doc = json::parse(...)
+            └─ data::kPlayer / kEnemies / kCampaign / kWaveTiming / kUpgradeRanges / k*Bullet
+                 └─ 游戏代码直接读常量（零运行时解析开销）
+```
+
+- 解析器：`src/lib/Json.h`，`constexpr` 递归下降，支持对象、数组、字符串、数字、true/false/null；
+- `build/generated/GameDataJson.h` 由 `tools/embed_json.cpp` 生成，Makefile 自动重建；JSON 改动会通过 `.d` 依赖触发包含它的 TU 重新编译；
+- 数据约束：字符串不使用转义、数字不使用指数；固定容量由 `GameData.h` 的 `Max*` 常量决定（超出会在编译期报错或截断）；
+- `GameData.h` 里每个文件都有 `static_assert`，JSON 写错会直接编译失败；
+- 修改数值只改 `src/json/*.json` 后重新 `make`，不需要手工生成或提交任何中间文件。
+
 ## Fighter 接口
 
 `Player` / `Enemy` 都实现 `arena::Fighter`：
@@ -302,23 +331,37 @@ GameWindow::paintEvent()
 
 ## 加机制应该改哪里
 
+### 改数值（平衡）
+
+| 想改什么 | 只改这里 |
+| --- | --- |
+| 玩家血量 / 移速 / 伤害 / 射速 / 弹速 / 弹体半径 | `src/json/player.json` |
+| 敌人血量 / 速度 / 半径 / 接触伤害 / 分数、Boss 基础值 | `src/json/enemies.json` |
+| 战役波次组成、出怪节奏、波次成长系数 | `src/json/waves.json` |
+| 强化每轮的随机区间 | `src/json/upgrades.json` |
+| 敌方子弹速度 / 伤害 / 半径 | `src/json/bullets.json` |
+
+改完直接 `make`：JSON 会重新嵌成 raw string，包含数值表的 TU 自动重编译；写错格式会在编译期由 `static_assert` 报错。
+
 ### 加强化
 
-只改 `src/app/Games/Upgrades/`：
+数值区间在 `src/json/upgrades.json`（按 key 的 `min`/`max`），其余在 `src/app/Games/Upgrades/`：
 
-1. `Upgrades::catalog()` 加定义：`{key, name, tag, color, minValue, maxValue}`，`min= max` 表示固定值（如 +1 穿透），否则每轮在区间内掷一次；
-2. `Upgrades::eligible()` 加限制；
-3. `Upgrades::describe()/valueLabel()` 加文案（卡面显示的数值就是实际生效值）；
-4. `Upgrades::applyEffect()` 加效果，直接用 `offer.value`；
-5. 新字段加到 `arena::PlayerState`。
+1. `src/json/upgrades.json` 加 `"key": {"min": ..., "max": ...}`（`min = max` 表示固定值，如 +1 穿透）；
+2. `Upgrades::catalog()` 加名称/标签/颜色（数值会自动从 `data::findUpgrade()` 填）；
+3. `Upgrades::eligible()` 加限制；
+4. `Upgrades::describe()/valueLabel()` 加文案（卡面显示的数值就是实际生效值）；
+5. `Upgrades::applyEffect()` 加效果，直接用 `offer.value`；
+6. 新字段加到 `arena::PlayerState`。
 
 `Renderer` 自动画卡片和右上角的 `offer.valueText`，`Games` 不用改。
 
 ### 加 / 改波次
 
-只改 `src/app/Menu/Menu.cpp` 的 `Menu::standardScript()`：每一波列出 `{敌人种类, 数量}`，最后一波带 `boss` 即为 Boss 波。
+只改 `src/json/waves.json` 的 `campaign`：每一波是 `[{"kind": "...", "count": N}, ...]`，最后一波带 `boss` 即为 Boss 波；`Menu::standardScript()` 把它转成 `games::Script` 提交。
 
 - 台本是数据，开局时作为 `Games::Level.script` 提交，`Waves` 只负责按它排队出生，不再有内置台本；
+- 出怪节奏（首波/后续延迟、间隔区间）在同一个文件的 `spawn` 段；
 - 总波数 = 台本长度，HUD 通过 `Waves::totalWaves()` 读取，结算通过 `Games` 的快照读取；
 - `boss` 出现在某一波里，那一波就是 Boss 波（`Waves::isBossWave()`），并且 Boss 永远第一个出场；击杀 Boss 不会结束对局，只有最后一波清空才胜利。
 
@@ -348,7 +391,7 @@ GameWindow::paintEvent()
 
 ### 加敌人 / 状态 / 事件
 
-- 敌人：`src/app/Arena/Combatants/Enemy.*` + `Waves::buildPlan`。
+- 敌人：数值在 `src/json/enemies.json`，颜色与行为在 `src/app/Arena/Combatants/Enemy.*`，出生在 `Waves`。
 - 状态：`src/app/Arena/State.*`。
 - 碰撞/击杀：`src/app/Arena/Events.*`。
 - 实体：`src/app/Arena/Entities/*`。

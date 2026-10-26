@@ -1,0 +1,8 @@
+{
+  "drone":    {"hp": 26,   "speed": 143, "radius": 13, "damage": 9,  "score": 10},
+  "spitter":  {"hp": 38,   "speed": 94,  "radius": 15, "damage": 10, "score": 18},
+  "tank":     {"hp": 122,  "speed": 60,  "radius": 24, "damage": 18, "score": 36},
+  "splitter": {"hp": 54,   "speed": 108, "radius": 18, "damage": 12, "score": 26},
+  "mini":     {"hp": 13,   "speed": 188, "radius": 8,  "damage": 6,  "score": 4},
+  "boss":     {"hp": 1750, "speed": 70,  "radius": 50, "damage": 28, "score": 600}
+}

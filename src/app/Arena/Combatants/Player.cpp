@@ -5,6 +5,7 @@
 #include "Arena/Entities/FloatingText.h"
 #include "Arena/Entities/Particle.h"
 #include "Arena/Entities/Shockwave.h"
+#include "Data/GameData.h"
 #include "GameConfig.h"
 #include "Random.h"
 #include "Base/Base.h"
@@ -18,6 +19,13 @@ namespace arena {
 void Player::reset()
 {
     state = PlayerState{};
+    state.hp = data::kPlayer.hp;
+    state.maxHp = data::kPlayer.hp;
+    state.hpDisplay = data::kPlayer.hp;
+    state.speed = data::kPlayer.speed;
+    state.damage = data::kPlayer.damage;
+    state.fireCd = data::kPlayer.fireCd;
+    state.bulletSpeed = data::kPlayer.bulletSpeed;
     state.pos = {GameConfig::ScreenWidth / 2.0f,
                  GameConfig::ScreenHeight / 2.0f + 32.0f};
     state.muzzlePos = state.pos;
@@ -127,7 +135,8 @@ void Player::shoot(Arena &arena)
                                   + side * ((float(index) - (count - 1) / 2.0f) * 4.0f);
         arena.bullets_.submit(std::make_unique<StandardBullet>(
             origin, direction * state.bulletSpeed, state.damage, Base::Cyan,
-            Bullet::Standpoint::Player, 3.2f, state.pierce, state.critChance));
+            Bullet::Standpoint::Player, data::kPlayer.bulletRadius, state.pierce,
+            state.critChance));
     }
     state.muzzlePos = state.pos + forward * 22.0f;
     state.fireFlash = 0.07f;

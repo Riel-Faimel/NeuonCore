@@ -25,7 +25,7 @@ INCS := -I$(QTDIR)/include/QtWidgets \
         -I$(QTDIR)/include/QtNetwork \
         -I$(QTDIR)/include/QtCore \
         -I$(QTDIR)/mkspecs/win32-g++ \
-        -Isrc/app -Isrc/include -Isrc/lib
+        -Isrc/app -Isrc/include -Isrc/lib -I$(BUILD)/generated
 DEFS := -DQT_WIDGETS_LIB -DQT_MULTIMEDIA_LIB -DQT_GUI_LIB \
         -DQT_CORE_LIB -DQT_NETWORK_LIB -DWIN32 -DWIN64 -D_WIN64 \
         -DMINGW_HAS_SECURE_API=1 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -DNDEBUG
@@ -50,6 +50,11 @@ MAIN_TEST_OBJ := $(BUILD)/app/main_test.o
 RC := $(MINGWDIR)/bin/windres.exe
 ICON_RES_OBJ := $(BUILD)/app/app_res.o
 
+# 数值数据：src/json/*.json 在构建期被嵌成 raw string，编译期由 constexpr JSON 解析器读成常量。
+JSON_FILES := $(wildcard src/json/*.json)
+EMBED_TOOL := $(BUILD)/embed_json.exe
+GENERATED_JSON := $(BUILD)/generated/GameDataJson.h
+
 ARENA_COMPONENTS := Arena Bullets/Bullets Bullets/StandardBullet \
                     Combatants/Combatants Entities/Entities Events State \
                     Combatants/Player Combatants/Enemy \
@@ -61,6 +66,9 @@ SHARED_OBJS := $(BASE_OBJS) $(LIB_OBJS) $(APP_OBJS) $(GAMES_OBJS) $(MENU_OBJS) $
 RELEASE_OBJS := $(SHARED_OBJS) $(MAIN_RELEASE_OBJ) $(ICON_RES_OBJ)
 TEST_OBJS := $(SHARED_OBJS) $(MAIN_TEST_OBJ)
 DEPS := $(RELEASE_OBJS:.o=.d) $(TEST_OBJS:.o=.d)
+
+# 所有编译单元在生成头就绪后再编译（增量重编译由 .d 依赖负责）。
+$(SHARED_OBJS) $(MAIN_RELEASE_OBJ) $(MAIN_TEST_OBJ): | $(GENERATED_JSON)
 
 .PHONY: all release test deploy clean
 
@@ -126,6 +134,15 @@ $(MAIN_TEST_OBJ): src/app/main.cpp | $(BUILD)
 $(ICON_RES_OBJ): src/app/app.rc assets/icon.ico | $(BUILD)
 	@echo [RC] $<
 	@$(RC) -I assets -i $< -o $@
+
+$(EMBED_TOOL): tools/embed_json.cpp | $(BUILD)
+	@echo [HOST] $<
+	@$(CXX) -std=c++20 -O2 $< -o $@
+
+$(GENERATED_JSON): $(EMBED_TOOL) $(JSON_FILES) | $(BUILD)
+	@if not exist "$(BUILD_WIN)\generated" mkdir "$(BUILD_WIN)\generated"
+	@echo [JSON] $@
+	@$(EMBED_TOOL) $@ player_json src/json/player.json enemies_json src/json/enemies.json waves_json src/json/waves.json upgrades_json src/json/upgrades.json bullets_json src/json/bullets.json
 
 $(BUILD)/NeonCoreConsole.exe: $(TEST_OBJS)
 	@echo [LD] $@ (debug/tests)

@@ -1,6 +1,7 @@
 #include "Games/Upgrades/Upgrades.h"
 
 #include "Arena/Arena.h"
+#include "Data/GameData.h"
 #include "Random.h"
 #include "Base/Base.h"
 
@@ -21,48 +22,57 @@ void Upgrades::reset()
     open_ = false;
 }
 
-// 每项的 min/max 是本轮随机数值的区间：百分比按 1% 取整，护甲按 1 点取整。
+// 名称/标签/颜色属于表现，留在代码；数值区间来自 src/json/upgrades.json。
 const std::vector<Upgrades::Definition> &Upgrades::catalog()
 {
-    static const std::vector<Definition> definitions = {
-        {QStringLiteral("damage"), QStringLiteral("火力校准"), QStringLiteral("DMG"),
-         Base::Coral, 0.15f, 0.35f},
-        {QStringLiteral("rate"), QStringLiteral("超频供弹"), QStringLiteral("RPM"),
-         Base::Amber, 0.10f, 0.24f},
-        {QStringLiteral("multi"), QStringLiteral("分裂弹头"), QStringLiteral("x2"),
-         Base::Cyan, 1.0f, 1.0f},
-        {QStringLiteral("pierce"), QStringLiteral("穿甲弹芯"), QStringLiteral("PEN"),
-         Base::Violet, 1.0f, 1.0f},
-        {QStringLiteral("speed"), QStringLiteral("相位推进"), QStringLiteral("SPD"),
-         Base::Green, 0.08f, 0.18f},
-        {QStringLiteral("maxhp"), QStringLiteral("复合装甲"), QStringLiteral("HP"),
-         QColor(255, 121, 136), 20.0f, 40.0f},
-        {QStringLiteral("heal"), QStringLiteral("纳米修复"), QStringLiteral("FIX"),
-         QColor(119, 255, 178), 0.35f, 0.60f},
-        {QStringLiteral("shock"), QStringLiteral("冲击核心"), QStringLiteral("AOE"),
-         Base::Magenta, 1.0f, 1.0f},
-        {QStringLiteral("crit"), QStringLiteral("精准瞄具"), QStringLiteral("CRIT"),
-         QColor(255, 224, 121), 0.08f, 0.16f},
-    };
+    static const std::vector<Definition> definitions = [] {
+        std::vector<Definition> list = {
+            {std::string_view{"damage"}, QStringLiteral("火力校准"), QStringLiteral("DMG"),
+             Base::Coral},
+            {std::string_view{"rate"}, QStringLiteral("超频供弹"), QStringLiteral("RPM"),
+             Base::Amber},
+            {std::string_view{"multi"}, QStringLiteral("分裂弹头"), QStringLiteral("x2"),
+             Base::Cyan},
+            {std::string_view{"pierce"}, QStringLiteral("穿甲弹芯"), QStringLiteral("PEN"),
+             Base::Violet},
+            {std::string_view{"speed"}, QStringLiteral("相位推进"), QStringLiteral("SPD"),
+             Base::Green},
+            {std::string_view{"maxhp"}, QStringLiteral("复合装甲"), QStringLiteral("HP"),
+             QColor(255, 121, 136)},
+            {std::string_view{"heal"}, QStringLiteral("纳米修复"), QStringLiteral("FIX"),
+             QColor(119, 255, 178)},
+            {std::string_view{"shock"}, QStringLiteral("冲击核心"), QStringLiteral("AOE"),
+             Base::Magenta},
+            {std::string_view{"crit"}, QStringLiteral("精准瞄具"), QStringLiteral("CRIT"),
+             QColor(255, 224, 121)},
+        };
+        for (Definition &definition : list) {
+            if (const data::UpgradeRange *range = data::findUpgrade(definition.key)) {
+                definition.minValue = range->min;
+                definition.maxValue = range->max;
+            }
+        }
+        return list;
+    }();
     return definitions;
 }
 
 bool Upgrades::eligible(const Definition &definition) const
 {
     const Arena::PlayerState &player = arena_.player();
-    if (definition.key == QStringLiteral("multi") && player.multishot >= 5) {
+    if (definition.key == "multi" && player.multishot >= 5) {
         return false;
     }
-    if (definition.key == QStringLiteral("pierce") && player.pierce >= 5) {
+    if (definition.key == "pierce" && player.pierce >= 5) {
         return false;
     }
-    if (definition.key == QStringLiteral("crit") && player.critChance >= 0.60f) {
+    if (definition.key == "crit" && player.critChance >= 0.60f) {
         return false;
     }
-    if (definition.key == QStringLiteral("rate") && player.fireCd <= 0.0565f) {
+    if (definition.key == "rate" && player.fireCd <= 0.0565f) {
         return false;
     }
-    if (definition.key == QStringLiteral("heal") && player.hp >= player.maxHp * 0.90f) {
+    if (definition.key == "heal" && player.hp >= player.maxHp * 0.90f) {
         return false;
     }
     return true;
@@ -74,64 +84,64 @@ float Upgrades::rollValue(const Definition &definition) const
     if (definition.maxValue > definition.minValue) {
         value = random_.real(definition.minValue, definition.maxValue);
     }
-    if (definition.key == QStringLiteral("maxhp")) {
+    if (definition.key == "maxhp") {
         return std::round(value);
     }
     return std::round(value * 100.0f) / 100.0f;
 }
 
-QString Upgrades::describe(const Definition &definition, float value)
+QString Upgrades::describe(std::string_view key, float value)
 {
     const int percent = int(std::lround(value * 100.0f));
-    if (definition.key == QStringLiteral("damage")) {
+    if (key == "damage") {
         return QStringLiteral("所有脉冲弹丸伤害 +%1%。简单、直接、有效。").arg(percent);
     }
-    if (definition.key == QStringLiteral("rate")) {
+    if (key == "rate") {
         return QStringLiteral("射速 +%1%。让下一波弹幕再密一点。").arg(percent);
     }
-    if (definition.key == QStringLiteral("multi")) {
+    if (key == "multi") {
         return QStringLiteral("每次射击额外发射 1 枚弹丸，弹道会轻微展开。");
     }
-    if (definition.key == QStringLiteral("pierce")) {
+    if (key == "pierce") {
         return QStringLiteral("子弹额外穿透 1 个目标，适合对付成群的敌人。");
     }
-    if (definition.key == QStringLiteral("speed")) {
+    if (key == "speed") {
         return QStringLiteral("移动速度 +%1%，相位冲刺冷却 -%2%。")
             .arg(percent)
             .arg(int(std::lround(value * 0.85f * 100.0f)));
     }
-    if (definition.key == QStringLiteral("maxhp")) {
+    if (key == "maxhp") {
         return QStringLiteral("最大生命 +%1，并立刻回复 %1 点生命。")
             .arg(int(std::lround(value)));
     }
-    if (definition.key == QStringLiteral("heal")) {
+    if (key == "heal") {
         return QStringLiteral("立刻回复 %1% 最大生命。活着才有输出。").arg(percent);
     }
-    if (definition.key == QStringLiteral("shock")) {
+    if (key == "shock") {
         return QStringLiteral("冲刺时释放冲击波，对附近敌人造成伤害并击退。");
     }
-    if (definition.key == QStringLiteral("crit")) {
+    if (key == "crit") {
         return QStringLiteral("暴击率 +%1%。暴击造成双倍伤害。").arg(percent);
     }
     return QString();
 }
 
-QString Upgrades::valueLabel(const Definition &definition, float value)
+QString Upgrades::valueLabel(std::string_view key, float value)
 {
     const int percent = int(std::lround(value * 100.0f));
-    if (definition.key == QStringLiteral("maxhp")) {
+    if (key == "maxhp") {
         return QStringLiteral("+%1 HP").arg(int(std::lround(value)));
     }
-    if (definition.key == QStringLiteral("heal")) {
+    if (key == "heal") {
         return QStringLiteral("+%1% HP").arg(percent);
     }
-    if (definition.key == QStringLiteral("multi")) {
+    if (key == "multi") {
         return QStringLiteral("+1 弹");
     }
-    if (definition.key == QStringLiteral("pierce")) {
+    if (key == "pierce") {
         return QStringLiteral("+1 穿透");
     }
-    if (definition.key == QStringLiteral("shock")) {
+    if (key == "shock") {
         return QStringLiteral("+1 级");
     }
     return QStringLiteral("+%1%").arg(percent);
@@ -159,15 +169,16 @@ bool Upgrades::open()
     offers_.clear();
     offers_.reserve(pool.size());
     for (const Definition &definition : pool) {
+        const QString key = QString::fromUtf8(definition.key.data(), int(definition.key.size()));
         Offer offer;
-        offer.key = definition.key;
+        offer.key = key;
         offer.name = definition.name;
         offer.tag = definition.tag;
         offer.color = definition.color;
-        offer.level = counts_.value(definition.key);
+        offer.level = counts_.value(key);
         offer.value = rollValue(definition);
-        offer.desc = describe(definition, offer.value);
-        offer.valueText = valueLabel(definition, offer.value);
+        offer.desc = describe(definition.key, offer.value);
+        offer.valueText = valueLabel(definition.key, offer.value);
         offers_.push_back(offer);
     }
     open_ = true;

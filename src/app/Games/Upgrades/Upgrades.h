@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QString>
 
+#include <string_view>
 #include <vector>
 
 class Arena;
@@ -43,7 +44,7 @@ private:
     friend class ::SelfTest;
 
     struct Definition {
-        QString key;
+        std::string_view key;
         QString name;
         QString tag;
         QColor color;
@@ -54,8 +55,8 @@ private:
     static const std::vector<Definition> &catalog();
     bool eligible(const Definition &definition) const;
     float rollValue(const Definition &definition) const;
-    static QString describe(const Definition &definition, float value);
-    static QString valueLabel(const Definition &definition, float value);
+    static QString describe(std::string_view key, float value);
+    static QString valueLabel(std::string_view key, float value);
     void applyEffect(const Offer &offer);
 
     Random &random_;

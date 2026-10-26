@@ -3,6 +3,7 @@
 #include "Arena/Arena.h"
 #include "Arena/Bullets/StandardBullet.h"
 #include "Arena/Entities/FloatingText.h"
+#include "Data/GameData.h"
 #include "GameConfig.h"
 #include "Random.h"
 #include "Base/Base.h"
@@ -17,18 +18,55 @@
 
 namespace arena {
 
+namespace {
+
+QString toQString(std::string_view text)
+{
+    return QString::fromUtf8(text.data(), int(text.size()));
+}
+
+QColor colorForKind(std::string_view kind)
+{
+    if (kind == "spitter") {
+        return Base::Magenta;
+    }
+    if (kind == "tank") {
+        return Base::Amber;
+    }
+    if (kind == "splitter") {
+        return Base::Violet;
+    }
+    if (kind == "mini") {
+        return QColor(218, 154, 255);
+    }
+    if (kind == "boss") {
+        return QColor(255, 74, 160);
+    }
+    return Base::Coral;
+}
+
+} // namespace
+
 int Enemy::sNextId = 1;
 
 const EnemyStats &Enemy::statsFor(const QString &kind)
 {
-    static const QHash<QString, EnemyStats> table = {
-        {QStringLiteral("drone"), {26.0f, 143.0f, 13.0f, 9.0f, 10, Base::Coral}},
-        {QStringLiteral("spitter"), {38.0f, 94.0f, 15.0f, 10.0f, 18, Base::Magenta}},
-        {QStringLiteral("tank"), {122.0f, 60.0f, 24.0f, 18.0f, 36, Base::Amber}},
-        {QStringLiteral("splitter"), {54.0f, 108.0f, 18.0f, 12.0f, 26, Base::Violet}},
-        {QStringLiteral("mini"), {13.0f, 188.0f, 8.0f, 6.0f, 4, QColor(218, 154, 255)}},
-        {QStringLiteral("boss"), {1750.0f, 68.0f, 50.0f, 28.0f, 600, QColor(255, 74, 160)}},
-    };
+    // 数值来自 src/json/enemies.json（编译期常量），颜色属于表现，留在代码里。
+    static const QHash<QString, EnemyStats> table = [] {
+        QHash<QString, EnemyStats> result;
+        for (int i = 0; i < data::kEnemies.count; ++i) {
+            const data::EnemyBase &base = data::kEnemies.items[size_t(i)];
+            EnemyStats stats;
+            stats.hp = base.hp;
+            stats.speed = base.speed;
+            stats.radius = base.radius;
+            stats.damage = base.damage;
+            stats.score = base.score;
+            stats.color = colorForKind(base.kind);
+            result.insert(toQString(base.kind), stats);
+        }
+        return result;
+    }();
     const auto it = table.constFind(kind);
     if (it != table.constEnd()) {
         return it.value();
@@ -44,15 +82,15 @@ Enemy::Enemy(const QString &enemyKind, const Math::Vec2 &position, int waveNumbe
     radius = stats.radius;
     color = stats.color;
     score = stats.score;
-    speed = stats.speed * (1.0f + 0.022f * (wave - 1));
-    damage = stats.damage * (1.0f + 0.045f * (wave - 1));
+    speed = stats.speed * (1.0f + data::kWaveScaling.speed * (wave - 1));
+    damage = stats.damage * (1.0f + data::kWaveScaling.damage * (wave - 1));
     boss = kind == QStringLiteral("boss");
     if (boss) {
         maxHp = stats.hp;
-        speed = 70.0f;
-        damage = 28.0f;
+        speed = stats.speed;
+        damage = stats.damage;
     } else {
-        maxHp = stats.hp * (1.0f + 0.16f * (wave - 1));
+        maxHp = stats.hp * (1.0f + data::kWaveScaling.hp * (wave - 1));
     }
     hp = maxHp;
     hpDisplay = maxHp;
@@ -103,8 +141,10 @@ void Enemy::update(Arena &arena, float dt)
                     const float angle = offset + Math::Tau * float(i) / float(count);
                     const Math::Vec2 bulletDirection(std::cos(angle), std::sin(angle));
                     arena.bullets_.submit(std::make_unique<StandardBullet>(
-                        pos + bulletDirection * 42.0f, bulletDirection * 285.0f, 13.0f,
-                        Base::Magenta, Bullet::Standpoint::Enemy, 5.0f));
+                        pos + bulletDirection * 42.0f,
+                        bulletDirection * data::kBossRadialBullet.speed,
+                        data::kBossRadialBullet.damage, Base::Magenta,
+                        Bullet::Standpoint::Enemy, data::kBossRadialBullet.radius));
                 }
                 arena.entities_.addShockwave(pos, 92.0f, Base::Magenta, 0.36f, 2);
             }
@@ -141,7 +181,7 @@ void Enemy::shoot(Arena &arena)
 {
     if (kind == QStringLiteral("boss")) {
         const bool enraged = hp < maxHp * 0.48f;
-        fireAimed(arena, enraged ? 3 : 2, 0.11f, 315.0f);
+        fireAimed(arena, enraged ? 3 : 2, 0.11f);
         arena.base_.playSound(QStringLiteral("shoot_enemy"));
         return;
     }
@@ -151,14 +191,15 @@ void Enemy::shoot(Arena &arena)
         const Math::Vec2 aim = Math::Vec2(std::cos(base), std::sin(base))
             .rotated(arena.random_.real(-0.055f, 0.055f));
         arena.bullets_.submit(std::make_unique<StandardBullet>(
-            pos + aim * 18.0f, aim * 300.0f, 11.0f, Base::Magenta,
-            Bullet::Standpoint::Enemy, 4.0f));
+            pos + aim * 18.0f, aim * data::kSpitterBullet.speed,
+            data::kSpitterBullet.damage, Base::Magenta, Bullet::Standpoint::Enemy,
+            data::kSpitterBullet.radius));
         arena.entities_.spawnBurst(arena, pos, Base::Magenta, 5, 70.0f, 0.26f);
         arena.base_.playSound(QStringLiteral("shoot_enemy"));
     }
 }
 
-void Enemy::fireAimed(Arena &arena, int count, float spread, float bulletSpeed)
+void Enemy::fireAimed(Arena &arena, int count, float spread)
 {
     const Math::Vec2 toPlayer = arena.combatants_.player().state.pos - pos;
     const float base = std::atan2(toPlayer.y, toPlayer.x);
@@ -166,8 +207,9 @@ void Enemy::fireAimed(Arena &arena, int count, float spread, float bulletSpeed)
         const float offset = (float(i) - (count - 1) / 2.0f) * spread;
         const Math::Vec2 direction(std::cos(base + offset), std::sin(base + offset));
         arena.bullets_.submit(std::make_unique<StandardBullet>(
-            pos + direction * 46.0f, direction * bulletSpeed, 13.0f,
-            QColor(255, 112, 190), Bullet::Standpoint::Enemy, 5.0f));
+            pos + direction * 46.0f, direction * data::kBossAimedBullet.speed,
+            data::kBossAimedBullet.damage, QColor(255, 112, 190),
+            Bullet::Standpoint::Enemy, data::kBossAimedBullet.radius));
     }
     arena.entities_.spawnBurst(arena, pos, Base::Magenta, 8, 100.0f, 0.35f);
 }

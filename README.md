@@ -97,6 +97,31 @@ dist\NeonCore\NeonCore.exe  交付用 release GUI，不包含测试逻辑
 
 测试代码位于 `src/tests/SelfTest.h`，只在 `src/app/main.cpp` 的 `#ifdef DEBUG` 分支里包含；`-DDEBUG` 只用于 `test` 目标。
 
+## 数值数据
+
+可调数值都在 `src/json/`，构建时嵌入、**编译期**解析，运行时不读文件也不解析 JSON：
+
+```text
+src/json/*.json
+  → build/embed_json.exe 生成 build/generated/GameDataJson.h（原样 raw string）
+  → src/app/Data/GameData.h 用 constexpr 解析器（src/lib/Json.h）展开成
+     data::kPlayer / kEnemies / kCampaign / kWaveTiming / kUpgradeRanges / k*Bullet
+  → 游戏代码直接读这些 inline constexpr 常量
+```
+
+| 文件 | 内容 |
+| --- | --- |
+| `player.json` | 玩家血量、移速、伤害、射速、弹速、弹体半径 |
+| `enemies.json` | 各敌人血量 / 速度 / 半径 / 接触伤害 / 分数 |
+| `waves.json` | 战役每波组成、出怪节奏、波次成长系数 |
+| `upgrades.json` | 强化每轮随机区间（`min` / `max`） |
+| `bullets.json` | 敌方子弹速度 / 伤害 / 半径 |
+
+- 改完直接 `make`：JSON 会重新嵌入，包含数值表的 TU 自动重编译；格式写错会在编译期由 `static_assert` 报错；
+- 解析器限制：字符串不使用转义、数字不使用指数；表项数量上限见 `GameData.h` 的 `Max*` 常量；
+- 运行时开销为零：`data::*` 都是 `inline constexpr`，游戏里没有 JSON 解析逻辑；
+- 生成的头文件在 `build/generated/`，不进版本库。
+
 ## 代码结构
 
 ```text
@@ -139,15 +164,25 @@ cpp/
 │  │  ├─ Pointer.h / Pointer.cpp  全局鼠标指针（窗口每帧叠加）
 │  │  ├─ app.rc                   Windows 资源：嵌入应用图标
 │  │  └─ main.cpp                 QWidget 窗口、输入桥接、release 入口
+│  ├─ Data/GameData.h             编译期数值表（展开自 src/json）
 │  ├─ lib/
 │  │  ├─ Math.h / Math.cpp        向量与几何
+│  │  ├─ Json.h                   constexpr JSON 解析器
 │  │  └─ Random.h / Random.cpp    可注入随机数
 │  ├─ include/
 │  │  ├─ GameConfig.h             全局尺寸常量
 │  │  ├─ Fighter.h                Player/Enemy 的公共虚接口
 │  │  └─ Bullet.h                 子弹的全局纯虚接口（池只认这一层）
+│  ├─ json/
+│  │  ├─ player.json              玩家基础数值
+│  │  ├─ enemies.json             敌人基础数值
+│  │  ├─ waves.json               战役台本 + 出怪节奏
+│  │  ├─ upgrades.json            强化数值区间
+│  │  └─ bullets.json             敌方子弹数值
 │  └─ tests/
 │     └─ SelfTest.h               仅 -DDEBUG 测试构建包含的测试/截图逻辑
+├─ tools/
+│  └─ embed_json.cpp              构建期把 JSON 嵌成 raw string
 ├─ build.bat                      调用 mingw32-make -j12 deploy
 ├─ Makefile                       mingw32-make -j12 并行构建
 ├─ run.bat

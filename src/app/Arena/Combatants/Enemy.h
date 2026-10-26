@@ -63,7 +63,7 @@ public:
     static const EnemyStats &statsFor(const QString &kind);
 
 private:
-    void fireAimed(Arena &arena, int count, float spread, float bulletSpeed);
+    void fireAimed(Arena &arena, int count, float spread);
     void drawBody(QPainter &world, QPainter &glow, float facing) const;
     void drawBoss(QPainter &world, QPainter &glow, float facing) const;
 

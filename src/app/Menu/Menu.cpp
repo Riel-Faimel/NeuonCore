@@ -1,11 +1,11 @@
 #include "Menu/Menu.h"
 
 #include "Base/Base.h"
+#include "Data/GameData.h"
 
 #include <QPainter>
 #include <Qt>
 
-#include <initializer_list>
 #include <utility>
 
 Menu::Menu(bool enableAudio) : settings_(enableAudio)
@@ -32,32 +32,24 @@ Menu::~Menu()
     score_.save();
 }
 
-// 台本是数据：每波列出敌人种类和数量，最后一波带 Boss。
-// 想改战役节奏只改这里，Waves / Games 不需要动。
+// 台本是数据：src/json/waves.json 的 campaign 在编译期展开成常量，
+// 这里只是把它转成这一局要提交给 Games 的 games::Script。
 games::Script Menu::standardScript()
 {
-    const auto wave = [](std::initializer_list<games::EnemySpawn> enemies) {
-        games::Wave value;
-        value.enemies.assign(enemies.begin(), enemies.end());
-        return value;
-    };
-    return {
-        wave({{QStringLiteral("drone"), 6}}),
-        wave({{QStringLiteral("drone"), 6}, {QStringLiteral("spitter"), 3}}),
-        wave({{QStringLiteral("drone"), 7}, {QStringLiteral("spitter"), 3},
-              {QStringLiteral("tank"), 2}}),
-        wave({{QStringLiteral("drone"), 7}, {QStringLiteral("spitter"), 4},
-              {QStringLiteral("tank"), 2}, {QStringLiteral("splitter"), 2}}),
-        wave({{QStringLiteral("drone"), 8}, {QStringLiteral("spitter"), 4},
-              {QStringLiteral("tank"), 3}, {QStringLiteral("splitter"), 3}}),
-        wave({{QStringLiteral("drone"), 9}, {QStringLiteral("spitter"), 5},
-              {QStringLiteral("tank"), 3}, {QStringLiteral("splitter"), 4}}),
-        wave({{QStringLiteral("drone"), 10}, {QStringLiteral("spitter"), 5},
-              {QStringLiteral("tank"), 4}, {QStringLiteral("splitter"), 4}}),
-        wave({{QStringLiteral("drone"), 6}, {QStringLiteral("spitter"), 4},
-              {QStringLiteral("tank"), 2}, {QStringLiteral("splitter"), 3},
-              {QStringLiteral("boss"), 1}}),
-    };
+    games::Script script;
+    script.reserve(size_t(data::kCampaign.count));
+    for (int w = 0; w < data::kCampaign.count; ++w) {
+        const data::WaveDef &definition = data::kCampaign.waves[size_t(w)];
+        games::Wave wave;
+        wave.enemies.reserve(size_t(definition.count));
+        for (int i = 0; i < definition.count; ++i) {
+            const data::WaveSpawn &spawn = definition.spawns[size_t(i)];
+            wave.enemies.push_back({QString::fromUtf8(spawn.kind.data(), int(spawn.kind.size())),
+                                    spawn.count});
+        }
+        script.push_back(wave);
+    }
+    return script;
 }
 
 std::vector<menu::Main::Card> Menu::cards() const

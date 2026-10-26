@@ -1,0 +1,8 @@
+{
+  "hp": 100,
+  "speed": 292,
+  "damage": 12.5,
+  "fire_cd": 0.155,
+  "bullet_speed": 920,
+  "bullet_radius": 3.2
+}
