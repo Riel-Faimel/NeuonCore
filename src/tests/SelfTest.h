@@ -350,6 +350,21 @@ public:
         success &= require(minisAfter == minisBefore + 2 && summoner->charge == 0,
                            QStringLiteral("summoner summons allies after enough deaths"));
 
+        summoner->charge = 0;
+        for (int i = 0; i < 3; ++i) {
+            arena::Enemy miniVictim(QStringLiteral("mini"), summoner->pos, 1);
+            supportCtx.events.handleKill(supportCtx, miniVictim);
+        }
+        int minisAfterMiniDeaths = 0;
+        for (const auto &other : game->arena_.enemies()) {
+            if (other->kind == QStringLiteral("mini")) {
+                ++minisAfterMiniDeaths;
+            }
+        }
+        success &= require(summoner->charge == 0
+                               && minisAfterMiniDeaths == minisAfter,
+                           QStringLiteral("minion deaths do not charge the summoner"));
+
         success &= require(
             arena::Enemy::roleOf(arena::Enemy::Kind::Drone) == arena::Enemy::Role::Melee
                 && arena::Enemy::roleOf(arena::Enemy::Kind::Tank) == arena::Enemy::Role::Melee

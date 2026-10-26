@@ -257,15 +257,18 @@ void Events::handleKill(const Context &ctx, Enemy &enemy)
             }
         }
 
-        // summoner：每有一个友军阵亡积累进度，满进度召唤一批小怪。
+        // summoner：每个常规友军阵亡积累进度，满进度召唤一批小怪。
+        // 召唤出来的 mini 不再计入进度，否则会变成“杀 mini → 再召唤”的无限循环。
         std::vector<Enemy *> summoners;
-        for (const auto &other : ctx.combatants.enemies()) {
-            Enemy *summoner = other.get();
-            if (summoner == &enemy || !summoner->alive
-                || summoner->kindId != Enemy::Kind::Summoner) {
-                continue;
+        if (enemy.kind != QStringLiteral("mini")) {
+            for (const auto &other : ctx.combatants.enemies()) {
+                Enemy *summoner = other.get();
+                if (summoner == &enemy || !summoner->alive
+                    || summoner->kindId != Enemy::Kind::Summoner) {
+                    continue;
+                }
+                summoners.push_back(summoner);
             }
-            summoners.push_back(summoner);
         }
         for (Enemy *summoner : summoners) {
             ++summoner->charge;
