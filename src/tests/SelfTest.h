@@ -207,6 +207,20 @@ public:
                            QStringLiteral("wave clear opens upgrade screen"));
         success &= require(game->upgrades_.offers().size() == 3,
                            QStringLiteral("offers three upgrades"));
+        bool rolled = true;
+        for (const games::Upgrades::Offer &offer : game->upgrades_.offers()) {
+            rolled = rolled && !offer.valueText.isEmpty();
+            for (const games::Upgrades::Definition &definition
+                 : games::Upgrades::catalog()) {
+                if (definition.key != offer.key) {
+                    continue;
+                }
+                rolled = rolled && offer.value >= definition.minValue - 0.001f
+                         && offer.value <= definition.maxValue + 0.001f;
+            }
+        }
+        success &= require(rolled,
+                           QStringLiteral("upgrade values roll inside their ranges"));
         game->render();
 
         const Arena::PlayerState before = game->arena_.player();

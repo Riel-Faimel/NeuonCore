@@ -524,6 +524,11 @@ void Renderer::drawUpgradeCard(QPainter &painter, int index,
                 QStringLiteral("0%1").arg(index + 1), Base::shade(color, 0.66f),
                 {float(drawRect.right()) - 24.0f, float(drawRect.top()) + 22.0f},
                 QStringLiteral("topright"), 195);
+    // 本轮掷出的实际数值
+    Base::text(painter, Base::techFont(), offer.valueText,
+                Base::withAlpha(color, 240),
+                {float(drawRect.right()) - 24.0f, float(drawRect.top()) + 52.0f},
+                QStringLiteral("topright"), 240);
 
     const Math::Vec2 iconCenter(float(drawRect.left()) + 52.0f,
                                 float(drawRect.top()) + 77.0f);

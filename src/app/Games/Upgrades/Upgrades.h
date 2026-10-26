@@ -14,9 +14,8 @@ class SelfTest;
 namespace games {
 
 // Upgrades 组件：封装强化池、可选性判断、抽取、叠加与应用。
-// 工具：Random（洗牌）、Arena（读取/修改玩家状态与播放反馈）、Base（音效）。
-// 封装：强化定义、上限、等级计数、效果分支。
-// 暴露：开启三选一、应用某张卡、当前候选卡、已叠加等级。
+// 工具：Random（洗牌 + 每轮数值）、Arena（读取/修改玩家状态与播放反馈）、Base（音效）。
+// 每轮三选一都会为“数值型”强化重新掷一个区间内的随机值，卡片上显示的就是实际生效值。
 class Upgrades {
 public:
     struct Offer {
@@ -24,8 +23,10 @@ public:
         QString name;
         QString tag;
         QString desc;
+        QString valueText;   // “+27%” / “+34 HP” / “+1 穿透” 之类
         QColor color;
         int level = 0;
+        float value = 0.0f;  // 本轮掷出的实际数值
     };
 
     Upgrades(Random &random, Arena &arena, Base &base);
@@ -45,13 +46,17 @@ private:
         QString key;
         QString name;
         QString tag;
-        QString desc;
         QColor color;
+        float minValue = 0.0f;
+        float maxValue = 0.0f;
     };
 
     static const std::vector<Definition> &catalog();
     bool eligible(const Definition &definition) const;
-    void applyEffect(const QString &key);
+    float rollValue(const Definition &definition) const;
+    static QString describe(const Definition &definition, float value);
+    static QString valueLabel(const Definition &definition, float value);
+    void applyEffect(const Offer &offer);
 
     Random &random_;
     Arena &arena_;

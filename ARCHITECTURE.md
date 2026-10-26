@@ -302,12 +302,13 @@ GameWindow::paintEvent()
 
 只改 `src/app/Games/Upgrades/`：
 
-1. `Upgrades::catalog()` 加定义。
-2. `Upgrades::eligible()` 加限制。
-3. `Upgrades::applyEffect()` 加效果。
-4. 新字段加到 `arena::PlayerState`。
+1. `Upgrades::catalog()` 加定义：`{key, name, tag, color, minValue, maxValue}`，`min= max` 表示固定值（如 +1 穿透），否则每轮在区间内掷一次；
+2. `Upgrades::eligible()` 加限制；
+3. `Upgrades::describe()/valueLabel()` 加文案（卡面显示的数值就是实际生效值）；
+4. `Upgrades::applyEffect()` 加效果，直接用 `offer.value`；
+5. 新字段加到 `arena::PlayerState`。
 
-`Renderer` 自动画卡片，`Games` 不用改。
+`Renderer` 自动画卡片和右上角的 `offer.valueText`，`Games` 不用改。
 
 ### 加 / 改波次
 
