@@ -212,77 +212,18 @@ void Events::handleKill(const Context &ctx, Enemy &enemy)
                               enemy.color, 0.45f, 2);
     BaseService.playSound(QStringLiteral("kill"));
 
-    if (enemy.kind == QStringLiteral("splitter")) {
-        for (int side = -1; side <= 1; side += 2) {
-            const Math::Vec2 offset(float(side) * 18.0f,
-                                    RandomService.real(-12.0f, 12.0f));
-            auto child = std::make_unique<Enemy>(QStringLiteral("mini"),
-                                                 enemy.pos + offset,
-                                                 enemy.wave);
-            ctx.entities.spawnBurst(ctx, child->pos, child->color, 6, 90.0f, 0.3f);
-            ctx.combatants.enemies().push_back(std::move(child));
-        }
-    }
+    enemy.onKilled(ctx);
 
     if (!enemy.boss) {
-        // necromancer：范围内的友军阵亡时，有概率以半血复活。
-        if (!enemy.revived) {
-            Enemy *necromancer = nullptr;
-            for (const auto &other : ctx.combatants.enemies()) {
-                Enemy *candidate = other.get();
-                if (candidate == &enemy || !candidate->alive
-                    || candidate->kindId != Enemy::Kind::Necromancer) {
-                    continue;
-                }
-                if (candidate->pos.distanceTo(enemy.pos) > candidate->supportRadius) {
-                    continue;
-                }
-                if (RandomService.real(0.0f, 1.0f) >= candidate->supportValue) {
-                    continue;
-                }
-                necromancer = candidate;
-                break;
-            }
-            if (necromancer != nullptr) {
-                auto revived = std::make_unique<Enemy>(enemy.kind, enemy.pos, enemy.wave);
-                revived->hp = revived->maxHp * 0.5f;
-                revived->hpDisplay = revived->hp;
-                revived->revived = true;
-                revived->score = std::max(1, enemy.score / 2);
-                ctx.entities.spawnBurst(ctx, enemy.pos, Base::Violet, 16, 150.0f, 0.5f);
-                ctx.entities.floatingTexts().push_back(FloatingText{
-                    enemy.pos + Math::Vec2(0.0f, -20.0f), QStringLiteral("复生"),
-                    Base::Violet, 0.9f, 0.9f, 15, false});
-                ctx.combatants.enemies().push_back(std::move(revived));
+        // 通知所有存活友军：有人阵亡；复活/召唤进度由具体敌人类实现。
+        std::vector<Enemy *> listeners;
+        for (const auto &other : ctx.combatants.enemies()) {
+            if (other->alive && other.get() != &enemy) {
+                listeners.push_back(other.get());
             }
         }
-
-        // summoner：每个常规友军阵亡积累进度，满进度召唤一批小怪。
-        // 召唤出来的 mini 不再计入进度，否则会变成“杀 mini → 再召唤”的无限循环。
-        std::vector<Enemy *> summoners;
-        if (enemy.kind != QStringLiteral("mini")) {
-            for (const auto &other : ctx.combatants.enemies()) {
-                Enemy *summoner = other.get();
-                if (summoner == &enemy || !summoner->alive
-                    || summoner->kindId != Enemy::Kind::Summoner) {
-                    continue;
-                }
-                summoners.push_back(summoner);
-            }
-        }
-        for (Enemy *summoner : summoners) {
-            ++summoner->charge;
-            if (summoner->charge < summoner->chargeRequired) {
-                continue;
-            }
-            summoner->charge -= summoner->chargeRequired;
-            ctx.combatants.spawnMinions(ctx, summoner->pos,
-                                        summoner->summonCount, summoner->wave);
-            ctx.entities.spawnBurst(ctx, summoner->pos, summoner->color,
-                                    18, 160.0f, 0.5f);
-            ctx.entities.floatingTexts().push_back(FloatingText{
-                summoner->pos + Math::Vec2(0.0f, -28.0f), QStringLiteral("召唤"),
-                summoner->color, 0.9f, 0.9f, 15, false});
+        for (Enemy *listener : listeners) {
+            listener->onAllyKilled(ctx, enemy);
         }
     }
 

@@ -151,7 +151,11 @@ cpp/
 │  │  │  ├─ Combatants/
 │  │  │  │  ├─ Combatants.h/.cpp  组件：玩家、敌人、Boss
 │  │  │  │  ├─ Player.h/.cpp      玩家类型
-│  │  │  │  └─ Enemy.h/.cpp       敌人类型、Boss
+│  │  │  │  ├─ Enemy.h/.cpp       敌人基类 + kind→工厂运行时表
+│  │  │  │  └─ Enemies/
+│  │  │  │     ├─ EnemyTypes.h/.cpp   六个虚基类（进攻/远程/防御/辅助/自毁/Boss）
+│  │  │  │     ├─ EnemyRegistry.h     CRTP 自动注册器
+│  │  │  │     └─ *Enemy.h/.cpp       每种敌人的走位、攻击、光环、绘制
 │  │  │  └─ Entities/
 │  │  │     ├─ Entities.h/.cpp    组件：实体容器
 │  │  │     ├─ Mine                   地雷（商店道具）
@@ -245,6 +249,8 @@ cpp/
 - 近战（drone / tank / splitter / mini / rusher）：直冲玩家、以接触为目标；
 - 远程与召唤（spitter / boss / summoner）：保持中远距离，玩家弹幕逼近时短促侧闪（0.12s，冷却 1.6s）；
 - 增益（amplifier / linker / mender / necromancer）：朝“邻居最多”的友军位置靠拢，让光环覆盖更密集的队形。
+
+敌人实现按 `Enemy` → 进攻 / 远程 / 防御 / 辅助 / 自毁 / Boss 六个虚基类拆分（`Enemies/EnemyTypes.h`），每个 kind 一个 `*Enemy.cpp`。各文件用 `EnemyRegistrar<T>`（CRTP）在静态初始化时登记到 `Enemy.cpp` 的 kind→工厂表，运行时 `Enemy::create()` 查表构造；`Enemy.cpp` 里不再有按 kind 的 `switch`。
 
 `src/lib/` 放不依赖应用层的通用模块：`Math`（向量/几何）和 `Random`（可注入随机数，并提供全局 `RandomService`）。
 

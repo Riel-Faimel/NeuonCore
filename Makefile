@@ -58,6 +58,13 @@ GENERATED_JSON := $(BUILD)/generated/GameDataJson.h
 ARENA_COMPONENTS := Arena Bullets/Bullets Bullets/StandardBullet \
                     Combatants/Combatants Entities/Entities Events State \
                     Combatants/Player Combatants/Enemy \
+                    Combatants/Enemies/EnemyTypes \
+                    Combatants/Enemies/DroneEnemy Combatants/Enemies/TankEnemy \
+                    Combatants/Enemies/MiniEnemy Combatants/Enemies/RusherEnemy \
+                    Combatants/Enemies/SplitterEnemy Combatants/Enemies/SpitterEnemy \
+                    Combatants/Enemies/SummonerEnemy Combatants/Enemies/AmplifierEnemy \
+                    Combatants/Enemies/MenderEnemy Combatants/Enemies/NecromancerEnemy \
+                    Combatants/Enemies/LinkerEnemy Combatants/Enemies/BossEnemy \
                     Entities/Mine Entities/Portal Entities/Pickup \
                     Entities/Particle Entities/FloatingText Entities/Shockwave
 ARENA_OBJS := $(addprefix $(BUILD)/app/Arena/,$(addsuffix .o,$(ARENA_COMPONENTS)))
@@ -106,6 +113,7 @@ $(BUILD):
 	@if not exist "$(BUILD_WIN)\app\Menu\Depot" mkdir "$(BUILD_WIN)\app\Menu\Depot"
 	@if not exist "$(BUILD_WIN)\app\Arena" mkdir "$(BUILD_WIN)\app\Arena"
 	@if not exist "$(BUILD_WIN)\app\Arena\Combatants" mkdir "$(BUILD_WIN)\app\Arena\Combatants"
+	@if not exist "$(BUILD_WIN)\app\Arena\Combatants\Enemies" mkdir "$(BUILD_WIN)\app\Arena\Combatants\Enemies"
 	@if not exist "$(BUILD_WIN)\app\Arena\Bullets" mkdir "$(BUILD_WIN)\app\Arena\Bullets"
 	@if not exist "$(BUILD_WIN)\app\Arena\Entities" mkdir "$(BUILD_WIN)\app\Arena\Entities"
 

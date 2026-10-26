@@ -76,10 +76,13 @@ void Combatants::draw(QPainter &world, QPainter &glow, const Context &ctx) const
 void Combatants::spawnEnemy(const Context &ctx, const QString &kind,
                             const Math::Vec2 &pos, int wave)
 {
-    auto enemy = std::make_unique<Enemy>(kind, pos, wave);
+    std::unique_ptr<Enemy> enemy = Enemy::create(kind, pos, wave);
+    if (!enemy) {
+        return;
+    }
     Enemy *ptr = enemy.get();
     enemies_.push_back(std::move(enemy));
-    if (kind == QStringLiteral("boss")) {
+    if (ptr->boss) {
         boss_ = ptr;
         BaseService.playSound(QStringLiteral("boss"));
         ctx.host.addFeedback(Base::Magenta, 45, 10.0f);
@@ -94,8 +97,11 @@ void Combatants::spawnMinions(const Context &ctx, const Math::Vec2 &pos, int cou
         const float angle = RandomService.real(0.0f, Math::Tau);
         const Math::Vec2 offset = Math::Vec2(std::cos(angle), std::sin(angle))
             * RandomService.real(60.0f, 90.0f);
-        auto child = std::make_unique<Enemy>(QStringLiteral("mini"),
-                                             pos + offset, wave);
+        std::unique_ptr<Enemy> child = Enemy::create(QStringLiteral("mini"),
+                                                     pos + offset, wave);
+        if (!child) {
+            continue;
+        }
         ctx.entities.spawnBurst(ctx, child->pos, child->color, 6, 110.0f, 0.35f);
         enemies_.push_back(std::move(child));
     }

@@ -51,7 +51,22 @@ cpp/src/
 │  │  ├─ Combatants/
 │  │  │  ├─ Combatants.h/.cpp
 │  │  │  ├─ Player.h/.cpp
-│  │  │  └─ Enemy.h/.cpp
+│  │  │  ├─ Enemy.h/.cpp              敌人基类 + kind→工厂表
+│  │  │  └─ Enemies/
+│  │  │     ├─ EnemyTypes.h/.cpp      六个虚基类
+│  │  │     ├─ EnemyRegistry.h        CRTP 注册器
+│  │  │     ├─ DroneEnemy.h/.cpp
+│  │  │     ├─ SpitterEnemy.h/.cpp
+│  │  │     ├─ TankEnemy.h/.cpp
+│  │  │     ├─ SplitterEnemy.h/.cpp
+│  │  │     ├─ MiniEnemy.h/.cpp
+│  │  │     ├─ RusherEnemy.h/.cpp
+│  │  │     ├─ AmplifierEnemy.h/.cpp
+│  │  │     ├─ LinkerEnemy.h/.cpp
+│  │  │     ├─ MenderEnemy.h/.cpp
+│  │  │     ├─ NecromancerEnemy.h/.cpp
+│  │  │     ├─ SummonerEnemy.h/.cpp
+│  │  │     └─ BossEnemy.h/.cpp
 │  │  └─ Entities/
 │  │     ├─ Entities.h/.cpp
 │  │     ├─ Mine.h/.cpp
@@ -308,7 +323,18 @@ public:
 
 ## 敌人与支援光环
 
-`Enemy::Kind` 目前覆盖 11 种：drone / spitter / tank / splitter / mini / boss，加上 6 种支援与特殊类型。数值（含光环参数）全部来自 `src/json/enemies.json`，热路径行为在 `Enemy::update()`，击杀触发在 `Events::handleKill()`：
+`Enemy` 是抽象基类：只保留共享状态、通用移动积分、受击/死亡/绘制骨架。`Enemies/EnemyTypes.h` 定义六个虚基类，`Enemies/<Kind>Enemy.cpp` 是每个 kind 的具体实现：
+
+| 虚基类 | 实现 |
+| --- | --- |
+| `OffensiveEnemy` | drone / mini / rusher |
+| `RangedEnemy` | spitter / summoner |
+| `DefensiveEnemy` | tank / linker |
+| `SupportEnemy` | amplifier / mender / necromancer |
+| `SelfDestructEnemy` | splitter（死亡分裂） |
+| `BossEnemy` | boss |
+
+`Enemy::Kind` 目前覆盖 11 种，数值（含光环参数）全部来自 `src/json/enemies.json`；击杀触发在 `Events::handleKill()`，由各敌人虚函数 `onKilled()` / `onAllyKilled()` 接管：
 
 | kind | 机制 |
 | --- | --- |
@@ -331,7 +357,23 @@ public:
 | `Ranged` | spitter / boss / summoner | 保持 205–340 的距离并绕圈；检测 140 距离内、横向 34 以内的玩家弹幕，触发 0.12s 侧闪，冷却 1.6s |
 | `Support` | amplifier / linker / mender / necromancer | 扫描友军，选 150 半径内邻居最多的目标点靠拢；没有友军时退回中距离走位 |
 
-辅助函数都在 `Enemy` 私有区：`avoidPlayerBullets()` 只读 `Bullets::playerBullets()`，`allyClusterDirection()` 只读 `Combatants::enemies()`，不引入新的组件依赖。
+辅助函数都在 `Enemy` 保护区：`avoidPlayerBullets()` 只读 `Bullets::playerBullets()`，`allyClusterDirection()` 只读 `Combatants::enemies()`，不引入新的组件依赖。
+
+### 注册与新增敌人
+
+注册走 CRTP：
+
+```cpp
+namespace {
+const EnemyRegistrar<DroneEnemy> kRegistration(
+    Enemy::Kind::Drone, "drone", Enemy::Role::Melee, Base::Coral);
+}
+```
+
+- 每个 `*Enemy.cpp` 定义自己的静态注册器，构造时写入 `enemyRegistry()`（`Enemy.cpp` 里的函数内 `static std::unordered_map`）；
+- `Enemy::create(kind, pos, wave)` 运行时查表，未注册返回 `nullptr`；
+- `Enemy.cpp` 不再有按 kind 的走位/绘制 `switch`，只保留基类逻辑、`statsFor()` 和注册表；
+- 新增敌人：`enemies.json` 加数值 → 在 `Enemies/` 新建 `XEnemy.h/.cpp`，继承对应虚基类并写走位/绘制 → 在 cpp 里放 `EnemyRegistrar` → Makefile 的 `ARENA_COMPONENTS` 加对象 → 编辑器敌人库（`Menu/Editor/Editor.cpp` 的 `kKeys/kLabels/kindColor`）加一项 → 波次里使用。
 
 ## 依赖方向
 

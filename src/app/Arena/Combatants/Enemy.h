@@ -5,6 +5,10 @@
 #include <QColor>
 #include <QString>
 
+#include <memory>
+#include <string_view>
+#include <vector>
+
 namespace arena {
 
 struct Context;
@@ -29,10 +33,11 @@ struct EnemyStats {
     QColor color;
 };
 
-// 敌人战斗者组件。一个实例代表一只敌人；Boss 也是其中一种 kind。
+// 敌人最基类：只保留所有敌人共享的状态、通用移动积分、受击/死亡/绘制骨架。
+// 具体敌人的走位、攻击、光环、死亡效果在 Enemies/ 下的子类里实现；
+// Enemy.cpp 只负责基类和“kind -> 工厂”的注册表。
 class Enemy : public Fighter {
 public:
-    // 热路径（update/draw）用枚举分支，避免每帧对 QString 做多次比较。
     enum class Kind {
         Drone,
         Spitter,
@@ -95,8 +100,20 @@ public:
     int summonCount = 0;
     bool revived = false;
 
-    Enemy(const QString &enemyKind, const Math::Vec2 &position, int waveNumber);
+    ~Enemy() override = default;
 
+    Enemy(const Enemy &) = delete;
+    Enemy &operator=(const Enemy &) = delete;
+
+    // ----- 注册表 -----
+    // 运行时按 kind 查表创建具体敌人；未注册的 kind 返回 nullptr。
+    static std::unique_ptr<Enemy> create(const QString &kind,
+                                         const Math::Vec2 &position, int wave);
+    static const EnemyStats &statsFor(const QString &kind);
+    static Role roleOf(Kind kind);
+    Role role() const { return role_; }
+
+    // ----- 接口 -----
     void update(const Context &ctx, float dt) override;
     void shoot(const Context &ctx) override;
     void takeDamage(const Context &ctx, const Damage &damage) override;
@@ -110,21 +127,32 @@ public:
     float contactDamage() const override;
     float damageMultiplier() const;
 
-    static const EnemyStats &statsFor(const QString &kind);
-    static Role roleOf(Kind kind);
-    Role role() const { return roleOf(kindId); }
+    // 友军阵亡通知：necromancer 复活、summoner 累积召唤进度在这里实现。
+    virtual void onAllyKilled(const Context &ctx, Enemy &dead) { (void)ctx; (void)dead; }
+    // 自己被击杀时的额外效果：splitter 分裂等。
+    virtual void onKilled(const Context &ctx) { (void)ctx; }
 
-private:
-    static Kind kindOf(const QString &kind);
+    // linker 的伤害分担能力；默认不参与。
+    virtual float damageShareRadius() const { return 0.0f; }
+    virtual float damageShareRatio() const { return 0.0f; }
 
-    void fireAimed(const Context &ctx, int count, float spread);
-    void applyAura(const Context &ctx);
-    void healAllies(const Context &ctx, float dt);
+protected:
+    Enemy(Kind kindId, std::string_view kindName, Role role,
+          const Math::Vec2 &position, int waveNumber);
+
+    // 具体敌人只需返回期望速度，积分、边界、闪避由基类统一处理。
+    virtual Math::Vec2 desiredVelocity(const Context &ctx, float dt);
+    // 每帧额外逻辑：射击计时、光环、治疗等。
+    virtual void updateSpecial(const Context &ctx, float dt) { (void)ctx; (void)dt; }
+    virtual void drawBody(QPainter &world, QPainter &glow, float facing) const = 0;
+    virtual bool showsAura() const { return false; }
+
     Math::Vec2 allyClusterDirection(const Context &ctx) const;
     Math::Vec2 avoidPlayerBullets(const Context &ctx) const;
-    void drawBody(QPainter &world, QPainter &glow, float facing) const;
-    void drawBoss(QPainter &world, QPainter &glow, float facing) const;
 
+    Role role_ = Role::Melee;
+
+private:
     static int sNextId;
 };
 

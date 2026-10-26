@@ -293,6 +293,9 @@ public:
         success &= require(linker->hp < linkerHp,
                            QStringLiteral("linker shares damage for nearby allies"));
 
+        game->arena_.enemies().clear();
+        game->arena_.portals().clear();
+        menu.clearInput();
         arena::Enemy *mender = spawn(QStringLiteral("mender"), {600, 470});
         arena::Enemy *tank = spawn(QStringLiteral("tank"), {640, 470});
         tank->hp = tank->maxHp * 0.3f;
@@ -338,8 +341,9 @@ public:
             }
         }
         for (int i = 0; i < 3; ++i) {
-            arena::Enemy chargedVictim(QStringLiteral("drone"), summoner->pos, 1);
-            supportCtx.events.handleKill(supportCtx, chargedVictim);
+            const auto chargedVictim =
+                arena::Enemy::create(QStringLiteral("drone"), summoner->pos, 1);
+            supportCtx.events.handleKill(supportCtx, *chargedVictim);
         }
         int minisAfter = 0;
         for (const auto &other : game->arena_.enemies()) {
@@ -352,8 +356,9 @@ public:
 
         summoner->charge = 0;
         for (int i = 0; i < 3; ++i) {
-            arena::Enemy miniVictim(QStringLiteral("mini"), summoner->pos, 1);
-            supportCtx.events.handleKill(supportCtx, miniVictim);
+            const auto miniVictim =
+                arena::Enemy::create(QStringLiteral("mini"), summoner->pos, 1);
+            supportCtx.events.handleKill(supportCtx, *miniVictim);
         }
         int minisAfterMiniDeaths = 0;
         for (const auto &other : game->arena_.enemies()) {
