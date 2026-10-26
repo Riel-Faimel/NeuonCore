@@ -1,12 +1,13 @@
 #include "Events.h"
 
 #include "Arena/Arena.h"
-#include "Arena/Entities/Bullet.h"
+#include "Arena/Bullets/Bullets.h"
 #include "Arena/Combatants/Combatants.h"
 #include "Arena/Entities/Entities.h"
 #include "Arena/Combatants/Enemy.h"
 #include "Arena/Combatants/Player.h"
 #include "Arena/State.h"
+#include "Bullet.h"
 #include "GameConfig.h"
 #include "Random.h"
 #include "Base/Base.h"
@@ -18,11 +19,11 @@
 
 namespace arena {
 
-void Events::resolvePlayerBullets(Arena &arena, float dt)
+void Events::resolvePlayerBullets(Arena &arena)
 {
-    for (Bullet &bullet : arena.entities_.playerBullets()) {
-        bullet.update(dt);
-        if (!bullet.alive) {
+    for (auto &owned : arena.bullets_.player()) {
+        Bullet &bullet = *owned;
+        if (!bullet.alive()) {
             continue;
         }
         const size_t count = arena.combatants_.enemies().size();
@@ -32,55 +33,53 @@ void Events::resolvePlayerBullets(Arena &arena, float dt)
             }
             Enemy *enemy = arena.combatants_.enemies()[i].get();
             Fighter &fighter = *enemy;
-            if (!fighter.isAlive() || bullet.hits.count(fighter.id())) {
+            if (!fighter.isAlive()) {
                 continue;
             }
-            if (!Math::segmentCircle(bullet.prev, bullet.pos, fighter.position(),
-                                     fighter.collisionRadius() + bullet.radius)) {
+            if (!Math::segmentCircle(bullet.prev(), bullet.position(),
+                                     fighter.position(),
+                                     fighter.collisionRadius() + bullet.radius())) {
                 continue;
             }
-            const bool critical = arena.random_.real(0.0f, 1.0f) < bullet.critChance;
-            const float damage = bullet.damage * (critical ? 2.0f : 1.0f);
-            const int enemyId = fighter.id();
-            fighter.takeDamage(arena, Damage{damage, critical, DamageSource::Bullet});
-            bullet.hits.insert(enemyId);
-            if (bullet.pierce <= 0) {
-                bullet.alive = false;
+            // 命中结算（伤害/暴击/穿透）由子弹自己处理；返回 false 表示这颗弹结束。
+            if (!bullet.hit(arena, fighter)) {
                 break;
             }
-            --bullet.pierce;
         }
         if (arena.state_.playerDefeated()) {
             break;
         }
     }
-    arena.entities_.cleanupProjectiles();
+    arena.bullets_.cleanup();
 }
 
-void Events::resolveEnemyBullets(Arena &arena, float dt)
+void Events::resolveEnemyBullets(Arena &arena)
 {
-    for (Bullet &bullet : arena.entities_.enemyBullets()) {
-        bullet.update(dt);
-        if (!bullet.alive || !arena.combatants_.player().isAlive()) {
+    Player &player = arena.combatants_.player();
+    if (!player.isAlive()) {
+        arena.bullets_.cleanup();
+        return;
+    }
+    for (auto &owned : arena.bullets_.enemy()) {
+        Bullet &bullet = *owned;
+        if (!bullet.alive()) {
             continue;
         }
-        if (!Math::segmentCircle(bullet.prev, bullet.pos,
-                                 arena.combatants_.player().position(),
-                                 arena.combatants_.player().state.radius + bullet.radius)) {
+        if (!Math::segmentCircle(bullet.prev(), bullet.position(),
+                                 player.position(),
+                                 player.state.radius + bullet.radius())) {
             continue;
         }
-        if (arena.combatants_.player().state.invuln > 0.0f) {
-            arena.entities_.spawnBurst(arena, bullet.pos, Base::Cyan, 5, 80.0f, 0.25f);
-        } else {
-            arena.combatants_.player().takeDamage(
-                arena, Damage{bullet.damage, false, DamageSource::Bullet});
+        if (player.state.invuln > 0.0f) {
+            arena.entities_.spawnBurst(arena, bullet.position(), Base::Cyan, 5, 80.0f,
+                                       0.25f);
         }
-        bullet.alive = false;
+        bullet.hit(arena, player);
         if (arena.state_.playerDefeated()) {
             break;
         }
     }
-    arena.entities_.cleanupProjectiles();
+    arena.bullets_.cleanup();
 }
 
 void Events::separateEnemies(Arena &arena)

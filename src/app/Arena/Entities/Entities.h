@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Arena/Entities/Bullet.h"
 #include "Arena/Entities/FloatingText.h"
 #include "Arena/Entities/Particle.h"
 #include "Arena/Entities/Pickup.h"
@@ -16,18 +15,15 @@ class Arena;
 
 namespace arena {
 
-// 实体组件：子弹、传送门、掉落、粒子、飘字、冲击波。
+// 实体组件：传送门、掉落、粒子、飘字、冲击波（子弹在 arena::Bullets）。
 class Entities {
 public:
     void reset();
-    void clearEnemyBullets();
-    void clearProjectiles();
 
     void updatePortals(Arena &arena, float dt);
     void updatePickups(Arena &arena, float dt);
     void updateEffects(Arena &arena, float dt);
     void cleanup();
-    void cleanupProjectiles();
 
     void drawBackground(QPainter &world, QPainter &glow) const;
     void drawForeground(QPainter &world, QPainter &glow) const;
@@ -42,8 +38,6 @@ public:
     int portalCount() const { return int(portals_.size()); }
     float &effectsTimer() { return effectsTimer_; }
 
-    std::vector<Bullet> &playerBullets() { return playerBullets_; }
-    std::vector<Bullet> &enemyBullets() { return enemyBullets_; }
     std::vector<Portal> &portals() { return portals_; }
     std::vector<Pickup> &pickups() { return pickups_; }
     std::vector<Particle> &particles() { return particles_; }
@@ -53,8 +47,6 @@ public:
 private:
     Math::Vec2 randomSpawnPosition(const Arena &arena) const;
 
-    std::vector<Bullet> playerBullets_;
-    std::vector<Bullet> enemyBullets_;
     std::vector<Portal> portals_;
     std::vector<Pickup> pickups_;
     std::vector<Particle> particles_;

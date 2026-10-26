@@ -1,7 +1,7 @@
 #include "Enemy.h"
 
 #include "Arena/Arena.h"
-#include "Arena/Entities/Bullet.h"
+#include "Arena/Bullets/StandardBullet.h"
 #include "Arena/Entities/FloatingText.h"
 #include "GameConfig.h"
 #include "Random.h"
@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <memory>
 
 namespace arena {
 
@@ -101,9 +102,9 @@ void Enemy::update(Arena &arena, float dt)
                 for (int i = 0; i < count; ++i) {
                     const float angle = offset + Math::Tau * float(i) / float(count);
                     const Math::Vec2 bulletDirection(std::cos(angle), std::sin(angle));
-                    arena.entities_.enemyBullets().emplace_back(pos + bulletDirection * 42.0f,
-                                                     bulletDirection * 285.0f, 13.0f,
-                                                     Base::Magenta, false, 5.0f);
+                    arena.bullets_.submit(std::make_unique<StandardBullet>(
+                        pos + bulletDirection * 42.0f, bulletDirection * 285.0f, 13.0f,
+                        Base::Magenta, Bullet::Standpoint::Enemy, 5.0f));
                 }
                 arena.entities_.addShockwave(pos, 92.0f, Base::Magenta, 0.36f, 2);
             }
@@ -149,8 +150,9 @@ void Enemy::shoot(Arena &arena)
         const float base = std::atan2(toPlayer.y, toPlayer.x);
         const Math::Vec2 aim = Math::Vec2(std::cos(base), std::sin(base))
             .rotated(arena.random_.real(-0.055f, 0.055f));
-        arena.entities_.enemyBullets().emplace_back(pos + aim * 18.0f, aim * 300.0f, 11.0f,
-                                         Base::Magenta, false, 4.0f);
+        arena.bullets_.submit(std::make_unique<StandardBullet>(
+            pos + aim * 18.0f, aim * 300.0f, 11.0f, Base::Magenta,
+            Bullet::Standpoint::Enemy, 4.0f));
         arena.entities_.spawnBurst(arena, pos, Base::Magenta, 5, 70.0f, 0.26f);
         arena.base_.playSound(QStringLiteral("shoot_enemy"));
     }
@@ -163,9 +165,9 @@ void Enemy::fireAimed(Arena &arena, int count, float spread, float bulletSpeed)
     for (int i = 0; i < count; ++i) {
         const float offset = (float(i) - (count - 1) / 2.0f) * spread;
         const Math::Vec2 direction(std::cos(base + offset), std::sin(base + offset));
-        arena.entities_.enemyBullets().emplace_back(pos + direction * 46.0f,
-                                          direction * bulletSpeed, 13.0f,
-                                          QColor(255, 112, 190), false, 5.0f);
+        arena.bullets_.submit(std::make_unique<StandardBullet>(
+            pos + direction * 46.0f, direction * bulletSpeed, 13.0f,
+            QColor(255, 112, 190), Bullet::Standpoint::Enemy, 5.0f));
     }
     arena.entities_.spawnBurst(arena, pos, Base::Magenta, 8, 100.0f, 0.35f);
 }

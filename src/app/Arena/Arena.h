@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Arena/Bullets/Bullets.h"
 #include "Arena/Combatants/Combatants.h"
 #include "Arena/Entities/Entities.h"
 #include "Arena/Events.h"
@@ -16,8 +17,8 @@ namespace games {
 class Upgrades;
 }
 
-// Arena 是全局模块类，只组合 4 个组件：
-// arena::Combatants / Entities / Events / State。
+// Arena 是全局模块类，只组合 5 个组件：
+// arena::Bullets / Combatants / Entities / Events / State。
 class Arena {
 public:
     using PlayerState = arena::PlayerState;
@@ -61,6 +62,9 @@ public:
     void celebrateVictory();
     Feedback takeFeedback();
 
+    // 子弹命中时要用同一个随机源（暴击判定）。
+    Random &random() { return random_; }
+
 private:
     friend class SelfTest;
     friend class games::Upgrades;
@@ -81,6 +85,7 @@ private:
     Random &random_;
     Base &base_;
 
+    arena::Bullets bullets_;
     arena::Combatants combatants_;
     arena::Entities entities_;
     arena::Events events_;

@@ -103,16 +103,19 @@ cpp/
 ├─ src/
 │  ├─ app/
 │  │  ├─ Arena/
-│  │  │  ├─ Arena.h / Arena.cpp   模块入口：组合 4 个组件
+│  │  │  ├─ Arena.h / Arena.cpp   模块入口：组合 5 个组件
 │  │  │  ├─ Events.h / Events.cpp 组件：碰撞 + 击杀（单个 class）
 │  │  │  ├─ State.h / State.cpp   组件：Boss 阶段 + 分数 + 玩家失败
+│  │  │  ├─ Bullets/
+│  │  │  │  ├─ Bullets.h/.cpp     组件：子弹池（Bullet 纯虚接口）
+│  │  │  │  └─ StandardBullet.h/.cpp 标准弹实现
 │  │  │  ├─ Combatants/
 │  │  │  │  ├─ Combatants.h/.cpp  组件：玩家、敌人、Boss
 │  │  │  │  ├─ Player.h/.cpp      玩家类型
 │  │  │  │  └─ Enemy.h/.cpp       敌人类型、Boss
 │  │  │  └─ Entities/
 │  │  │     ├─ Entities.h/.cpp    组件：实体容器
-│  │  │     ├─ Bullet / Portal / Pickup
+│  │  │     ├─ Portal / Pickup
 │  │  │     └─ Particle / FloatingText / Shockwave
 │  │  ├─ Base/
 │  │  │  ├─ Base.h / Base.cpp     模块入口：组合 Input / Audio / Paint
@@ -139,7 +142,8 @@ cpp/
 │  │  └─ Random.h / Random.cpp    可注入随机数
 │  ├─ include/
 │  │  ├─ GameConfig.h             全局尺寸常量
-│  │  └─ Fighter.h                Player/Enemy 的公共虚接口
+│  │  ├─ Fighter.h                Player/Enemy 的公共虚接口
+│  │  └─ Bullet.h                 子弹的全局纯虚接口（池只认这一层）
 │  └─ tests/
 │     └─ SelfTest.h               仅 -DDEBUG 测试构建包含的测试/截图逻辑
 ├─ build.bat                      调用 mingw32-make -j12 deploy
@@ -159,7 +163,7 @@ cpp/
 
 `src/app/Menu/` 和 `Arena/` 同构：`Menu` 只持有进程级的 `Base`、关卡表、当前屏幕和输入路由，五个界面是 `namespace menu` 组件——`Main`（标题/关卡卡/设置入口）、`Match`（持有这一局的 `Games`）、`Result`（只读 `Summary` 的结算层）、`Editor`（持有自定义台本）、`Settings`（音量 + `settings.ini`）。组件把玩家意图作为 `Action` 交回 `Menu`，`Menu` 负责开局、进编辑器和回主菜单；“自定义协议”点开即进编辑器，逐波编辑台本（1–12 波、四种敌人数量、单 Boss），部署时由 `Menu` 把 `Editor::script()` 写进 `Level.script` 交给 `Match`。
 
-`src/app/Arena/` 是模块目录：`Arena` 是全局模块类，只组合 `Combatants`、`Entities`、`Events`、`State` 四个 `namespace arena` 组件。`Fighter` 放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段、分数和玩家失败。
+`src/app/Arena/` 是模块目录：`Arena` 是全局模块类，组合 `Bullets`、`Combatants`、`Entities`、`Events`、`State` 五个 `namespace arena` 组件。`Bullet` 是 `src/include/Bullet.h` 里的全局纯虚接口，具体弹种（目前是 `StandardBullet`）在 `Arena/Bullets/`；发射方只 `submit()` 对象，推进、回收和绘制都由池统一做。`Fighter` 也放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段、分数和玩家失败。
 
 `src/lib/` 放不依赖应用层的通用模块：`Math`（向量/几何）和 `Random`（可注入随机数）。
 

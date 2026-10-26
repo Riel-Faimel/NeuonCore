@@ -50,9 +50,10 @@ MAIN_TEST_OBJ := $(BUILD)/app/main_test.o
 RC := $(MINGWDIR)/bin/windres.exe
 ICON_RES_OBJ := $(BUILD)/app/app_res.o
 
-ARENA_COMPONENTS := Arena Combatants/Combatants Entities/Entities Events State \
+ARENA_COMPONENTS := Arena Bullets/Bullets Bullets/StandardBullet \
+                    Combatants/Combatants Entities/Entities Events State \
                     Combatants/Player Combatants/Enemy \
-                    Entities/Bullet Entities/Portal Entities/Pickup \
+                    Entities/Portal Entities/Pickup \
                     Entities/Particle Entities/FloatingText Entities/Shockwave
 ARENA_OBJS := $(addprefix $(BUILD)/app/Arena/,$(addsuffix .o,$(ARENA_COMPONENTS)))
 
@@ -86,6 +87,7 @@ $(BUILD):
 	@if not exist "$(BUILD_WIN)\app\Menu\Settings" mkdir "$(BUILD_WIN)\app\Menu\Settings"
 	@if not exist "$(BUILD_WIN)\app\Arena" mkdir "$(BUILD_WIN)\app\Arena"
 	@if not exist "$(BUILD_WIN)\app\Arena\Combatants" mkdir "$(BUILD_WIN)\app\Arena\Combatants"
+	@if not exist "$(BUILD_WIN)\app\Arena\Bullets" mkdir "$(BUILD_WIN)\app\Arena\Bullets"
 	@if not exist "$(BUILD_WIN)\app\Arena\Entities" mkdir "$(BUILD_WIN)\app\Arena\Entities"
 
 $(BASE_OBJS): $(BUILD)/app/Base/%.o: src/app/Base/%.cpp | $(BUILD)

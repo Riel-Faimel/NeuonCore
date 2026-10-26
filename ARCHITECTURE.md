@@ -41,13 +41,15 @@ cpp/src/
 │  │  ├─ Arena.h / Arena.cpp
 │  │  ├─ Events.h / Events.cpp
 │  │  ├─ State.h / State.cpp
+│  │  ├─ Bullets/
+│  │  │  ├─ Bullets.h/.cpp
+│  │  │  └─ StandardBullet.h/.cpp
 │  │  ├─ Combatants/
 │  │  │  ├─ Combatants.h/.cpp
 │  │  │  ├─ Player.h/.cpp
 │  │  │  └─ Enemy.h/.cpp
 │  │  └─ Entities/
 │  │     ├─ Entities.h/.cpp
-│  │     ├─ Bullet.h/.cpp
 │  │     ├─ Portal.h/.cpp
 │  │     ├─ Pickup.h/.cpp
 │  │     ├─ Particle.h/.cpp
@@ -141,16 +143,42 @@ cpp/src/
 
 ### Arena
 
-`Arena` 是全局模块类，组合 4 个 `namespace arena` 组件：
+`Arena` 是全局模块类，组合 5 个 `namespace arena` 组件：
 
 | 组件 | 职责 |
 | --- | --- |
+| `Bullets` | 子弹池：持有 `Bullet*`（纯虚接口），统一推进、回收、绘制；按阵营分两组 |
 | `Combatants` | 玩家、敌人容器、Boss 指针；推进/绘制战斗者 |
-| `Entities` | 子弹、传送门、掉落、粒子、飘字、冲击波 |
+| `Entities` | 传送门、掉落、粒子、飘字、冲击波 |
 | `Events` | 碰撞、接触伤害、敌人分离、击杀 |
 | `State` | Boss 阶段、Boss 击败、玩家失败、分数/击杀数 |
 
 `Arena` 只编排顺序并汇总 `Feedback`。
+
+### 子弹
+
+`Bullet` 是**全局纯虚接口**（`src/include/Bullet.h`），池不关心具体弹种：
+
+```cpp
+class Bullet {
+public:
+    enum class Standpoint { Player, Enemy };
+
+    virtual void advance(float dt) = 0;                       // 位置推进 + 寿命
+    virtual void draw(QPainter &world, QPainter &glow) const = 0;
+    virtual bool hit(Arena &arena, arena::Fighter &target) = 0;  // 命中多态；返回 false 结束自己
+    virtual bool alive() const = 0;                            // 池据此回收
+    virtual const Math::Vec2 &prev() const = 0;                // 扫掠碰撞起点
+    virtual const Math::Vec2 &position() const = 0;            // 扫掠碰撞终点
+    virtual float radius() const = 0;                          // 碰撞半径
+    virtual Standpoint standpoint() const = 0;                 // 阵营 ID
+};
+```
+
+- 发射方只做 `arena.bullets_.submit(std::make_unique<StandardBullet>(...))`，不自持子弹；
+- `arena::Bullets` 按 `standpoint()` 分流到玩家/敌方两组，用 `reserve` + 交换删除（swap-pop）回收，稳态不搬移整段数组；
+- 碰撞仍由 `arena::Events` 做几何判定（`segmentCircle(bullet.prev(), bullet.position(), target, targetR + bullet.radius)`），命中后调 `bullet.hit(...)`，伤害、暴击、穿透全部由弹种自己结算；
+- 新弹种 = 在 `Arena/Bullets/` 加一个 `Bullet` 实现，提交即可，`Events`/`Renderer` 不用改。
 
 ### Renderer
 
@@ -169,6 +197,7 @@ cpp/src/
 - `src/lib/Math.h/.cpp`：向量、clamp、ease、线段圆碰撞。
 - `src/lib/Random.h/.cpp`：可注入随机引擎。
 - `src/include/Fighter.h`：Player / Enemy 的共同虚接口。
+- `src/include/Bullet.h`：子弹的全局纯虚接口（`advance / draw / hit / alive / prev / position / radius / standpoint`）。
 - `src/tests/SelfTest.h`：只在 `-DDEBUG` 构建中由 `main.cpp` 包含。
 
 ## Fighter 接口
@@ -216,7 +245,7 @@ GameWindow
    ├─ menu::Match ────────► Games(Level, Base&)   ← 一局一个实例
    │  └─ Games
    │     ├─ Base ─────► base::Input / Audio / Music / Paint（引用，由 Menu 持有）
-   │     ├─ Arena ────► arena::Combatants / Entities / Events / State
+   │     ├─ Arena ────► arena::Bullets / Combatants / Entities / Events / State
    │     ├─ games::Waves ─────► Arena, Random
    │     ├─ games::Upgrades ──► Arena, Base, Random
    │     ├─ Renderer ─────────► Games/Arena/Waves/Upgrades(只读), Base, Random
@@ -318,6 +347,13 @@ GameWindow::paintEvent()
 - 状态：`src/app/Arena/State.*`。
 - 碰撞/击杀：`src/app/Arena/Events.*`。
 - 实体：`src/app/Arena/Entities/*`。
+
+### 加弹种
+
+1. 在 `src/include/Bullet.h` 之外、`src/app/Arena/Bullets/` 里新建实现（参考 `StandardBullet`）；
+2. 实现 `advance`（推进/寿命/出屏）、`draw`（样式）、`hit`（命中结算并返回是否继续存活）；
+3. 发射处调用 `arena.bullets_.submit(std::make_unique<YourBullet>(...))`，池会按 `standpoint()` 分流；
+4. `Events` 的几何判定、`Arena` 的批量清理和绘制都不需要改。
 
 ### 加 IO / 音频 / 绘制原语
 

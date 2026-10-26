@@ -1,7 +1,7 @@
 #include "Player.h"
 
 #include "Arena/Arena.h"
-#include "Arena/Entities/Bullet.h"
+#include "Arena/Bullets/StandardBullet.h"
 #include "Arena/Entities/FloatingText.h"
 #include "Arena/Entities/Particle.h"
 #include "Arena/Entities/Shockwave.h"
@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 
 namespace arena {
 
@@ -124,9 +125,9 @@ void Player::shoot(Arena &arena)
         const Math::Vec2 direction = forward.rotated(offset);
         const Math::Vec2 origin = state.pos + forward * 20.0f
                                   + side * ((float(index) - (count - 1) / 2.0f) * 4.0f);
-        arena.entities_.playerBullets().emplace_back(origin, direction * state.bulletSpeed,
-                                          state.damage, Base::Cyan, true, 3.2f,
-                                          state.pierce, state.critChance);
+        arena.bullets_.submit(std::make_unique<StandardBullet>(
+            origin, direction * state.bulletSpeed, state.damage, Base::Cyan,
+            Bullet::Standpoint::Player, 3.2f, state.pierce, state.critChance));
     }
     state.muzzlePos = state.pos + forward * 22.0f;
     state.fireFlash = 0.07f;

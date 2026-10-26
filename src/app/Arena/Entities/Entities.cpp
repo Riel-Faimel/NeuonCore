@@ -14,25 +14,12 @@ namespace arena {
 
 void Entities::reset()
 {
-    playerBullets_.clear();
-    enemyBullets_.clear();
     portals_.clear();
     pickups_.clear();
     particles_.clear();
     floatingTexts_.clear();
     shockwaves_.clear();
     effectsTimer_ = 0.0f;
-}
-
-void Entities::clearEnemyBullets()
-{
-    enemyBullets_.clear();
-}
-
-void Entities::clearProjectiles()
-{
-    playerBullets_.clear();
-    enemyBullets_.clear();
 }
 
 void Entities::updatePortals(Arena &arena, float dt)
@@ -90,22 +77,11 @@ void Entities::updateEffects(Arena &arena, float dt)
 
 void Entities::cleanup()
 {
-    cleanupProjectiles();
     std::erase_if(portals_, [](const Portal &portal) {
         return !portal.alive;
     });
     std::erase_if(pickups_, [](const Pickup &pickup) {
         return !pickup.alive;
-    });
-}
-
-void Entities::cleanupProjectiles()
-{
-    std::erase_if(playerBullets_, [](const Bullet &bullet) {
-        return !bullet.alive;
-    });
-    std::erase_if(enemyBullets_, [](const Bullet &bullet) {
-        return !bullet.alive;
     });
 }
 
@@ -124,12 +100,6 @@ void Entities::drawBackground(QPainter &world, QPainter &glow) const
     }
     for (const Shockwave &wave : shockwaves_) {
         wave.draw(world, glow);
-    }
-    for (const Bullet &bullet : playerBullets_) {
-        bullet.draw(world, glow);
-    }
-    for (const Bullet &bullet : enemyBullets_) {
-        bullet.draw(world, glow);
     }
 }
 

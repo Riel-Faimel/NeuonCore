@@ -6,6 +6,7 @@
 #include "Menu/Menu.h"
 #include "Base/Base.h"
 #include "Pointer.h"
+#include "Arena/Bullets/StandardBullet.h"
 
 #include <QDir>
 #include <QFile>
@@ -195,7 +196,7 @@ public:
         game->waves_.queue_.clear();
         game->arena_.entities_.portals().clear();
         game->arena_.combatants_.enemies().clear();
-        game->arena_.entities_.enemyBullets().clear();
+        game->arena_.bullets_.clearEnemy();
         for (int i = 0; i < 70; ++i) {
             game->update(1.0f / 60.0f);
             if (game->state() == Games::State::Upgrade) {
@@ -478,8 +479,8 @@ public:
         game->arena_.combatants_.enemies().clear();
         game->arena_.entities_.portals().clear();
         game->arena_.entities_.pickups().clear();
-        game->arena_.entities_.playerBullets().clear();
-        game->arena_.entities_.enemyBullets().clear();
+        game->arena_.bullets_.player().clear();
+        game->arena_.bullets_.clearEnemy();
         game->arena_.entities_.particles().clear();
         game->arena_.entities_.floatingTexts().clear();
         game->arena_.entities_.shockwaves().clear();
@@ -513,19 +514,12 @@ public:
                                                      Math::Vec2(1160, 615), 4);
         game->arena_.entities_.spawnPickup(game->arena_, {360, 315}, 16);
         game->arena_.combatants_.player().shoot(game->arena_);
-        game->arena_.entities_.playerBullets().emplace_back(
-            Math::Vec2(650, 360), Math::Vec2(900, -250), 12.5f, Base::Cyan, true, 3.2f);
-        game->arena_.entities_.playerBullets().emplace_back(
-            Math::Vec2(590, 325), Math::Vec2(950, -180), 12.5f, Base::Cyan, true, 3.2f);
-        game->arena_.entities_.playerBullets().emplace_back(
-            Math::Vec2(720, 400), Math::Vec2(880, -60), 12.5f, Base::Cyan, true, 3.2f);
-        game->arena_.entities_.enemyBullets().emplace_back(
-            Math::Vec2(850, 300), Math::Vec2(-420, 150), 11.0f, Base::Magenta, false, 4.0f);
-        game->arena_.entities_.enemyBullets().emplace_back(
-            Math::Vec2(1010, 510), Math::Vec2(-380, -90), 11.0f, Base::Magenta, false, 4.0f);
-        game->arena_.entities_.enemyBullets().emplace_back(
-            Math::Vec2(1090, 420), Math::Vec2(-440, -30), 13.0f,
-            QColor(255, 112, 190), false, 5.0f);
+        game->arena_.bullets_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(650, 360), Math::Vec2(900, -250), 12.5f, Base::Cyan, Bullet::Standpoint::Player, 3.2f));
+        game->arena_.bullets_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(590, 325), Math::Vec2(950, -180), 12.5f, Base::Cyan, Bullet::Standpoint::Player, 3.2f));
+        game->arena_.bullets_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(720, 400), Math::Vec2(880, -60), 12.5f, Base::Cyan, Bullet::Standpoint::Player, 3.2f));
+        game->arena_.bullets_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(850, 300), Math::Vec2(-420, 150), 11.0f, Base::Magenta, Bullet::Standpoint::Enemy, 4.0f));
+        game->arena_.bullets_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(1010, 510), Math::Vec2(-380, -90), 11.0f, Base::Magenta, Bullet::Standpoint::Enemy, 4.0f));
+        game->arena_.bullets_.submit(std::make_unique<arena::StandardBullet>(Math::Vec2(1090, 420), Math::Vec2(-440, -30), 13.0f, QColor(255, 112, 190), Bullet::Standpoint::Enemy, 5.0f));
         game->arena_.entities_.spawnBurst(game->arena_, {860, 290}, Base::Coral, 14, 130.0f, 0.7f);
         game->arena_.entities_.spawnBurst(game->arena_, {715, 400}, Base::Cyan, 8, 100.0f, 0.5f);
         game->arena_.entities_.addShockwave({860, 290}, 48.0f, Base::Coral, 0.6f, 2);
@@ -537,8 +531,8 @@ public:
         game->arena_.combatants_.enemies().clear();
         game->arena_.entities_.portals().clear();
         game->arena_.entities_.pickups().clear();
-        game->arena_.entities_.playerBullets().clear();
-        game->arena_.entities_.enemyBullets().clear();
+        game->arena_.bullets_.player().clear();
+        game->arena_.bullets_.clearEnemy();
         game->arena_.entities_.particles().clear();
         game->arena_.entities_.floatingTexts().clear();
         game->arena_.entities_.shockwaves().clear();
@@ -561,8 +555,8 @@ public:
         game->arena_.state_.total_ = 9870;
         game->arena_.state_.kills_ = 63;
         game->arena_.combatants_.enemies().clear();
-        game->arena_.entities_.playerBullets().clear();
-        game->arena_.entities_.enemyBullets().clear();
+        game->arena_.bullets_.player().clear();
+        game->arena_.bullets_.clearEnemy();
         game->arena_.entities_.particles().clear();
         game->arena_.entities_.shockwaves().clear();
         Arena::PlayerState &bossPlayer = game->arena_.combatants_.player().state;
@@ -585,9 +579,8 @@ public:
         for (int i = 0; i < 12; ++i) {
             const float angle = i * Math::Tau / 12.0f;
             const Math::Vec2 direction(std::cos(angle), std::sin(angle));
-            game->arena_.entities_.enemyBullets().emplace_back(
-                game->arena_.combatants_.boss()->pos + direction * 58.0f,
-                direction * 285.0f, 13.0f, Base::Magenta, false, 5.0f);
+            game->arena_.bullets_.submit(std::make_unique<arena::StandardBullet>(game->arena_.combatants_.boss()->pos + direction * 58.0f,
+                direction * 285.0f, 13.0f, Base::Magenta, Bullet::Standpoint::Enemy, 5.0f));
         }
         bossPlayer.fireFlash = 0.04f;
         game->arena_.combatants_.player().shoot(game->arena_);

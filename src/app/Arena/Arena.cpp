@@ -16,6 +16,7 @@ Arena::~Arena() = default;
 
 void Arena::reset()
 {
+    bullets_.clear();
     combatants_.reset();
     entities_.reset();
     state_.reset();
@@ -24,7 +25,7 @@ void Arena::reset()
 
 void Arena::beginWave()
 {
-    entities_.clearProjectiles();
+    bullets_.clear();
     combatants_.beginWave();
     state_.beginWave();
     entities_.spawnBurst(*this, combatants_.player().state.pos, Base::Cyan,
@@ -45,13 +46,14 @@ void Arena::update(float dt)
     }
 
     entities_.updatePortals(*this, dt);
-    events_.resolvePlayerBullets(*this, dt);
+    bullets_.update(dt);
+    events_.resolvePlayerBullets(*this);
     if (state_.playerDefeated()) {
         entities_.updateEffects(*this, dt);
         return;
     }
 
-    events_.resolveEnemyBullets(*this, dt);
+    events_.resolveEnemyBullets(*this);
     if (state_.playerDefeated()) {
         entities_.updateEffects(*this, dt);
         return;
@@ -67,6 +69,7 @@ void Arena::update(float dt)
 
     entities_.updatePickups(*this, dt);
     combatants_.cleanup();
+    bullets_.cleanup();
     entities_.cleanup();
     entities_.updateEffects(*this, dt);
 }
@@ -75,6 +78,7 @@ void Arena::draw(QPainter &world, QPainter &glow) const
 {
     drawBorder(world);
     entities_.drawBackground(world, glow);
+    bullets_.draw(world, glow);
     combatants_.draw(world, glow, *this);
     entities_.drawForeground(world, glow);
 }
@@ -91,17 +95,17 @@ void Arena::updateVisuals(float dt)
 
 void Arena::clearEnemyBullets()
 {
-    entities_.clearEnemyBullets();
+    bullets_.clearEnemy();
 }
 
 void Arena::clearProjectiles()
 {
-    entities_.clearProjectiles();
+    bullets_.clear();
 }
 
 void Arena::clearForVictory()
 {
-    entities_.clearEnemyBullets();
+    bullets_.clearEnemy();
     combatants_.clearForVictory(*this);
 }
 
