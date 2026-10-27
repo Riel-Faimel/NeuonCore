@@ -139,12 +139,103 @@ bool GameServer::listen(quint16 port, bool loopbackOnly, QString *error)
         }
         return false;
     }
+    // 服务端一开始就有一个等待中的房间；宿主可以再用 openRoom() 命名。
+    rooms_.open(QStringLiteral("NEON CORE 房间"));
+    localHostRoom_ = false;
     return true;
+}
+
+bool GameServer::openRoom(const QString &name, QString *error)
+{
+    if (simulation_ != nullptr) {
+        if (error != nullptr) {
+            *error = QStringLiteral("cannot open a room while a match is running");
+        }
+        return false;
+    }
+    if (!tcpServer_.isListening()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("cannot open a room before listen()");
+        }
+        return false;
+    }
+    rooms_.open(name.isEmpty() ? QStringLiteral("NEON CORE 房间") : name,
+                controllerSocket_ != nullptr ? sessions_.value(controllerSocket_).id : 0);
+    localHostRoom_ = true;
+    broadcastRoomList();
+    return true;
+}
+
+void GameServer::dissolveRoom(const QString &reason)
+{
+    if (!rooms_.isOpen() && sessions_.isEmpty() && !tcpServer_.isListening()) {
+        return;
+    }
+    // 先通知：客户端收到 MatchEnd(reason) 后进入“房间已解散”失败页；
+    // 即使消息在断开时丢失，客户端也会用断线兜底渲染同一失败页。
+    sendRoomClosed(reason);
+    tickTimer_.stop();
+    simulation_.reset();
+    snapshot_.clear();
+    matchEndSent_ = true;
+    accumulator_ = 0.0;
+    rooms_.reset();
+    tcpServer_.close();
+    controllerSocket_ = nullptr;
+    localHostRoom_ = false;
+    const QList<QTcpSocket *> sockets = sessions_.keys();
+    for (QTcpSocket *socket : sockets) {
+        if (socket != nullptr) {
+            socket->disconnectFromHost();
+        }
+    }
+}
+
+QString GameServer::roomName() const
+{
+    return rooms_.isOpen() ? rooms_.defaultRoom().name : QString();
+}
+
+int GameServer::roomPlayers() const
+{
+    return welcomedCount();
+}
+
+int GameServer::roomMaxPlayers() const
+{
+    return rooms_.isOpen() ? rooms_.defaultRoom().maxPlayers : 0;
+}
+
+quint32 GameServer::roomHostSessionId() const
+{
+    if (!rooms_.isOpen()) {
+        return 0;
+    }
+    const Room &room = rooms_.defaultRoom();
+    if (room.hostSessionId != 0) {
+        return room.hostSessionId;
+    }
+    if (!localHostRoom_ || controllerSocket_ == nullptr) {
+        return 0;
+    }
+    return sessions_.value(controllerSocket_).id;
+}
+
+int GameServer::welcomedCount() const
+{
+    int count = 0;
+    for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+        if (it->welcomed) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 void GameServer::close()
 {
     tickTimer_.stop();
+    localHostRoom_ = false;
     for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
         QTcpSocket *socket = it.key();
         if (socket != nullptr) {
@@ -286,6 +377,11 @@ void GameServer::handleHello(QTcpSocket *socket, const QByteArray &frame)
         // 第一个连接到本地内嵌服务端的客户端是主控玩家；后续客户端只读。
         controllerSocket_ = socket;
     }
+    if (localHostRoom_ && rooms_.isOpen()
+        && rooms_.defaultRoom().hostSessionId == 0) {
+        // 内嵌宿主自己的回环客户端是房主；独立服务端的客户端仍是加入者。
+        rooms_.setHostSession(it->id);
+    }
     sendWelcome(socket, true, QString());
     broadcastRoomList();
 }
@@ -328,6 +424,11 @@ bool GameServer::startMatch(const games::GameSimulation::Level &level, QString *
         return false;
     }
 
+    if (!rooms_.isOpen()) {
+        // 兼容直接调用 startMatch() 的宿主 / 测试：没有显式房间时补一个。
+        rooms_.open(QStringLiteral("NEON CORE 房间"),
+                    controllerSocket_ != nullptr ? sessions_.value(controllerSocket_).id : 0);
+    }
     auto simulation = std::make_unique<ServerSimulation>(level);
     simulation->onEvent = [this](const net::EventMessage &event) {
         broadcastEvent(event);
@@ -520,7 +621,16 @@ void GameServer::sendRoomList(QTcpSocket *socket)
     if (it == sessions_.end() || !it->welcomed) {
         return;
     }
-    rooms_.setPlayers(int(sessions_.size()));
+    if (!rooms_.isOpen()) {
+        // 房间已解散：服务端权威地发送空列表，客户端不会进入假对局。
+        net::RoomListMessage empty;
+        const QByteArray frame = net::encodeRoomList(empty);
+        if (!frame.isEmpty()) {
+            socket->write(frame);
+        }
+        return;
+    }
+    rooms_.setPlayers(welcomedCount());
     net::RoomListMessage message;
     message.rooms.reserve(rooms_.rooms().size());
     for (const Room &room : rooms_.rooms()) {
@@ -540,7 +650,10 @@ void GameServer::sendRoomList(QTcpSocket *socket)
 
 void GameServer::broadcastRoomList()
 {
-    rooms_.setPlayers(int(sessions_.size()));
+    if (!rooms_.isOpen()) {
+        return;
+    }
+    rooms_.setPlayers(welcomedCount());
     for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
         if (it->welcomed && it.key() != nullptr) {
             sendRoomList(it.key());
@@ -593,6 +706,25 @@ void GameServer::sendMatchEnd(QTcpSocket *socket, const QString &reason)
     }
     rooms_.setPlaying(false);
     broadcastRoomList();
+}
+
+void GameServer::sendRoomClosed(const QString &reason)
+{
+    net::MatchEndMessage message;
+    message.reason = reason;
+    message.retryable = true;
+    const QByteArray frame = net::encodeMatchEnd(message);
+    if (frame.isEmpty()) {
+        return;
+    }
+    for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+        QTcpSocket *socket = it.key();
+        if (socket == nullptr || !it->welcomed) {
+            continue;
+        }
+        socket->write(frame);
+        socket->flush();
+    }
 }
 
 void GameServer::reject(QTcpSocket *socket, const QString &reason)

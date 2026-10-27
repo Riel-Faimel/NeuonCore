@@ -63,6 +63,8 @@ bool GameClient::connectToHost(const QString &host, quint16 port)
     matchRequested_ = false;
     rooms_.clear();
     inLobby_ = false;
+    hadSession_ = false;
+    hadRoom_ = false;
     pendingDash_ = false;
     pendingPause_ = false;
     pendingMine_ = false;
@@ -235,10 +237,18 @@ void GameClient::onReadyRead()
 
 void GameClient::onDisconnected()
 {
+    const bool wasWaitingInRoom = inLobby_ || (hadRoom_ && snapshotCount_ == 0);
     welcomed_ = false;
     matchRequested_ = false;
     frames_.clear();
     if (closedByUser_ || failed_ || matchEnded_) {
+        return;
+    }
+    // 房间阶段掉线不需要重连：主机已经解散/关闭，直接进入失败页。
+    // 对局阶段的掉线仍允许客户端按配置重连。
+    if (wasWaitingInRoom) {
+        inLobby_ = false;
+        fail(QStringLiteral("房间已解散"));
         return;
     }
     if (autoReconnect_) {
@@ -337,6 +347,7 @@ void GameClient::handleWelcome(const QByteArray &frame)
     sessionId_ = welcome.sessionId;
     tickRate_ = welcome.tickRate;
     welcomed_ = true;
+    hadSession_ = true;
     reconnectAttempts_ = 0;
     lastError_.clear();
 }
@@ -373,6 +384,9 @@ void GameClient::handleRoomList(const QByteArray &frame)
         }
     }
     inLobby_ = lobby && snapshotCount_ == 0;
+    if (inLobby_) {
+        hadRoom_ = true;
+    }
 }
 
 void GameClient::handleEvent(const QByteArray &frame)

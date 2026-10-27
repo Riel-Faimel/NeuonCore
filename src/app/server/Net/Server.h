@@ -56,6 +56,17 @@ public:
     bool running() const { return simulation_ != nullptr; }
     const net::Snapshot &snapshot() const { return snapshot_; }
 
+    // ----- 房间生命周期（控制面：只允许本地宿主调用） -----
+    // listen() 会先建立一个默认房间；宿主可以用 openRoom() 换成自己的房间名。
+    // 房间的开/关与人数以服务端为准，客户端只收到 RoomList。
+    bool openRoom(const QString &name, QString *error = nullptr);
+    void dissolveRoom(const QString &reason = QStringLiteral("房间已解散"));
+    bool roomOpen() const { return rooms_.isOpen(); }
+    QString roomName() const;
+    int roomPlayers() const;
+    int roomMaxPlayers() const;
+    quint32 roomHostSessionId() const;
+
     // 控制面：只允许本地宿主（内嵌 Match / 独立服务端 stdio）调用。
     // TCP 客户端只能收快照，不能 StartMatch、暂停、选强化或控制服务器。
     bool startMatch(const games::GameSimulation::Level &level, QString *error = nullptr);
@@ -87,10 +98,12 @@ private:
     void startMatchSocket(QTcpSocket *socket, const net::StartMatchMessage &request);
     void sendWelcome(QTcpSocket *socket, bool accepted, const QString &reason);
     void sendMatchEnd(QTcpSocket *socket, const QString &reason);
+    void sendRoomClosed(const QString &reason);
     void reject(QTcpSocket *socket, const QString &reason);
     void broadcastSnapshot();
     void sendRoomList(QTcpSocket *socket);
     void broadcastRoomList();
+    int welcomedCount() const;
     void broadcastEvent(const net::EventMessage &event);
     void broadcastToWelcomed(const QByteArray &frame);
 
@@ -106,6 +119,9 @@ private:
     quint32 nextSessionId_ = 1;
     int rejectedClients_ = 0;
     bool matchEndSent_ = false;
+    // openRoom() 由本地宿主调用：只有这种房间才把第一个会话标成房主。
+    // 独立 NeonCoreServer 的 TCP 客户端都只是加入者，控制权在 stdio 宿主。
+    bool localHostRoom_ = false;
     QString lastError_;
 };
 

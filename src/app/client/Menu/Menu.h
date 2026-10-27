@@ -6,10 +6,12 @@
 #include "Menu/Armory/Armory.h"
 #include "Menu/Depot/Depot.h"
 #include "Menu/Editor/Editor.h"
+#include "Menu/Failure/Failure.h"
 #include "Menu/Main/Main.h"
 #include "Menu/Map/Map.h"
 #include "Menu/Match/Match.h"
 #include "Menu/Result/Result.h"
+#include "Menu/Room/Room.h"
 #include "Menu/Settings/Settings.h"
 
 #include <QImage>
@@ -27,8 +29,12 @@ public:
     enum class Screen {
         Main,
         Map,
+        // 房间/大厅：主机与加入者在对局开始前看到的同一块服务端权威界面。
+        Room,
         Match,
         Result,
+        // 无法连接服务器 / 房间已解散：独立的失败页，不套用对局失败结算。
+        Failure,
         Editor,
         Shop,
         Armory,
@@ -74,8 +80,13 @@ private:
     void startCampaign(int index);
     void startCustom(const menu::Editor::Config &config);
     void retry();
+    void retryFailure();
     void returnToMenu();
     void openEditor();
+    void enterMatchScreen();
+
+    menu::Room::View roomView() const;
+    menu::Failure::View failureView() const;
 
     std::vector<Games::Level> levels_;
     std::vector<Games::Level> campaignLevels_;
@@ -83,6 +94,8 @@ private:
     menu::Main main_;
     menu::Map map_;
     menu::Match match_;
+    menu::Room room_;
+    menu::Failure failure_;
     menu::Result result_;
     menu::Editor editor_;
     menu::Depot depot_;

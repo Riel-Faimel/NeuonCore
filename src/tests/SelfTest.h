@@ -646,11 +646,13 @@ public:
         menu.editor_.setMode(menu::Editor::Mode::Host);
         menu.editor_.setPort(customHostPort);
         menu.startCustom(menu.editor_.config());
-        success &= require(menu.screen() == Menu::Screen::Match
+        success &= require(menu.screen() == Menu::Screen::Room
+                               && menu.match_.inRoom()
                                && menu.match_.localServer() != nullptr
                                && menu.match_.localServer()->isListening()
-                               && menu.match_.localServer()->port() == customHostPort,
-                           QStringLiteral("custom host binds the configured port"));
+                               && menu.match_.localServer()->port() == customHostPort
+                               && !menu.match_.localServer()->running(),
+                           QStringLiteral("custom host enters a room instead of starting"));
         menu.returnToMenu();
 
         log(QStringLiteral("Script editor"));
@@ -1250,6 +1252,137 @@ public:
         }
         networkMenu.returnToMenu();
 
+        log(QStringLiteral("Room lobby lifecycle"));
+        auto pumpMenu = [&](Menu &roomMenu, const std::function<bool()> &predicate,
+                            int timeoutMs) {
+            QElapsedTimer timer;
+            timer.start();
+            while (!predicate() && timer.elapsed() < timeoutMs) {
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+                roomMenu.update(1.0f / 60.0f);
+                QThread::msleep(1);
+            }
+            return predicate();
+        };
+
+        QTcpServer roomProbe;
+        success &= require(roomProbe.listen(QHostAddress::LocalHost, 0),
+                           QStringLiteral("room test reserves a host port"));
+        const quint16 roomPort = roomProbe.serverPort();
+        roomProbe.close();
+
+        Menu hostMenu(false, false);
+        hostMenu.keyPress(Qt::Key_2);
+        hostMenu.keyPress(Qt::Key_F2);
+        hostMenu.editor_.setPort(roomPort);
+        hostMenu.keyPress(Qt::Key_Return);
+        success &= require(hostMenu.screen() == Menu::Screen::Room
+                               && hostMenu.match_.inRoom()
+                               && hostMenu.match_.roomHost(),
+                           QStringLiteral("host ENTER enters the room instead of the match"));
+        success &= require(hostMenu.match_.localServer() != nullptr
+                               && hostMenu.match_.localServer()->isListening()
+                               && !hostMenu.match_.localServer()->running()
+                               && hostMenu.match_.gameClient() != nullptr
+                               && hostMenu.match_.gameClient()->snapshotCount() == 0,
+                           QStringLiteral("host room owns a listening server without a match"));
+        success &= require(pumpMenu(hostMenu, [&] {
+                               return hostMenu.match_.roomConnected()
+                                      && hostMenu.match_.roomPlayers() == 1;
+                           }, 4000),
+                           QStringLiteral("host appears in its own room with one player"));
+        success &= require(hostMenu.match_.roomYouAreHost()
+                               && !hostMenu.match_.roomName().isEmpty()
+                               && hostMenu.match_.localServer()->roomHostSessionId()
+                                      == hostMenu.match_.gameClient()->sessionId()
+                               && hostMenu.roomView().canStart,
+                           QStringLiteral("room view marks the host, name and player count"));
+        menu::Room roomScreen;
+        menu::Room::View hostRoomView = hostMenu.roomView();
+        success &= require(roomScreen.keyPress(Qt::Key_Return, false, hostRoomView)
+                                   == menu::Room::Action::Start
+                               && roomScreen.keyPress(Qt::Key_X, false, hostRoomView)
+                                      == menu::Room::Action::Dissolve
+                               && roomScreen.keyPress(Qt::Key_Escape, false, hostRoomView)
+                                      == menu::Room::Action::Back,
+                           QStringLiteral("room host controls are ENTER start / X dissolve / ESC back"));
+
+        Menu joinMenu(false, false);
+        joinMenu.keyPress(Qt::Key_2);
+        joinMenu.keyPress(Qt::Key_F3);
+        joinMenu.editor_.setHost(QStringLiteral("127.0.0.1"));
+        joinMenu.editor_.setPort(roomPort);
+        joinMenu.keyPress(Qt::Key_Return);
+        success &= require(joinMenu.screen() == Menu::Screen::Room
+                               && joinMenu.match_.inRoom()
+                               && !joinMenu.match_.roomHost(),
+                           QStringLiteral("joining a room opens the same lobby screen"));
+        success &= require(pumpMenu(joinMenu, [&] {
+                               return joinMenu.match_.roomConnected()
+                                      && joinMenu.match_.roomPlayers() == 2;
+                           }, 4000),
+                           QStringLiteral("joined client sees the authoritative player count"));
+        success &= require(pumpMenu(hostMenu, [&] {
+                               return hostMenu.match_.roomPlayers() == 2;
+                           }, 3000),
+                           QStringLiteral("host room count updates when a client joins"));
+        success &= require(hostMenu.match_.roomName() == joinMenu.match_.roomName()
+                               && joinMenu.match_.roomMaxPlayers() == 4
+                               && !joinMenu.match_.roomYouAreHost(),
+                           QStringLiteral("both sides share the same room name and host marker"));
+        joinMenu.keyPress(Qt::Key_Return);
+        success &= require(joinMenu.match_.inRoom()
+                               && !hostMenu.match_.localServer()->running(),
+                           QStringLiteral("only the host can start the match from the room"));
+
+        hostMenu.keyPress(Qt::Key_Return);
+        success &= require(hostMenu.match_.localServer() != nullptr
+                               && hostMenu.match_.localServer()->running(),
+                           QStringLiteral("host ENTER starts the authoritative match"));
+        success &= require(pumpMenu(hostMenu, [&] {
+                               return hostMenu.screen() == Menu::Screen::Match
+                                      && hostMenu.match_.gameClient() != nullptr
+                                      && hostMenu.match_.gameClient()->snapshotCount() > 0;
+                           }, 4000),
+                           QStringLiteral("host switches from room to the running match"));
+        success &= require(pumpMenu(joinMenu, [&] {
+                               return joinMenu.screen() == Menu::Screen::Match
+                                      && joinMenu.match_.gameClient() != nullptr
+                                      && joinMenu.match_.gameClient()->snapshotCount() > 0;
+                           }, 4000),
+                           QStringLiteral("joined client follows the host start into the match"));
+        success &= require(hostMenu.match_.totalWaves() >= 1
+                               && joinMenu.match_.totalWaves()
+                                      == hostMenu.match_.totalWaves(),
+                           QStringLiteral("host start uses the submitted script for every client"));
+
+        hostMenu.match_.dissolveRoom();
+        success &= require(hostMenu.match_.localServer() == nullptr,
+                           QStringLiteral("dissolve closes the embedded host server"));
+        success &= require(pumpMenu(joinMenu, [&] {
+                               return joinMenu.screen() == Menu::Screen::Failure;
+                           }, 4000),
+                           QStringLiteral("dissolved host sends clients to the failure screen"));
+        success &= require(joinMenu.failureView().title.contains(QStringLiteral("房间已解散")),
+                           QStringLiteral("failure screen explains the room was dissolved"));
+
+        joinMenu.keyPress(Qt::Key_Return);
+        success &= require(joinMenu.screen() == Menu::Screen::Room
+                               && joinMenu.match_.active(),
+                           QStringLiteral("failure retry recreates the connection attempt"));
+        success &= require(pumpMenu(joinMenu, [&] {
+                               return joinMenu.screen() == Menu::Screen::Failure;
+                           }, 8000),
+                           QStringLiteral("retry against an absent server reaches failure"));
+        success &= require(joinMenu.failureView().title.contains(
+                               QStringLiteral("无法连接服务器")),
+                           QStringLiteral("failure screen distinguishes a missing server"));
+        joinMenu.keyPress(Qt::Key_Escape);
+        success &= require(joinMenu.screen() == Menu::Screen::Main
+                               && !joinMenu.match_.active(),
+                           QStringLiteral("failure screen ESC returns to the main menu"));
+        hostMenu.returnToMenu();
+
         log(success ? QStringLiteral("ALL C++ SMOKE TESTS PASSED")
                     : QStringLiteral("SMOKE TESTS FAILED"));
         logFile.close();
@@ -1362,10 +1495,10 @@ public:
             menu.mouseMove(position);
             BaseService.pointerMoveTo(position);
         };
-        auto save = [&](const QString &name) {
-            menu.render();
+        auto saveMenu = [&](Menu &screenMenu, const QString &name) {
+            screenMenu.render();
             const QString path = dir.filePath(name);
-            QImage frame = menu.frame().copy();
+            QImage frame = screenMenu.frame().copy();
             {
                 QPainter overlay(&frame);
                 BaseService.pointerDraw(overlay);
@@ -1376,6 +1509,7 @@ public:
                 std::printf("%s\n", path.toUtf8().constData());
             }
         };
+        auto save = [&](const QString &name) { saveMenu(menu, name); };
 
         for (int i = 0; i < 120; ++i) {
             menu.update(1.0f / 60.0f);
@@ -1613,6 +1747,65 @@ public:
         }
         menu.update(0.0f);
         save(QStringLiteral("game_over.png"));
+
+        // 房间/大厅与房间失败页：真实内嵌服务端 + 两个真实 TCP 客户端。
+        QTcpServer captureProbe;
+        quint16 captureRoomPort = 0;
+        if (captureProbe.listen(QHostAddress::LocalHost, 0)) {
+            captureRoomPort = captureProbe.serverPort();
+            captureProbe.close();
+        }
+        if (captureRoomPort != 0) {
+            Menu hostRoom(false, false);
+            hostRoom.keyPress(Qt::Key_2);
+            hostRoom.keyPress(Qt::Key_F2);
+            hostRoom.editor_.setPort(captureRoomPort);
+            hostRoom.keyPress(Qt::Key_Return);
+
+            Menu joinRoom(false, false);
+            joinRoom.keyPress(Qt::Key_2);
+            joinRoom.keyPress(Qt::Key_F3);
+            joinRoom.editor_.setHost(QStringLiteral("127.0.0.1"));
+            joinRoom.editor_.setPort(captureRoomPort);
+            joinRoom.keyPress(Qt::Key_Return);
+
+            auto spinRoom = [&](Menu &screenMenu, const std::function<bool()> &done,
+                                int timeoutMs) {
+                QElapsedTimer timer;
+                timer.start();
+                while (!done() && timer.elapsed() < timeoutMs) {
+                    QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+                    screenMenu.update(1.0f / 60.0f);
+                    QThread::msleep(1);
+                }
+            };
+            spinRoom(hostRoom, [&] {
+                return hostRoom.match_.roomConnected()
+                       && hostRoom.match_.roomPlayers() == 1;
+            }, 4000);
+            spinRoom(joinRoom, [&] {
+                return joinRoom.match_.roomConnected()
+                       && joinRoom.match_.roomPlayers() == 2;
+            }, 4000);
+            spinRoom(hostRoom, [&] {
+                return hostRoom.match_.roomPlayers() == 2;
+            }, 2000);
+
+            hostRoom.mouseMove({410.0f, 576.0f});
+            BaseService.pointerMoveTo({410.0f, 576.0f});
+            saveMenu(hostRoom, QStringLiteral("room_host.png"));
+            joinRoom.mouseMove({880.0f, 576.0f});
+            BaseService.pointerMoveTo({880.0f, 576.0f});
+            saveMenu(joinRoom, QStringLiteral("room_join.png"));
+
+            hostRoom.keyPress(Qt::Key_X);
+            spinRoom(joinRoom, [&] {
+                return joinRoom.screen() == Menu::Screen::Failure;
+            }, 4000);
+            joinRoom.mouseMove({510.0f, 532.0f});
+            BaseService.pointerMoveTo({510.0f, 532.0f});
+            saveMenu(joinRoom, QStringLiteral("room_failure.png"));
+        }
         return 0;
     }
 };

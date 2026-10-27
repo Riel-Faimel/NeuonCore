@@ -31,6 +31,9 @@ public:
     enum class Mode {
         Local,
         Network,
+        // 局域网主机：启动内嵌 GameServer 并进入房间，等房主按 ENTER 才 startMatch。
+        // 与 Network 的“单机自动端口 + 立即开局”和“加入远端”区分开。
+        Host,
     };
 
     Match();
@@ -44,10 +47,35 @@ public:
 
     void start(const Games::Level &level);
     void stop();
+    // 用上一次 start() 的关卡和配置重新开始（失败页的重试）。
+    bool restart();
     bool active() const { return games_ != nullptr || client_ != nullptr; }
     bool lobby() const;
     bool failed() const;
     QString error() const { return error_; }
+
+    // ----- 房间 / 大厅（服务端权威） -----
+    bool inRoom() const;
+    bool roomHost() const { return mode_ == Mode::Host; }
+    bool roomConnected() const;
+    bool roomPlaying() const;
+    bool roomYouAreHost() const;
+    QString roomName() const;
+    QString roomEndpoint() const;
+    int roomPlayers() const;
+    int roomMaxPlayers() const;
+
+    // 房主动作：直接调用内嵌 GameServer::startMatch()，绝不走 TCP StartMatch。
+    bool startRoomMatch();
+    // 房主解散：通知客户端并关闭内嵌服务端；之后 Match 不再 active。
+    void dissolveRoom();
+    // 加入者离开；只断开本地客户端，不影响主机。
+    void leaveRoom() { stop(); }
+
+    // 失败页信息（区分无法连接 / 房间已解散）。
+    QString failureTitle() const;
+    QString failureDetail() const;
+    QString failureEndpoint() const;
 
     void update(float dt);
     void render();
@@ -77,12 +105,15 @@ private:
 
     void startLocal(const Games::Level &level);
     void startNetwork(const Games::Level &level);
+    void startHostRoom(const Games::Level &level);
     void renderLobby();
 
     Mode mode_ = Mode::Network;
     QString host_;
     quint16 port_ = 0;
     QString error_;
+    Games::Level level_;
+    bool hasLevel_ = false;
 
     std::unique_ptr<Games> games_;
     std::unique_ptr<client::GameClient> client_;

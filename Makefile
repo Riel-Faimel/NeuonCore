@@ -65,6 +65,7 @@ CLIENT_COMPONENTS := Base/Base Base/Input/Input Base/Audio/Audio Base/Audio/Musi
                      Games/Games Games/Renderer/Renderer Client/GameView \
                      Net/Client \
                      Menu/Menu Menu/Main/Main Menu/Map/Map Menu/Match/Match \
+                     Menu/Room/Room Menu/Failure/Failure \
                      Menu/Result/Result Menu/Editor/Editor Menu/Depot/Depot \
                      Menu/Armory/Armory \
                      Menu/Settings/Settings

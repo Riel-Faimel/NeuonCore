@@ -4,7 +4,7 @@
 
 这篇文档先定边界和迁移顺序，不直接改运行代码。当前 `local` 单机路径保持可玩，迁移按阶段进行，每阶段都能构建、能跑 smoke。
 
-> 状态：阶段 0–3 已完成。阶段 3 的实现是 `src/app/server/Net/Server.*`（`server::GameServer`，headless `GameSimulation` + 60Hz tick + `QTcpServer`）和 `src/app/client/Net/Client.*`（`client::GameClient`，`QTcpSocket` + 握手/输入/快照/`GameView`/`Renderer`），协议/快照在 `src/app/shared/Net/`，消息在 `include/Net/Input.h`、`Messages.h`、`Snapshot.h`。`menu::Match` 默认走网络：单机在 127.0.0.1 上启动自动端口的内嵌服务端，`--connect host:port` 连远端。与本文原计划的差异：内嵌服务端与客户端在同一 Qt 事件循环（真实 TCP 回环，不额外起线程）；本地 `Games` 路径保留为 `--local`/自动化测试回退，等阶段 4 再删除。
+> 状态：阶段 0–3 已完成，并补上了房间/大厅生命周期。阶段 3 的实现是 `src/app/server/Net/Server.*`（`server::GameServer`，headless `GameSimulation` + 60Hz tick + `QTcpServer`）和 `src/app/client/Net/Client.*`（`client::GameClient`，`QTcpSocket` + 握手/输入/快照/`GameView`/`Renderer`），协议/快照在 `src/app/shared/Net/`，消息在 `include/Net/Input.h`、`Messages.h`、`Snapshot.h`。`menu::Match` 默认走网络：单机在 127.0.0.1 上启动自动端口的内嵌服务端并立即开局，`--connect host:port` 连远端并进入 `Room`。自定义协议的“局域网主机”启动内嵌服务端后只开房，房主在 `Room` 按 ENTER 才本地 `startMatch()`；按 X 解散会关闭服务端并让加入者看到专用失败页。与本文原计划的差异：内嵌服务端与客户端在同一 Qt 事件循环（真实 TCP 回环，不额外起线程）；本地 `Games` 路径保留为 `--local`/自动化测试回退，等阶段 4 再删除。
 
 ## 1. 当前耦合点
 

@@ -56,11 +56,30 @@ void Match::configure(Mode mode, const QString &host, quint16 port)
 void Match::start(const Games::Level &level)
 {
     stop();
-    if (mode_ == Mode::Local) {
+    level_ = level;
+    hasLevel_ = true;
+    switch (mode_) {
+    case Mode::Local:
         startLocal(level);
-    } else {
+        break;
+    case Mode::Host:
+        startHostRoom(level);
+        break;
+    case Mode::Network:
         startNetwork(level);
+        break;
     }
+}
+
+bool Match::restart()
+{
+    if (!hasLevel_) {
+        return false;
+    }
+    const Games::Level level = level_;
+    stop();
+    start(level);
+    return active();
 }
 
 void Match::startLocal(const Games::Level &level)
@@ -73,11 +92,10 @@ void Match::startNetwork(const Games::Level &level)
     client_ = std::make_unique<client::GameClient>();
     if (host_.isEmpty()) {
         // 单机：同进程内嵌服务端，自动端口 + 127.0.0.1 回环，仍然走真实 TCP。
-        // 自定义“局域网主机”会传入显式端口：此时绑定所有网卡，让局域网客户端加入。
+        // 单机路径保持“立即开局”；只有 Mode::Host 才进入房间等待房主开始。
         server_ = std::make_unique<server::GameServer>();
         QString error;
-        const bool lanHost = port_ != 0;
-        if (!server_->listen(lanHost ? port_ : 0, !lanHost, &error)) {
+        if (!server_->listen(0, true, &error)) {
             error_ = error;
             client_->setFatalError(error);
             return;
@@ -95,14 +113,43 @@ void Match::startNetwork(const Games::Level &level)
             return;
         }
     } else {
-        client_->setAutoReconnect(true);
+        // 加入远端主机：只连接并进入房间；开局只能由房主本地 startMatch 触发。
+        // 失败由专用失败页提供手动重试，不做后台重连以免停留在空画面。
+        client_->setAutoReconnect(false);
         const quint16 port = port_ == 0 ? net::kDefaultPort : port_;
         if (!client_->connectToHost(host_, port)) {
             error_ = client_->lastError();
             return;
         }
-        // 加入主机：控制权在主机/stdio，客户端不发送 StartMatch。
     }
+}
+
+void Match::startHostRoom(const Games::Level &level)
+{
+    client_ = std::make_unique<client::GameClient>();
+    server_ = std::make_unique<server::GameServer>();
+    QString error;
+    // 局域网主机：绑定所有网卡上的显式端口，让其他玩家加入。
+    if (!server_->listen(port_, false, &error)) {
+        error_ = error;
+        client_->setFatalError(error);
+        return;
+    }
+    const QString roomName = QStringLiteral("%1 房间 · %2")
+                                 .arg(level.name.isEmpty() ? QStringLiteral("自定义")
+                                                           : level.name)
+                                 .arg(server_->port());
+    if (!server_->openRoom(roomName, &error)) {
+        error_ = error;
+        client_->setFatalError(error);
+        return;
+    }
+    client_->setAutoReconnect(false);
+    if (!client_->connectToHost(QStringLiteral("127.0.0.1"), server_->port())) {
+        error_ = client_->lastError();
+        return;
+    }
+    // 注意：这里不调用 startMatch()。房主在房间页按 ENTER 时才真正开始。
 }
 
 void Match::stop()
@@ -111,6 +158,8 @@ void Match::stop()
     server_.reset();
     games_.reset();
     error_.clear();
+    level_ = Games::Level{};
+    hasLevel_ = false;
 }
 
 bool Match::failed() const
@@ -123,7 +172,180 @@ bool Match::failed() const
 
 bool Match::lobby() const
 {
-    return client_ != nullptr && client_->inLobby();
+    return inRoom();
+}
+
+bool Match::inRoom() const
+{
+    if (games_ != nullptr || client_ == nullptr || failed()) {
+        return false;
+    }
+    if (client_->snapshotCount() > 0 || client_->matchEnded()) {
+        return false;
+    }
+    if (mode_ == Mode::Host) {
+        return true;
+    }
+    // 加入远端：在收到第一份快照前都留在房间页；单机内嵌服务端立即开局，不经过这里。
+    return mode_ == Mode::Network && !host_.isEmpty();
+}
+
+bool Match::roomConnected() const
+{
+    return client_ != nullptr && client_->welcomed();
+}
+
+bool Match::roomPlaying() const
+{
+    if (server_ != nullptr && server_->running()) {
+        return true;
+    }
+    if (client_ != nullptr) {
+        for (const net::RoomInfo &room : client_->rooms()) {
+            if (room.playing) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool Match::roomYouAreHost() const
+{
+    // 只有启动内嵌 GameServer 的 Match 是房主；加入远端时即使是独立服务端的
+    // 第一个 TCP 会话也不是房主（控制权在启动 NeonCoreServer 的 stdio 宿主）。
+    return mode_ == Mode::Host && server_ != nullptr;
+}
+
+QString Match::roomName() const
+{
+    if (server_ != nullptr && !server_->roomName().isEmpty()) {
+        return server_->roomName();
+    }
+    if (client_ != nullptr) {
+        for (const net::RoomInfo &room : client_->rooms()) {
+            if (!room.name.isEmpty()) {
+                return room.name;
+            }
+        }
+    }
+    return QStringLiteral("等待房间信息…");
+}
+
+QString Match::roomEndpoint() const
+{
+    if (server_ != nullptr) {
+        return QStringLiteral("0.0.0.0:%1").arg(server_->port());
+    }
+    if (!host_.isEmpty()) {
+        return QStringLiteral("%1:%2").arg(host_).arg(port_ == 0 ? net::kDefaultPort : port_);
+    }
+    return QString();
+}
+
+int Match::roomPlayers() const
+{
+    if (server_ != nullptr) {
+        return server_->roomPlayers();
+    }
+    if (client_ != nullptr) {
+        for (const net::RoomInfo &room : client_->rooms()) {
+            return room.players;
+        }
+    }
+    return 0;
+}
+
+int Match::roomMaxPlayers() const
+{
+    if (server_ != nullptr) {
+        return server_->roomMaxPlayers();
+    }
+    if (client_ != nullptr) {
+        for (const net::RoomInfo &room : client_->rooms()) {
+            return room.maxPlayers;
+        }
+    }
+    return 4;
+}
+
+bool Match::startRoomMatch()
+{
+    if (!roomHost() || server_ == nullptr) {
+        return false;
+    }
+    if (server_->running()) {
+        return true;   // 重复 ENTER 不重开对局
+    }
+    QString startError;
+    if (!server_->startMatch(level_, &startError)) {
+        error_ = startError;
+        if (client_ != nullptr) {
+            client_->setFatalError(startError);
+        }
+        return false;
+    }
+    return true;
+}
+
+void Match::dissolveRoom()
+{
+    if (server_ != nullptr) {
+        server_->dissolveRoom(QStringLiteral("房间已解散"));
+    }
+    client_.reset();
+    server_.reset();
+    games_.reset();
+    error_.clear();
+}
+
+QString Match::failureTitle() const
+{
+    if (mode_ == Mode::Host) {
+        return QStringLiteral("无法启动服务器");
+    }
+    if (client_ != nullptr && client_->lastError().contains(QStringLiteral("解散"))) {
+        return QStringLiteral("房间已解散");
+    }
+    // 进过房间的客户端掉线（包括主机在对局中解散）都按“房间已解散”呈现。
+    if (client_ != nullptr && client_->hadRoom()) {
+        return QStringLiteral("房间已解散");
+    }
+    if (client_ != nullptr && client_->snapshotCount() > 0) {
+        return QStringLiteral("连接已中断");
+    }
+    if (client_ != nullptr && client_->hadSession()) {
+        return QStringLiteral("房间已解散");
+    }
+    return QStringLiteral("无法连接服务器");
+}
+
+QString Match::failureDetail() const
+{
+    QString detail;
+    if (!error_.isEmpty()) {
+        detail = error_;
+    } else if (client_ != nullptr && !client_->lastError().isEmpty()) {
+        detail = client_->lastError();
+    }
+    if (detail.isEmpty()) {
+        return QStringLiteral("服务器没有响应，或房间已经关闭。");
+    }
+    if (detail == failureTitle()) {
+        return QStringLiteral("房主关闭了房间服务器，所有客户端连接已断开。");
+    }
+    return detail;
+}
+
+QString Match::failureEndpoint() const
+{
+    if (server_ != nullptr) {
+        return QStringLiteral("127.0.0.1:%1").arg(server_->port());
+    }
+    if (!host_.isEmpty()) {
+        return QStringLiteral("%1:%2").arg(host_).arg(port_ == 0 ? net::kDefaultPort : port_);
+    }
+    return QString();
 }
 
 void Match::update(float dt)

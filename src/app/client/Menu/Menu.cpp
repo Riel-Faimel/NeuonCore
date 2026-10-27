@@ -114,20 +114,85 @@ menu::Result::Summary Menu::summary() const
 
 const QImage &Menu::frame() const
 {
-    return screen_ == Screen::Match && match_.active() ? match_.frame() : frame_;
+    if (screen_ == Screen::Match && match_.active()) {
+        return match_.frame();
+    }
+    return frame_;
+}
+
+menu::Room::View Menu::roomView() const
+{
+    menu::Room::View view;
+    view.host = match_.roomHost();
+    view.youAreHost = match_.roomYouAreHost();
+    view.connected = match_.roomConnected();
+    view.playing = match_.roomPlaying();
+    view.canStart = view.host && view.connected && !view.playing;
+    view.roomName = match_.roomName();
+    view.endpoint = match_.roomEndpoint();
+    view.players = match_.roomPlayers();
+    view.maxPlayers = match_.roomMaxPlayers();
+    if (!view.connected) {
+        view.status = QStringLiteral("正在连接主机，等待房间状态…");
+    } else if (view.playing) {
+        view.status = QStringLiteral("房主已开始对局，正在同步战场…");
+    } else if (view.host) {
+        view.status = QStringLiteral("房间已建立，等待你按 ENTER 开始对局");
+    } else {
+        view.status = QStringLiteral("你已加入房间，等待房主开始对局");
+    }
+    if (view.host && !campaignActive_) {
+        view.scriptSummary = QStringLiteral("台本 %1 波 · %2 个敌方目标")
+                                 .arg(editor_.waveCount())
+                                 .arg(editor_.totalEnemies());
+    } else if (campaignActive_ && activeCampaign_ >= 0
+               && activeCampaign_ < int(campaignLevels_.size())) {
+        view.scriptSummary = QStringLiteral("%1 · 等待房主开始")
+                                 .arg(campaignLevels_[size_t(activeCampaign_)].name);
+    } else {
+        view.scriptSummary = QStringLiteral("台本由主机同步 · 对局开始后进入战斗");
+    }
+    return view;
+}
+
+menu::Failure::View Menu::failureView() const
+{
+    menu::Failure::View view;
+    view.title = match_.failureTitle();
+    view.detail = match_.failureDetail();
+    view.endpoint = match_.failureEndpoint();
+    view.retryable = true;
+    return view;
 }
 
 void Menu::update(float dt)
 {
+    if (screen_ == Screen::Room && match_.active()) {
+        match_.update(dt);
+        if (match_.failed()) {
+            screen_ = Screen::Failure;
+        } else if (!match_.inRoom()) {
+            screen_ = Screen::Match;
+        }
+        return;
+    }
     if (screen_ == Screen::Match && match_.active()) {
         match_.update(dt);
-        if (match_.finished()) {
+        if (match_.failed()) {
+            // 连接/房间层失败是独立页面，不进入对局结算。
+            screen_ = Screen::Failure;
+        } else if (match_.inRoom()) {
+            screen_ = Screen::Room;
+        } else if (match_.finished()) {
             screen_ = Screen::Result;
         }
         return;
     }
     if (screen_ == Screen::Result && match_.active()) {
         match_.update(dt);
+        return;
+    }
+    if (screen_ == Screen::Failure) {
         return;
     }
     if (screen_ == Screen::Main) {
@@ -141,8 +206,18 @@ void Menu::update(float dt)
 
 void Menu::render()
 {
+    if (screen_ == Screen::Room && match_.active()) {
+        QPainter painter(&frame_);
+        room_.render(painter, roomView());
+        return;
+    }
     if (screen_ == Screen::Match && match_.active()) {
         match_.render();
+        return;
+    }
+    if (screen_ == Screen::Failure) {
+        QPainter painter(&frame_);
+        failure_.render(painter, failureView());
         return;
     }
     if (screen_ == Screen::Result && match_.active()) {
@@ -180,7 +255,7 @@ void Menu::startCampaign(int index)
     activeCampaign_ = index;
     campaignActive_ = true;
     match_.start(campaignLevels_[size_t(index)]);
-    screen_ = Screen::Match;
+    enterMatchScreen();
     BaseService.keyRelease(Qt::Key_Escape);
 }
 
@@ -194,19 +269,32 @@ void Menu::startCustom(const menu::Editor::Config &config)
     level.startWave = 1;
 
     if (config.mode == menu::Editor::Mode::Single) {
-        // 单机自定义：不开放端口，使用本地直连路径。
+        // 单机自定义：不开放端口，使用本地直连路径，保持直接开局。
         match_.configure(menu::Match::Mode::Local);
     } else if (config.mode == menu::Editor::Mode::Host) {
-        // 本机开房：port 非 0 让 Match 在 0.0.0.0 上启动内嵌服务端。
-        match_.configure(menu::Match::Mode::Network, QString(), config.port);
+        // 本机开房：启动内嵌服务端并进入房间，不立即 startMatch。
+        match_.configure(menu::Match::Mode::Host, QString(), config.port);
     } else {
-        // 加入已有主机。
+        // 加入已有主机：只连接并进入房间，开局权在房主。
         match_.configure(menu::Match::Mode::Network, config.host, config.port);
     }
 
     match_.start(level);
-    screen_ = Screen::Match;
+    enterMatchScreen();
     BaseService.keyRelease(Qt::Key_Escape);
+}
+
+void Menu::enterMatchScreen()
+{
+    if (!match_.active()) {
+        screen_ = Screen::Main;
+        return;
+    }
+    if (match_.failed()) {
+        screen_ = Screen::Failure;
+        return;
+    }
+    screen_ = match_.inRoom() ? Screen::Room : Screen::Match;
 }
 
 void Menu::startLevel(int index)
@@ -239,6 +327,17 @@ void Menu::retry()
     } else {
         startLevel(level_);
     }
+}
+
+void Menu::retryFailure()
+{
+    if (!match_.active()) {
+        returnToMenu();
+        return;
+    }
+    match_.restart();
+    enterMatchScreen();
+    BaseService.keyRelease(Qt::Key_Escape);
 }
 
 void Menu::returnToMenu()
@@ -304,14 +403,41 @@ void Menu::keyPress(int key, bool autoRepeat)
         }
         break;
     }
+    case Screen::Room: {
+        const menu::Room::Action action =
+            room_.keyPress(key, autoRepeat, roomView());
+        if (action == menu::Room::Action::Start) {
+            match_.startRoomMatch();
+            BaseService.playSound(QStringLiteral("ui"));
+        } else if (action == menu::Room::Action::Dissolve) {
+            // 房主解散：通知已连接客户端，然后关闭内嵌服务端。
+            match_.dissolveRoom();
+            returnToMenu();
+        } else if (action == menu::Room::Action::Back) {
+            if (match_.roomHost()) {
+                match_.dissolveRoom();
+            } else {
+                match_.leaveRoom();
+            }
+            returnToMenu();
+        }
+        break;
+    }
+    case Screen::Failure: {
+        const menu::Failure::Action action = failure_.keyPress(key);
+        if (action == menu::Failure::Action::Retry) {
+            retryFailure();
+        } else if (action == menu::Failure::Action::Back) {
+            returnToMenu();
+        }
+        break;
+    }
     case Screen::Match:
         if (!match_.active()) {
             break;
         }
         if (match_.lobby()) {
-            if (key == Qt::Key_Escape || key == Qt::Key_Q) {
-                returnToMenu();
-            }
+            screen_ = Screen::Room;
             break;
         }
         match_.keyPress(key, autoRepeat);
@@ -376,7 +502,9 @@ void Menu::mouseMove(const Math::Vec2 &position)
 {
     mouse_ = position;
     mouseActive_ = true;
-    if (screen_ == Screen::Match) {
+    if (screen_ == Screen::Room) {
+        room_.mouseMove(position);
+    } else if (screen_ == Screen::Match) {
         match_.mouseMove(position);
     } else if (screen_ == Screen::Settings) {
         settings_.mouseMove(position);
@@ -432,7 +560,38 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
         }
         break;
     }
+    case Screen::Room: {
+        const menu::Room::Action action = room_.mousePress(position, roomView());
+        if (action == menu::Room::Action::Start) {
+            match_.startRoomMatch();
+            BaseService.playSound(QStringLiteral("ui"));
+        } else if (action == menu::Room::Action::Dissolve) {
+            match_.dissolveRoom();
+            returnToMenu();
+        } else if (action == menu::Room::Action::Back) {
+            if (match_.roomHost()) {
+                match_.dissolveRoom();
+            } else {
+                match_.leaveRoom();
+            }
+            returnToMenu();
+        }
+        break;
+    }
+    case Screen::Failure: {
+        const menu::Failure::Action action = failure_.mousePress(position);
+        if (action == menu::Failure::Action::Retry) {
+            retryFailure();
+        } else if (action == menu::Failure::Action::Back) {
+            returnToMenu();
+        }
+        break;
+    }
     case Screen::Match:
+        if (match_.lobby()) {
+            screen_ = Screen::Room;
+            break;
+        }
         match_.mousePressLeft(position);
         break;
     case Screen::Result: {

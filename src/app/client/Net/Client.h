@@ -58,6 +58,9 @@ public:
     bool welcomed() const { return welcomed_; }
     bool matchActive() const { return snapshotCount_ > 0; }
     bool inLobby() const { return inLobby_; }
+    // 曾经握手 / 曾经进入房间：断线时用来区分“无法连接服务器”和“房间已解散”。
+    bool hadSession() const { return hadSession_; }
+    bool hadRoom() const { return hadRoom_; }
     const std::vector<net::RoomInfo> &rooms() const { return rooms_; }
     bool failed() const { return failed_; }
     bool matchEnded() const { return matchEnded_; }
@@ -120,6 +123,8 @@ private:
     bool matchRequested_ = false;
     bool welcomed_ = false;
     bool inLobby_ = false;
+    bool hadSession_ = false;
+    bool hadRoom_ = false;
     bool failed_ = false;
     bool matchEnded_ = false;
     bool autoReconnect_ = false;
