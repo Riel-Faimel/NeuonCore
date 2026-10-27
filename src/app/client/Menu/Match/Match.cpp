@@ -521,7 +521,6 @@ void Match::keyRelease(int key)
     }
     if (client_) {
         BaseService.keyRelease(key);
-        client_->keyRelease(key);
     }
 }
 
@@ -576,9 +575,6 @@ void Match::mouseReleaseLeft()
         return;
     }
     BaseService.mouseReleaseLeft();
-    if (client_) {
-        client_->mouseReleaseLeft();
-    }
 }
 
 } // namespace menu

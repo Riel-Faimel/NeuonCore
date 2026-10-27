@@ -5,7 +5,7 @@
 
 #include "Menu/Menu.h"
 #include "Base/Base.h"
-#include "Client/GameView.h"
+#include "View/GameView.h"
 #include "Data/GameData.h"
 #include "Net/Client.h"
 #include "Net/Protocol.h"
@@ -955,6 +955,14 @@ public:
                 net::decodeSnapshotMessage(frame, &framed, &snapshotError);
             success &= require(framedOk && framed == original,
                                QStringLiteral("snapshot message roundtrips with framing"));
+            net::MessageHeader frameHeader;
+            QByteArray framePayload;
+            success &= require(net::decodeFrame(frame, &frameHeader, &framePayload)
+                                   && frameHeader.type == net::MessageType::Snapshot
+                                   && frameHeader.length == quint32(framePayload.size())
+                                   && quint32(frame.size())
+                                          == net::kFrameHeaderSize + frameHeader.length,
+                               QStringLiteral("snapshot is written as one exact frame"));
             const QByteArray wrongVersion = net::frameMessage(
                 net::MessageType::Snapshot, net::serializeSnapshot(original),
                 quint16(net::kProtocolVersion + 1));
@@ -967,7 +975,6 @@ public:
 
             net::RoomListMessage roomList;
             net::RoomInfo room;
-            room.id = 7;
             room.name = QStringLiteral("测试房间");
             room.players = 2;
             room.maxPlayers = 4;
@@ -1346,6 +1353,29 @@ public:
             success &= require(tcpServer.running()
                                    && tcpServer.snapshot().waves.totalWaves == 1,
                                QStringLiteral("TCP StartMatch cannot replace the host match"));
+
+            // 已删除的 JoinRoom（id 9）与任意未知类型：Hello 之后必须被拒绝。
+            const int rejectedBefore = tcpServer.rejectedClients();
+            QTcpSocket unknownProbe;
+            unknownProbe.connectToHost(QStringLiteral("127.0.0.1"), tcpServer.port());
+            pumpUntil([&] {
+                return unknownProbe.state() == QAbstractSocket::ConnectedState;
+            }, 2000);
+            net::HelloMessage unknownHello;
+            unknownHello.clientVersion = QStringLiteral("unknown-probe");
+            unknownProbe.write(net::encodeHello(unknownHello));
+            unknownProbe.flush();
+            pumpUntil([&] { return unknownProbe.bytesAvailable() > 0; }, 2000);
+            unknownProbe.write(net::frameMessage(
+                static_cast<net::MessageType>(9), QByteArray()));
+            unknownProbe.flush();
+            success &= require(pumpUntil([&] {
+                                   return unknownProbe.state()
+                                          == QAbstractSocket::UnconnectedState;
+                               }, 3000),
+                               QStringLiteral("server rejects the removed JoinRoom id"));
+            success &= require(tcpServer.rejectedClients() == rejectedBefore + 1,
+                               QStringLiteral("unknown message types are counted as rejects"));
 
             tcpClient.close();
             watcher.close();

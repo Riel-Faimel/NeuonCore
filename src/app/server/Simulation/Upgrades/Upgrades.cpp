@@ -1,4 +1,4 @@
-#include "Games/Upgrades/Upgrades.h"
+#include "Simulation/Upgrades/Upgrades.h"
 
 #include "Arena/Arena.h"
 #include "Data/GameData.h"

@@ -1,14 +1,13 @@
 #include "Net/Server.h"
 
 #include "Arena/Combatants/Enemy.h"
-#include "Games/Simulation/GameSimulation.h"
+#include "Simulation/GameSimulation.h"
 #include "Shop/Shop.h"
 
 #include <QHostAddress>
 #include <QTcpSocket>
 
 #include <algorithm>
-#include <cmath>
 #include <functional>
 #include <utility>
 
@@ -194,7 +193,7 @@ void GameServer::dissolveRoom(const QString &reason)
 
 QString GameServer::roomName() const
 {
-    return rooms_.isOpen() ? rooms_.defaultRoom().name : QString();
+    return rooms_.isOpen() ? rooms_.room().name : QString();
 }
 
 int GameServer::roomPlayers() const
@@ -204,7 +203,7 @@ int GameServer::roomPlayers() const
 
 int GameServer::roomMaxPlayers() const
 {
-    return rooms_.isOpen() ? rooms_.defaultRoom().maxPlayers : 0;
+    return rooms_.isOpen() ? rooms_.room().maxPlayers : 0;
 }
 
 quint32 GameServer::roomHostSessionId() const
@@ -212,7 +211,7 @@ quint32 GameServer::roomHostSessionId() const
     if (!rooms_.isOpen()) {
         return 0;
     }
-    const Room &room = rooms_.defaultRoom();
+    const Room &room = rooms_.room();
     if (room.hostSessionId != 0) {
         return room.hostSessionId;
     }
@@ -231,16 +230,6 @@ int GameServer::welcomedCount() const
         }
     }
     return count;
-}
-
-int GameServer::playerIdForSession(quint32 sessionId) const
-{
-    for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
-        if (it->id == sessionId) {
-            return it->playerId;
-        }
-    }
-    return 0;
 }
 
 int GameServer::allocatePlayerId() const
@@ -369,7 +358,7 @@ void GameServer::onDisconnected(QTcpSocket *socket)
     socket->deleteLater();
 
     // 房主离开房间：把房主交给下一个 welcomed 会话，房间继续。
-    if (rooms_.isOpen() && rooms_.defaultRoom().hostSessionId == sessionId) {
+    if (rooms_.isOpen() && rooms_.room().hostSessionId == sessionId) {
         quint32 nextHost = 0;
         for (auto other = sessions_.begin(); other != sessions_.end(); ++other) {
             if (other->welcomed) {
@@ -417,17 +406,14 @@ void GameServer::handleFrame(QTcpSocket *socket, const QByteArray &frame)
 
     switch (header.type) {
     case net::MessageType::Hello:
-        handleHello(socket, frame);
+        handleHello(socket, payload);
         break;
     case net::MessageType::StartMatch:
         // 控制面禁用网络：只有本地宿主（内嵌 Match / stdio）能开局。
         reject(socket, QStringLiteral("StartMatch is local-only; use the server host"));
         break;
     case net::MessageType::Input:
-        handleInput(socket, frame);
-        break;
-    case net::MessageType::JoinRoom:
-        handleJoinRoom(socket, frame);
+        handleInput(socket, payload);
         break;
     case net::MessageType::Welcome:
     case net::MessageType::Snapshot:
@@ -436,14 +422,18 @@ void GameServer::handleFrame(QTcpSocket *socket, const QByteArray &frame)
     case net::MessageType::RoomList:
         reject(socket, QStringLiteral("server-only message type received from client"));
         break;
+    default:
+        // 旧 JoinRoom 等已删除的消息 id、损坏的类型都按未知消息拒绝。
+        reject(socket, QStringLiteral("unknown message type %1").arg(int(header.type)));
+        break;
     }
 }
 
-void GameServer::handleHello(QTcpSocket *socket, const QByteArray &frame)
+void GameServer::handleHello(QTcpSocket *socket, const QByteArray &payload)
 {
     net::HelloMessage hello;
     QString error;
-    if (!net::decodeHello(frame, &hello, &error)) {
+    if (!net::deserializeHello(payload, &hello, &error)) {
         reject(socket, error);
         return;
     }
@@ -488,43 +478,13 @@ void GameServer::handleHello(QTcpSocket *socket, const QByteArray &frame)
         // 第一个连接到本地内嵌服务端的客户端是主控玩家；后续客户端各有自己的飞机。
         controllerSocket_ = socket;
     }
-    if (localHostRoom_ && rooms_.isOpen()
-        && rooms_.defaultRoom().hostSessionId == 0) {
+    if (localHostRoom_ && rooms_.isOpen() && rooms_.room().hostSessionId == 0) {
         // 内嵌宿主自己的回环客户端是房主；独立服务端的客户端仍是加入者。
         rooms_.setHostSession(it->id);
     }
     sendWelcome(socket, true, QString());
     broadcastRoomList();
 }
-
-void GameServer::handleJoinRoom(QTcpSocket *socket, const QByteArray &frame)
-{
-    net::JoinRoomMessage request;
-    QString error;
-    if (!net::decodeJoinRoom(frame, &request, &error)) {
-        reject(socket, error);
-        return;
-    }
-    auto it = sessions_.find(socket);
-    if (it == sessions_.end()) {
-        return;
-    }
-    bool found = false;
-    for (const Room &room : rooms_.rooms()) {
-        if (room.id == request.roomId) {
-            found = true;
-            break;
-        }
-    }
-    if (!found) {
-        reject(socket, QStringLiteral("room not found"));
-        return;
-    }
-    it->roomId = request.roomId;
-    sendRoomList(socket);
-    broadcastRoomList();
-}
-
 
 bool GameServer::startMatch(const games::GameSimulation::Level &level, QString *error)
 {
@@ -628,7 +588,7 @@ bool GameServer::handleControlFrame(const QByteArray &frame, QString *error)
     switch (header.type) {
     case net::MessageType::StartMatch: {
         net::StartMatchMessage request;
-        if (!net::decodeStartMatch(frame, &request, &decodeError)) {
+        if (!net::deserializeStartMatch(payload, &request, &decodeError)) {
             if (error != nullptr) {
                 *error = decodeError;
             }
@@ -646,7 +606,7 @@ bool GameServer::handleControlFrame(const QByteArray &frame, QString *error)
     }
     case net::MessageType::Input: {
         net::InputCommand command;
-        if (!net::decodeInputMessage(frame, &command, &decodeError)) {
+        if (!net::deserializeInputCommand(payload, &command, &decodeError)) {
             if (error != nullptr) {
                 *error = decodeError;
             }
@@ -668,7 +628,7 @@ bool GameServer::handleControlFrame(const QByteArray &frame, QString *error)
     }
 }
 
-void GameServer::handleInput(QTcpSocket *socket, const QByteArray &frame)
+void GameServer::handleInput(QTcpSocket *socket, const QByteArray &payload)
 {
     if (simulation_ == nullptr) {
         return;
@@ -682,7 +642,7 @@ void GameServer::handleInput(QTcpSocket *socket, const QByteArray &frame)
     }
     net::InputCommand command;
     QString error;
-    if (!net::decodeInputMessage(frame, &command, &error)) {
+    if (!net::deserializeInputCommand(payload, &command, &error)) {
         // 单条坏输入不踢掉整个会话；忽略并保留连接。
         return;
     }
@@ -770,31 +730,28 @@ void GameServer::sendRoomList(QTcpSocket *socket)
         }
         return;
     }
-    rooms_.setPlayers(welcomedCount());
+    const Room &room = rooms_.room();
     net::RoomListMessage message;
-    message.rooms.reserve(rooms_.rooms().size());
+    message.rooms.reserve(1);
+    net::RoomInfo info;
+    info.name = room.name;
+    info.maxPlayers = room.maxPlayers;
+    info.playing = room.playing;
     const quint32 hostSessionId = roomHostSessionId();
-    for (const Room &room : rooms_.rooms()) {
-        net::RoomInfo info;
-        info.id = room.id;
-        info.name = room.name;
-        info.players = room.players;
-        info.maxPlayers = room.maxPlayers;
-        info.playing = room.playing;
-        for (auto member = sessions_.begin(); member != sessions_.end(); ++member) {
-            if (!member->welcomed) {
-                continue;
-            }
-            net::RoomPlayerInfo player;
-            player.sessionId = member->id;
-            player.playerId = member->playerId;
-            player.host = member->id == hostSessionId;
-            player.inMatch = member->inMatch;
-            info.members.push_back(player);
+    for (auto member = sessions_.begin(); member != sessions_.end(); ++member) {
+        if (!member->welcomed) {
+            continue;
         }
-        info.players = int(info.members.size());
-        message.rooms.push_back(std::move(info));
+        net::RoomPlayerInfo player;
+        player.sessionId = member->id;
+        player.playerId = member->playerId;
+        player.host = member->id == hostSessionId;
+        player.inMatch = member->inMatch;
+        info.members.push_back(player);
     }
+    // 人数始终由成员列表派生，不在 Room 里维护第二份计数。
+    info.players = int(info.members.size());
+    message.rooms.push_back(std::move(info));
     const QByteArray frame = net::encodeRoomList(message);
     if (!frame.isEmpty()) {
         socket->write(frame);
@@ -806,7 +763,6 @@ void GameServer::broadcastRoomList()
     if (!rooms_.isOpen()) {
         return;
     }
-    rooms_.setPlayers(welcomedCount());
     for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
         if (it->welcomed && it.key() != nullptr) {
             sendRoomList(it.key());

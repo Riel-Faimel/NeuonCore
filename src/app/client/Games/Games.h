@@ -1,9 +1,9 @@
 #pragma once
 
 #include "Arena/Arena.h"
-#include "Client/GameView.h"
-#include "Games/Renderer/Renderer.h"
-#include "Games/Simulation/GameSimulation.h"
+#include "View/GameView.h"
+#include "Renderer/Renderer.h"
+#include "Simulation/GameSimulation.h"
 #include "Net/Snapshot.h"
 #include "Shop/Shop.h"
 

@@ -1,4 +1,4 @@
-#include "Games/Simulation/GameSimulation.h"
+#include "Simulation/GameSimulation.h"
 
 #include "Net/Snapshot.h"
 

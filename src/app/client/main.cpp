@@ -223,9 +223,7 @@ int main(int argc, char *argv[])
     }
 
     bool offline = false;
-    bool serverMode = false;
     bool showHelp = false;
-    quint16 serverPort = net::kDefaultPort;
     QString connectHost;
     quint16 connectPort = net::kDefaultPort;
     QString argumentError;
@@ -242,24 +240,10 @@ int main(int argc, char *argv[])
 
     for (int i = 1; i < argc; ++i) {
         const QString argument = QString::fromLocal8Bit(argv[i]);
-        if (argument == QStringLiteral("--server")) {
-            serverMode = true;
-        } else if (argument == QStringLiteral("--local")) {
+        if (argument == QStringLiteral("--local")) {
             offline = true;
         } else if (argument == QStringLiteral("--help") || argument == QStringLiteral("-h")) {
             showHelp = true;
-        } else if (argument == QStringLiteral("--port")) {
-            if (i + 1 >= argc) {
-                argumentError = QStringLiteral("--port requires a value");
-                break;
-            }
-            bool ok = false;
-            const uint value = QString::fromLocal8Bit(argv[++i]).toUInt(&ok);
-            if (!ok || value == 0 || value > 65535) {
-                argumentError = QStringLiteral("--port expects 1..65535");
-                break;
-            }
-            serverPort = quint16(value);
         } else if (argument == QStringLiteral("--connect")) {
             if (i + 1 >= argc) {
                 argumentError = QStringLiteral("--connect requires host:port");
@@ -319,20 +303,8 @@ int main(int argc, char *argv[])
         usage();
         return 2;
     }
-    if (serverMode && !connectHost.isEmpty()) {
-        std::fprintf(stderr, "ARGUMENT ERROR: --server cannot be combined with --connect\n");
-        return 2;
-    }
     if (offline && !connectHost.isEmpty()) {
         std::fprintf(stderr, "ARGUMENT ERROR: --local cannot be combined with --connect\n");
-        return 2;
-    }
-
-    // 服务端是独立进程，控制面走 stdio；GUI 客户端不再内嵌 server 模式。
-    if (serverMode) {
-        std::fprintf(stderr,
-                     "SERVER MODE MOVED: use NeonCoreServer.exe --port %u\n",
-                     unsigned(serverPort));
         return 2;
     }
 

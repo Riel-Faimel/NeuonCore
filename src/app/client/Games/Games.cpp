@@ -1,7 +1,7 @@
 #include "Games/Games.h"
 
 #include "Base/Base.h"
-#include "Client/GameView.h"
+#include "View/GameView.h"
 #include "GameConfig.h"
 #include "Net/Snapshot.h"
 #include "Shop/Shop.h"

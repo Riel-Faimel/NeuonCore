@@ -62,7 +62,7 @@ SHARED_OBJS := $(addprefix $(BUILD)/app/shared/,$(addsuffix .o,$(SHARED_COMPONEN
 
 CLIENT_COMPONENTS := Base/Base Base/Input/Input Base/Audio/Audio Base/Audio/Music \
                      Base/Paint/Paint Base/Pointer/Pointer Base/ThreadPool/ThreadPool \
-                     Games/Games Games/Renderer/Renderer Client/GameView \
+                     Games/Games Renderer/Renderer View/GameView \
                      Net/Client \
                      Menu/Menu Menu/Main/Main Menu/Map/Map Menu/Match/Match \
                      Menu/Room/Room Menu/Failure/Failure \
@@ -71,8 +71,8 @@ CLIENT_COMPONENTS := Base/Base Base/Input/Input Base/Audio/Audio Base/Audio/Musi
                      Menu/Settings/Settings
 CLIENT_OBJS := $(addprefix $(BUILD)/app/client/,$(addsuffix .o,$(CLIENT_COMPONENTS)))
 
-SERVER_COMPONENTS := Games/Simulation/GameSimulation Games/Waves/Waves \
-                     Games/Upgrades/Upgrades Net/Server Room/Room \
+SERVER_COMPONENTS := Simulation/GameSimulation Simulation/Waves/Waves \
+                     Simulation/Upgrades/Upgrades Net/Server Room/Room \
                      Shop/Shop Shop/Score/Score Shop/Inventory/Inventory Loadout/Loadout
 SERVER_OBJS := $(addprefix $(BUILD)/app/server/,$(addsuffix .o,$(SERVER_COMPONENTS)))
 

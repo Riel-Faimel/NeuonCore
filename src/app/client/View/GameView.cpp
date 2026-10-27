@@ -1,4 +1,4 @@
-#include "Client/GameView.h"
+#include "View/GameView.h"
 
 namespace client {
 

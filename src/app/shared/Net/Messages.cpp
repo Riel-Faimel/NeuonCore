@@ -3,6 +3,8 @@
 #include <QDataStream>
 #include <QIODevice>
 
+#include <utility>
+
 namespace net {
 
 namespace {
@@ -60,6 +62,26 @@ bool decodeMessageFrame(const QByteArray &frame, MessageType expected,
         return false;
     }
     return true;
+}
+
+// 各消息的 payload 编解码函数签名一致；把“payload -> 帧”和
+// “帧 -> payload -> 消息”的重复样板集中在这里，具体消息只声明自己的字段。
+template <typename Message>
+QByteArray encodeMessage(MessageType type, const Message &message,
+                         QByteArray (*serializer)(const Message &), quint16 version)
+{
+    const QByteArray payload = serializer(message);
+    return payload.isEmpty() ? QByteArray() : frameMessage(type, payload, version);
+}
+
+template <typename Message>
+bool decodeMessage(MessageType type, const QByteArray &frame, Message *message,
+                   bool (*deserializer)(const QByteArray &, Message *, QString *),
+                   QString *error)
+{
+    QByteArray payload;
+    return decodeMessageFrame(frame, type, &payload, error)
+           && deserializer(payload, message, error);
 }
 
 bool readCount(QDataStream &stream, quint32 *count, quint32 maximum, QString *error)
@@ -237,7 +259,7 @@ QByteArray serializeRoomList(const RoomListMessage &message)
     return serialize([&](QDataStream &stream) {
         stream << quint32(message.rooms.size());
         for (const RoomInfo &room : message.rooms) {
-            stream << room.id << room.name << qint32(room.players)
+            stream << room.name << qint32(room.players)
                    << qint32(room.maxPlayers) << room.playing;
             stream << quint32(room.members.size());
             for (const RoomPlayerInfo &member : room.members) {
@@ -268,8 +290,7 @@ bool deserializeRoomList(const QByteArray &payload, RoomListMessage *message,
                 RoomInfo room;
                 qint32 players = 0;
                 qint32 maxPlayers = 0;
-                stream >> room.id >> room.name >> players >> maxPlayers
-                    >> room.playing;
+                stream >> room.name >> players >> maxPlayers >> room.playing;
                 if (stream.status() != QDataStream::Ok) {
                     return false;
                 }
@@ -296,123 +317,68 @@ bool deserializeRoomList(const QByteArray &payload, RoomListMessage *message,
         error);
 }
 
-QByteArray serializeJoinRoom(const JoinRoomMessage &message)
-{
-    return serialize([&](QDataStream &stream) { stream << message.roomId; });
-}
-
-bool deserializeJoinRoom(const QByteArray &payload, JoinRoomMessage *message,
-                         QString *error)
-{
-    if (message == nullptr) {
-        setError(error, QStringLiteral("null join room destination"));
-        return false;
-    }
-    return deserialize(payload,
-                       [&](QDataStream &stream) {
-                           stream >> message->roomId;
-                           return stream.status() == QDataStream::Ok;
-                       },
-                       error);
-}
-
 QByteArray encodeHello(const HelloMessage &message, quint16 version)
 {
-    const QByteArray payload = serializeHello(message);
-    return payload.isEmpty() ? QByteArray()
-                             : frameMessage(MessageType::Hello, payload, version);
+    return encodeMessage(MessageType::Hello, message, serializeHello, version);
 }
 
 bool decodeHello(const QByteArray &frame, HelloMessage *message, QString *error)
 {
-    QByteArray payload;
-    return decodeMessageFrame(frame, MessageType::Hello, &payload, error)
-           && deserializeHello(payload, message, error);
+    return decodeMessage(MessageType::Hello, frame, message, deserializeHello, error);
 }
 
 QByteArray encodeWelcome(const WelcomeMessage &message, quint16 version)
 {
-    const QByteArray payload = serializeWelcome(message);
-    return payload.isEmpty() ? QByteArray()
-                             : frameMessage(MessageType::Welcome, payload, version);
+    return encodeMessage(MessageType::Welcome, message, serializeWelcome, version);
 }
 
 bool decodeWelcome(const QByteArray &frame, WelcomeMessage *message, QString *error)
 {
-    QByteArray payload;
-    return decodeMessageFrame(frame, MessageType::Welcome, &payload, error)
-           && deserializeWelcome(payload, message, error);
+    return decodeMessage(MessageType::Welcome, frame, message, deserializeWelcome, error);
 }
 
 QByteArray encodeStartMatch(const StartMatchMessage &message, quint16 version)
 {
-    const QByteArray payload = serializeStartMatch(message);
-    return payload.isEmpty() ? QByteArray()
-                             : frameMessage(MessageType::StartMatch, payload, version);
+    return encodeMessage(MessageType::StartMatch, message, serializeStartMatch, version);
 }
 
 bool decodeStartMatch(const QByteArray &frame, StartMatchMessage *message,
                       QString *error)
 {
-    QByteArray payload;
-    return decodeMessageFrame(frame, MessageType::StartMatch, &payload, error)
-           && deserializeStartMatch(payload, message, error);
+    return decodeMessage(MessageType::StartMatch, frame, message,
+                         deserializeStartMatch, error);
 }
 
 QByteArray encodeEvent(const EventMessage &message, quint16 version)
 {
-    const QByteArray payload = serializeEvent(message);
-    return payload.isEmpty() ? QByteArray()
-                             : frameMessage(MessageType::Event, payload, version);
+    return encodeMessage(MessageType::Event, message, serializeEvent, version);
 }
 
 bool decodeEvent(const QByteArray &frame, EventMessage *message, QString *error)
 {
-    QByteArray payload;
-    return decodeMessageFrame(frame, MessageType::Event, &payload, error)
-           && deserializeEvent(payload, message, error);
+    return decodeMessage(MessageType::Event, frame, message, deserializeEvent, error);
 }
 
 QByteArray encodeMatchEnd(const MatchEndMessage &message, quint16 version)
 {
-    const QByteArray payload = serializeMatchEnd(message);
-    return payload.isEmpty() ? QByteArray()
-                             : frameMessage(MessageType::MatchEnd, payload, version);
+    return encodeMessage(MessageType::MatchEnd, message, serializeMatchEnd, version);
 }
 
 bool decodeMatchEnd(const QByteArray &frame, MatchEndMessage *message, QString *error)
 {
-    QByteArray payload;
-    return decodeMessageFrame(frame, MessageType::MatchEnd, &payload, error)
-           && deserializeMatchEnd(payload, message, error);
+    return decodeMessage(MessageType::MatchEnd, frame, message, deserializeMatchEnd,
+                         error);
 }
 
 QByteArray encodeRoomList(const RoomListMessage &message, quint16 version)
 {
-    const QByteArray payload = serializeRoomList(message);
-    return payload.isEmpty() ? QByteArray()
-                             : frameMessage(MessageType::RoomList, payload, version);
+    return encodeMessage(MessageType::RoomList, message, serializeRoomList, version);
 }
 
 bool decodeRoomList(const QByteArray &frame, RoomListMessage *message, QString *error)
 {
-    QByteArray payload;
-    return decodeMessageFrame(frame, MessageType::RoomList, &payload, error)
-           && deserializeRoomList(payload, message, error);
-}
-
-QByteArray encodeJoinRoom(const JoinRoomMessage &message, quint16 version)
-{
-    const QByteArray payload = serializeJoinRoom(message);
-    return payload.isEmpty() ? QByteArray()
-                             : frameMessage(MessageType::JoinRoom, payload, version);
-}
-
-bool decodeJoinRoom(const QByteArray &frame, JoinRoomMessage *message, QString *error)
-{
-    QByteArray payload;
-    return decodeMessageFrame(frame, MessageType::JoinRoom, &payload, error)
-           && deserializeJoinRoom(payload, message, error);
+    return decodeMessage(MessageType::RoomList, frame, message, deserializeRoomList,
+                         error);
 }
 
 } // namespace net

@@ -2,7 +2,7 @@
 
 #include "GameConfig.h"
 #include "Math.h"
-#include "Games/Upgrades/Upgrades.h"
+#include "Simulation/Upgrades/Upgrades.h"
 
 #include <QColor>
 #include <QImage>

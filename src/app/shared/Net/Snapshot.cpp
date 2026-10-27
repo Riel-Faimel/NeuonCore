@@ -3,8 +3,6 @@
 #include <QDataStream>
 #include <QIODevice>
 
-#include <limits>
-
 namespace net {
 
 namespace {
@@ -401,11 +399,26 @@ bool deserializeSnapshot(const QByteArray &payload, Snapshot *snapshot, QString 
 
 QByteArray encodeSnapshotMessage(const Snapshot &snapshot, quint16 version)
 {
-    const QByteArray payload = serializeSnapshot(snapshot);
-    if (payload.isEmpty()) {
+    // 快照每帧每个会话都要编码，是协议里最大的消息。直接写进同一个
+    // QByteArray（先占 4 字节长度位），避免先序列化 payload 再复制进帧。
+    QByteArray frame;
+    QDataStream stream(&frame, QIODevice::WriteOnly);
+    stream.setVersion(QDataStream::Qt_6_0);
+    stream.setByteOrder(QDataStream::LittleEndian);
+    stream << quint32(0) << quint16(MessageType::Snapshot) << version;
+    writeSnapshot(stream, snapshot);
+    if (stream.status() != QDataStream::Ok) {
         return {};
     }
-    return frameMessage(MessageType::Snapshot, payload, version);
+    const quint32 payloadSize = quint32(frame.size() - qsizetype(kFrameHeaderSize));
+    if (payloadSize > kMaxPayloadBytes) {
+        return {};
+    }
+    frame[0] = char(payloadSize & 0xffu);
+    frame[1] = char((payloadSize >> 8) & 0xffu);
+    frame[2] = char((payloadSize >> 16) & 0xffu);
+    frame[3] = char((payloadSize >> 24) & 0xffu);
+    return frame;
 }
 
 bool decodeSnapshotMessage(const QByteArray &frame, Snapshot *snapshot, QString *error)

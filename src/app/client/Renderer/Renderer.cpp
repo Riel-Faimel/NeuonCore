@@ -1,9 +1,9 @@
-#include "Games/Renderer/Renderer.h"
+#include "Renderer/Renderer.h"
 
 #include "Arena/Arena.h"
-#include "Client/GameView.h"
+#include "View/GameView.h"
 #include "Random.h"
-#include "Games/Upgrades/Upgrades.h"
+#include "Simulation/Upgrades/Upgrades.h"
 #include "Base/Base.h"
 
 #include <QFontMetricsF>

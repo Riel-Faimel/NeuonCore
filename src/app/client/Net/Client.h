@@ -1,12 +1,10 @@
 #pragma once
 
-#include "Client/GameView.h"
-#include "Games/Renderer/Renderer.h"
-#include "Games/Simulation/GameSimulation.h"
 #include "Net/Input.h"
 #include "Net/Messages.h"
-#include "Net/Protocol.h"
 #include "Net/Snapshot.h"
+#include "Renderer/Renderer.h"
+#include "View/GameView.h"
 
 #include <QByteArray>
 #include <QImage>
@@ -15,7 +13,7 @@
 #include <QTcpSocket>
 #include <QTimer>
 
-#include <memory>
+#include <vector>
 
 namespace client {
 
@@ -26,7 +24,7 @@ namespace client {
 // 不读取服务端对象，也不把本地世界状态回传给服务端。
 //
 // 单机模式下 GameClient 连接同进程 127.0.0.1 上的内嵌 GameServer；联机模式连接
-// `--server` 启动的远端端口。两条路径使用完全相同的消息。
+// `NeonCoreServer.exe` 或房主内嵌服务端的远端端口。两条路径使用完全相同的消息。
 class GameClient : public QObject {
 public:
     explicit GameClient(QObject *parent = nullptr);
@@ -45,18 +43,13 @@ public:
 
     // 输入转发：Match 负责把窗口事件同时交给 BaseService（移动/瞄准轮询）。
     void keyPress(int key, bool autoRepeat);
-    void keyRelease(int key);
     void mousePressLeft(const Math::Vec2 &position);
-    void mouseReleaseLeft();
     void requestMine(const Math::Vec2 &position);
-    int upgradeIndexAt(const Math::Vec2 &position) const;
 
     // 直接发送一条输入命令（测试/调试）；正常路径由 update() 每帧采集 BaseService。
     bool sendInput(const net::InputCommand &command);
-    bool joinRoom(quint32 roomId);
 
     bool welcomed() const { return welcomed_; }
-    bool matchActive() const { return snapshotCount_ > 0; }
     bool inLobby() const { return inLobby_; }
     // 曾经握手 / 曾经进入房间：断线时用来区分“无法连接服务器”和“房间已解散”。
     bool hadSession() const { return hadSession_; }
@@ -64,12 +57,9 @@ public:
     const std::vector<net::RoomInfo> &rooms() const { return rooms_; }
     bool failed() const { return failed_; }
     bool matchEnded() const { return matchEnded_; }
-    bool autoReconnect() const { return autoReconnect_; }
     int snapshotCount() const { return snapshotCount_; }
     int reconnectAttempts() const { return reconnectAttempts_; }
     QString lastError() const { return lastError_; }
-    QAbstractSocket::SocketState socketState() const { return socket_.state(); }
-    quint16 serverTickRate() const { return tickRate_; }
     quint32 sessionId() const { return sessionId_; }
     // 服务端在 Welcome 里分配的稳定玩家 id/slot（1..4）；0=无。
     int playerId() const { return playerId_; }
@@ -83,7 +73,6 @@ public:
     net::RunState state() const { return view_.state(); }
     const GameView &view() const { return view_; }
     const net::Snapshot &lastSnapshot() const { return lastSnapshot_; }
-    const net::MatchEndMessage &matchEnd() const { return matchEnd_; }
     int runScore() const { return matchEnd_.runScore; }
 
     // 启动内嵌服务端失败等由 menu::Match 注入；保持 GameClient 仍可渲染空画面。
@@ -96,12 +85,14 @@ private:
     void onSocketError();
     void onReconnectTimeout();
 
+    // handleFrame 只拆一次帧；各 handle* 直接读已校验的 payload，避免每帧
+    // 为快照再复制一次整份 payload。
     void handleFrame(const QByteArray &frame);
-    void handleWelcome(const QByteArray &frame);
-    void handleSnapshot(const QByteArray &frame);
-    void handleEvent(const QByteArray &frame);
-    void handleMatchEnd(const QByteArray &frame);
-    void handleRoomList(const QByteArray &frame);
+    void handleWelcome(const QByteArray &payload);
+    void handleSnapshot(const QByteArray &payload);
+    void handleEvent(const QByteArray &payload);
+    void handleMatchEnd(const QByteArray &payload);
+    void handleRoomList(const QByteArray &payload);
 
     void sendHello();
     arena::InputState localInput() const;
@@ -125,11 +116,9 @@ private:
     QString lastError_;
     quint32 sessionId_ = 0;
     int playerId_ = 0;
-    quint16 tickRate_ = 60;
     int snapshotCount_ = 0;
     int reconnectAttempts_ = 0;
 
-    bool matchRequested_ = false;
     bool welcomed_ = false;
     bool inLobby_ = false;
     bool hadSession_ = false;

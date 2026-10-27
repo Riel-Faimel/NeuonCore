@@ -105,7 +105,6 @@ struct RoomPlayerInfo {
 };
 
 struct RoomInfo {
-    quint32 id = 0;
     QString name;
     int players = 0;
     int maxPlayers = 4;
@@ -116,16 +115,11 @@ struct RoomInfo {
     bool operator==(const RoomInfo &) const = default;
 };
 
+// 单房间模型：列表保留一个元素，便于以后扩展多房间而不改外层帧。
 struct RoomListMessage {
     std::vector<RoomInfo> rooms;
 
     bool operator==(const RoomListMessage &) const = default;
-};
-
-struct JoinRoomMessage {
-    quint32 roomId = 0;
-
-    bool operator==(const JoinRoomMessage &) const = default;
 };
 
 // ----- QDataStream payload 序列化 -----
@@ -151,10 +145,6 @@ bool deserializeMatchEnd(const QByteArray &payload, MatchEndMessage *message,
 
 QByteArray serializeRoomList(const RoomListMessage &message);
 bool deserializeRoomList(const QByteArray &payload, RoomListMessage *message,
-                         QString *error = nullptr);
-
-QByteArray serializeJoinRoom(const JoinRoomMessage &message);
-bool deserializeJoinRoom(const QByteArray &payload, JoinRoomMessage *message,
                          QString *error = nullptr);
 
 // ----- 带帧头的完整消息 -----
@@ -186,11 +176,6 @@ bool decodeMatchEnd(const QByteArray &frame, MatchEndMessage *message,
 QByteArray encodeRoomList(const RoomListMessage &message,
                           quint16 version = kProtocolVersion);
 bool decodeRoomList(const QByteArray &frame, RoomListMessage *message,
-                    QString *error = nullptr);
-
-QByteArray encodeJoinRoom(const JoinRoomMessage &message,
-                          quint16 version = kProtocolVersion);
-bool decodeJoinRoom(const QByteArray &frame, JoinRoomMessage *message,
                     QString *error = nullptr);
 
 } // namespace net

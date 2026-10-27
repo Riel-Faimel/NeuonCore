@@ -1,13 +1,10 @@
 #include "Net/Client.h"
 
-#include "Arena/Combatants/Enemy.h"
 #include "Base/Base.h"
 
 #include <QAbstractSocket>
-#include <QDataStream>
-#include <QIODevice>
 
-#include <algorithm>
+#include <utility>
 
 namespace client {
 
@@ -61,7 +58,6 @@ bool GameClient::connectToHost(const QString &host, quint16 port)
     failed_ = false;
     matchEnded_ = false;
     closedByUser_ = false;
-    matchRequested_ = false;
     rooms_.clear();
     inLobby_ = false;
     hadSession_ = false;
@@ -79,7 +75,6 @@ void GameClient::close()
     closedByUser_ = true;
     reconnectTimer_.stop();
     welcomed_ = false;
-    matchRequested_ = false;
     frames_.clear();
     if (socket_.state() != QAbstractSocket::UnconnectedState) {
         socket_.abort();
@@ -147,11 +142,6 @@ void GameClient::keyPress(int key, bool autoRepeat)
     }
 }
 
-void GameClient::keyRelease(int key)
-{
-    Q_UNUSED(key);
-}
-
 void GameClient::mousePressLeft(const Math::Vec2 &position)
 {
     if (view_.state() != net::RunState::Upgrade) {
@@ -163,17 +153,10 @@ void GameClient::mousePressLeft(const Math::Vec2 &position)
     }
 }
 
-void GameClient::mouseReleaseLeft() {}
-
 void GameClient::requestMine(const Math::Vec2 &position)
 {
     pendingMine_ = true;
     minePosition_ = position;
-}
-
-int GameClient::upgradeIndexAt(const Math::Vec2 &position) const
-{
-    return renderer_.upgradeIndexAt(position);
 }
 
 bool GameClient::sendInput(const net::InputCommand &command)
@@ -182,20 +165,6 @@ bool GameClient::sendInput(const net::InputCommand &command)
         return false;
     }
     const QByteArray frame = net::encodeInputMessage(command);
-    if (frame.isEmpty()) {
-        return false;
-    }
-    return socket_.write(frame) != -1;
-}
-
-bool GameClient::joinRoom(quint32 roomId)
-{
-    if (socket_.state() != QAbstractSocket::ConnectedState) {
-        return false;
-    }
-    net::JoinRoomMessage message;
-    message.roomId = roomId;
-    const QByteArray frame = net::encodeJoinRoom(message);
     if (frame.isEmpty()) {
         return false;
     }
@@ -240,7 +209,6 @@ void GameClient::onDisconnected()
 {
     const bool wasWaitingInRoom = inLobby_ || (hadRoom_ && snapshotCount_ == 0);
     welcomed_ = false;
-    matchRequested_ = false;
     frames_.clear();
     if (closedByUser_ || failed_ || matchEnded_) {
         return;
@@ -279,7 +247,6 @@ void GameClient::onReconnectTimeout()
     }
     frames_.clear();
     welcomed_ = false;
-    matchRequested_ = false;
     if (socket_.state() != QAbstractSocket::UnconnectedState) {
         socket_.abort();
     }
@@ -306,35 +273,38 @@ void GameClient::handleFrame(const QByteArray &frame)
 
     switch (header.type) {
     case net::MessageType::Welcome:
-        handleWelcome(frame);
+        handleWelcome(payload);
         break;
     case net::MessageType::Snapshot:
-        handleSnapshot(frame);
+        handleSnapshot(payload);
         break;
     case net::MessageType::Event:
-        handleEvent(frame);
+        handleEvent(payload);
         break;
     case net::MessageType::MatchEnd:
-        handleMatchEnd(frame);
+        handleMatchEnd(payload);
         break;
     case net::MessageType::RoomList:
-        handleRoomList(frame);
+        handleRoomList(payload);
         break;
     case net::MessageType::Hello:
     case net::MessageType::StartMatch:
     case net::MessageType::Input:
-    case net::MessageType::JoinRoom:
         fail(QStringLiteral("client-only message type received from server"));
+        socket_.abort();
+        break;
+    default:
+        fail(QStringLiteral("unknown server message type %1").arg(int(header.type)));
         socket_.abort();
         break;
     }
 }
 
-void GameClient::handleWelcome(const QByteArray &frame)
+void GameClient::handleWelcome(const QByteArray &payload)
 {
     net::WelcomeMessage welcome;
     QString error;
-    if (!net::decodeWelcome(frame, &welcome, &error)) {
+    if (!net::deserializeWelcome(payload, &welcome, &error)) {
         fail(error);
         socket_.abort();
         return;
@@ -347,18 +317,17 @@ void GameClient::handleWelcome(const QByteArray &frame)
     }
     sessionId_ = welcome.sessionId;
     playerId_ = welcome.playerId;
-    tickRate_ = welcome.tickRate;
     welcomed_ = true;
     hadSession_ = true;
     reconnectAttempts_ = 0;
     lastError_.clear();
 }
 
-void GameClient::handleSnapshot(const QByteArray &frame)
+void GameClient::handleSnapshot(const QByteArray &payload)
 {
     net::Snapshot snapshot;
     QString error;
-    if (!net::decodeSnapshotMessage(frame, &snapshot, &error)) {
+    if (!net::deserializeSnapshot(payload, &snapshot, &error)) {
         fail(error);
         socket_.abort();
         return;
@@ -366,15 +335,14 @@ void GameClient::handleSnapshot(const QByteArray &frame)
     lastSnapshot_ = std::move(snapshot);
     view_.apply(lastSnapshot_);
     ++snapshotCount_;
-    matchRequested_ = true;
     inLobby_ = false;
 }
 
-void GameClient::handleRoomList(const QByteArray &frame)
+void GameClient::handleRoomList(const QByteArray &payload)
 {
     net::RoomListMessage message;
     QString error;
-    if (!net::decodeRoomList(frame, &message, &error)) {
+    if (!net::deserializeRoomList(payload, &message, &error)) {
         return;
     }
     rooms_ = std::move(message.rooms);
@@ -391,27 +359,26 @@ void GameClient::handleRoomList(const QByteArray &frame)
     }
 }
 
-void GameClient::handleEvent(const QByteArray &frame)
+void GameClient::handleEvent(const QByteArray &payload)
 {
     net::EventMessage event;
     QString error;
-    if (!net::decodeEvent(frame, &event, &error)) {
+    if (!net::deserializeEvent(payload, &event, &error)) {
         return;   // 表现事件坏了不终止对局
     }
     applyEvent(event);
 }
 
-void GameClient::handleMatchEnd(const QByteArray &frame)
+void GameClient::handleMatchEnd(const QByteArray &payload)
 {
     net::MatchEndMessage message;
     QString error;
-    if (!net::decodeMatchEnd(frame, &message, &error)) {
+    if (!net::deserializeMatchEnd(payload, &message, &error)) {
         fail(error);
         return;
     }
     matchEnd_ = message;
     matchEnded_ = true;
-    matchRequested_ = true;
     if (!message.reason.isEmpty()) {
         fail(message.reason);
     }

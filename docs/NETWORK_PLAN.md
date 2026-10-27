@@ -4,7 +4,7 @@
 
 这篇文档先定边界和迁移顺序，不直接改运行代码。当前 `local` 单机路径保持可玩，迁移按阶段进行，每阶段都能构建、能跑 smoke。
 
-> 状态：阶段 0–3 已完成，并补上了房间/大厅生命周期与真实多玩家会话（协议 v2）。阶段 3 的实现是 `src/app/server/Net/Server.*`（`server::GameServer`，headless `GameSimulation` + 60Hz tick + `QTcpServer`）和 `src/app/client/Net/Client.*`（`client::GameClient`，`QTcpSocket` + 握手/输入/快照/`GameView`/`Renderer`），协议/快照在 `src/app/shared/Net/`，消息在 `include/Net/Input.h`、`Messages.h`、`Snapshot.h`。`menu::Match` 默认走网络：单机在 127.0.0.1 上启动自动端口的内嵌服务端并立即开局，`--connect host:port` 连远端并进入 `Room`。自定义协议的“局域网主机”启动内嵌服务端后只开房，房主在 `Room` 按 ENTER 才本地 `startMatch()`；按 X 解散会关闭服务端并让加入者看到专用失败页。多玩家：Hello 分配稳定 playerId/slot（1–4），startMatch 把当前 welcomed 会话组成 roster，生成 1–4 架玩家飞机；每个会话输入只作用于自己的飞机，快照携带 `players[]` 和每个客户端的 `localPlayerId`，中途加入为观战、掉线只移除该飞机。与本文原计划的差异：内嵌服务端与客户端在同一 Qt 事件循环（真实 TCP 回环，不额外起线程）；本地 `Games` 路径保留为 `--local`/自动化测试回退，等阶段 4 再删除。
+> 状态：阶段 0–3 已完成，并补上了房间/大厅生命周期与真实多玩家会话（协议 v2）。阶段 3 的实现是 `src/app/server/Net/Server.*`（`server::GameServer`，headless `GameSimulation` + 60Hz tick + `QTcpServer`）和 `src/app/client/Net/Client.*`（`client::GameClient`，`QTcpSocket` + 握手/输入/快照/`GameView`/`Renderer`），协议/快照的头文件与实现统一在 `src/app/shared/Net/`。`menu::Match` 默认走网络：单机在 127.0.0.1 上启动自动端口的内嵌服务端并立即开局，`--connect host:port` 连远端并进入 `Room`。自定义协议的“局域网主机”启动内嵌服务端后只开房，房主在 `Room` 按 ENTER 才本地 `startMatch()`；按 X 解散会关闭服务端并让加入者看到专用失败页。多玩家：Hello 分配稳定 playerId/slot（1–4），startMatch 把当前 welcomed 会话组成 roster，生成 1–4 架玩家飞机；每个会话输入只作用于自己的飞机，快照携带 `players[]` 和每个客户端的 `localPlayerId`，中途加入为观战、掉线只移除该飞机。房间是单房间模型：Hello/Welcome 即加入当前房间，不再有 JoinRoom 请求；未知/已删除的消息 id 会被服务端拒绝。与本文原计划的差异：内嵌服务端与客户端在同一 Qt 事件循环（真实 TCP 回环，不额外起线程）；本地 `Games` 路径保留为 `--local`/自动化测试回退。
 
 ## 1. 当前耦合点
 
@@ -18,21 +18,22 @@
 ## 2. 目标结构
 
 ```text
-src/
-├─ include/Net/
-│  ├─ Protocol.h        消息头、消息 id、版本号、长度前缀
-│  ├─ Snapshot.h        服务端 -> 客户端的只读世界快照
-│  └─ Input.h           客户端 -> 服务端的输入命令
+src/app/
+├─ shared/
+│  ├─ Net/              Protocol / Input / Messages / Snapshot（头文件 + 实现）
+│  └─ Arena/            Arena + Bullets / Combatants / Entities / Events / State
 ├─ server/
-│  ├─ GameSimulation.*  只含 Arena / Waves / Upgrades / 计分，不依赖 Renderer
-│  ├─ GameServer.*      TCP 监听、会话、固定 tick、广播快照
-│  └─ main_server.cpp   独立服务器入口
-├─ client/
-│  ├─ GameView.*        快照 -> 可渲染的视图状态（Arena 的只读镜像）
-│  ├─ Renderer.*        从 Games 移到 client，只读 GameView
-│  ├─ GameClient.*      TCP 连接、输入发送、快照插值
-│  └─ Match.*           客户端对局控制器（替代现在 Menu::Match）
-└─ app/                 菜单、商店、战备、编辑器等纯客户端界面
+│  ├─ Simulation/       GameSimulation + Waves + Upgrades（只含模拟，不依赖 Renderer）
+│  ├─ Net/Server.*      TCP 监听、会话、固定 tick、广播快照、房间生命周期
+│  ├─ Room/             服务端权威单房间状态
+│  ├─ Shop/ Loadout/    权威存档
+│  └─ main.cpp          独立服务器入口（--port，stdin 控制面）
+└─ client/
+   ├─ View/GameView.*   快照 -> 可渲染的只读 Arena 镜像
+   ├─ Renderer/         只读 GameView 的绘制层
+   ├─ Net/Client.*      TCP 连接、输入发送、快照接收
+   ├─ Games/            本地单机适配器（--local / 测试）
+   └─ Menu/             菜单、房间、失败页、编辑器等界面
 ```
 
 ## 3. 协议
@@ -54,6 +55,7 @@ TCP，默认端口 `7777`。消息统一：
 | `Snapshot` | S→C | 世界快照（见下） |
 | `Event` | S→C | 音效、横幅、震屏/闪屏等表现事件 |
 | `MatchEnd` | S→C | 胜负、统计、可重试 |
+| `RoomList` | S→C | 没有对局时的服务端权威房间与会话槽位；加入房间由 Hello/Welcome 完成 |
 
 快照内容（只读，不含业务对象指针）：
 
@@ -72,7 +74,7 @@ TCP，默认端口 `7777`。消息统一：
 
 ### 阶段 0：共享协议和快照
 
-- 新增 `include/Net/Protocol.h`、`Snapshot.h`、`Input.h`；
+- 新增 `src/app/shared/Net/Protocol.h`、`Snapshot.h`、`Input.h`；
 - 定义 `QDataStream` 读写；所有 `type_index` 在数据边界转成 `EnemyDef::dataKey`；
 - 加快照 roundtrip 测试：构造 `Snapshot` → 序列化 → 反序列化 → 字段相等。
 
@@ -102,8 +104,8 @@ TCP，默认端口 `7777`。消息统一：
 
 - `server::GameServer`：`QTcpServer`、固定 tick（60Hz）、每个连接一个会话、广播快照；
 - `client::GameClient`：`QTcpSocket`、握手、输入发送、快照接收、断线重连；
-- 单机模式：客户端启动时在后台线程起一个本地服务端（端口 0 自动分配），客户端连 `127.0.0.1`；这样单机和联机走同一条代码路径；
-- 联机模式：`--connect host:7777`；服务端可独立启动 `--server --port 7777`。
+- 单机模式：客户端在同一 Qt 事件循环里启动一个本地服务端（端口 0 自动分配），客户端连 `127.0.0.1`；这样单机和联机走同一条代码路径；
+- 联机模式：`--connect host:7777`；服务端独立启动 `NeonCoreServer.exe --port 7777`。
 
 验收：本地端口回环下完整打通一局；两个客户端可同时连接一个服务端。
 
@@ -129,7 +131,7 @@ TCP，默认端口 `7777`。消息统一：
 - 敌人/子弹/实体类型在协议里用 `dataKey` 字符串，客户端查注册表重建；
 - 服务端固定 tick，客户端表现层可以插值，不把渲染帧率绑到模拟 tick；
 - 单机 = 本地回环服务端，避免“单机一套、联机一套”两条逻辑；
-- 当前 `local` 路径在阶段 1–2 保留，作为回退和测试基线，阶段 3 完成后删除。
+- 当前 `local` 路径保留为 `--local`/自动化测试基线；默认单机已经走内嵌服务端回环。
 
 ## 6. 测试清单
 

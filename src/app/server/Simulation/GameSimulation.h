@@ -2,8 +2,8 @@
 
 #include "Arena/Arena.h"
 #include "Arena/Combatants/Player.h"
-#include "Games/Upgrades/Upgrades.h"
-#include "Games/Waves/Waves.h"
+#include "Simulation/Upgrades/Upgrades.h"
+#include "Simulation/Waves/Waves.h"
 #include "Net/Snapshot.h"
 
 #include <QColor>
@@ -20,7 +20,7 @@ namespace games {
 // 拥有 Arena / Waves / Upgrades、对局状态、运行时间、胜负与清波计时；
 // 只推进模拟，不持有也不调用 Renderer，也不读取 BaseService 的键鼠状态。
 // 表现（渲染、音效、横幅、震屏、彩带）通过 on* 虚函数钩子向上发出：
-// 默认实现为空，因此 GameSimulation 可以脱离 Games/Renderer 单独 update。
+// 默认实现为空，因此 GameSimulation 可以脱离 client Games / Renderer 单独 update。
 // 单机时 Games 继承它、实现钩子；将来服务端可以直接使用它并广播快照。
 class GameSimulation {
 public:
@@ -67,7 +67,6 @@ public:
     // 单机用 setInput(input)（第一架飞机）；网络按 playerId 定向，未知/观战 id 被忽略。
     void setInput(const arena::InputState &input);
     void setInput(int playerId, const arena::InputState &input);
-    const arena::InputState &input() const { return input_; }
 
     // 请求冲刺；本地按键和测试都走这里（等价于输入里的 dashRequested）。
     void requestDash(int playerId = 0);
@@ -82,7 +81,6 @@ public:
     float runTime() const { return runTime_; }
     int currentWave() const { return waves_.currentWave(); }
     int totalWaves() const { return waves_.totalWaves(); }
-    const Level &level() const { return level_; }
 
     // ----- 网络快照（阶段 2） -----
     // 服务端边界：把一局模拟提取成只读数据；不传任何对象指针/RTTI。

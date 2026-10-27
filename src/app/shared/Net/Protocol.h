@@ -16,6 +16,9 @@ class QDataStream;
 // 协议版本 2：真实多玩家会话。Welcome 携带稳定 playerId/slot；快照携带
 // players[] 与每个客户端自己的 localPlayerId；RoomList 携带玩家槽位列表；
 // InputCommand 可携带 stdio 宿主的目标 playerId。
+//
+// 控制面（StartMatch）只走本地宿主，不在 TCP 消息表里；加入房间也不需要
+// 单独的请求消息：服务器只有当前房间，Hello/Welcome 即完成加入。
 namespace net {
 
 inline constexpr quint16 kProtocolVersion = 2;
@@ -37,7 +40,6 @@ enum class MessageType : quint16 {
     Event = 6,        // S→C：音效、横幅、震屏/闪屏等表现事件
     MatchEnd = 7,     // S→C：胜负、统计、可重试
     RoomList = 8,     // S→C：没有对局时，服务端展示房间而不是对局
-    JoinRoom = 9,     // C→S：请求加入房间
 };
 
 struct MessageHeader {

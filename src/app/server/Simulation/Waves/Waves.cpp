@@ -1,4 +1,4 @@
-#include "Games/Waves/Waves.h"
+#include "Simulation/Waves/Waves.h"
 
 #include "Arena/Arena.h"
 #include "Arena/Combatants/Enemy.h"

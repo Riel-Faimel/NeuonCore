@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Arena/Arena.h"
-#include "Games/Upgrades/Upgrades.h"
+#include "Simulation/Upgrades/Upgrades.h"
 #include "Net/Snapshot.h"
 
 #include <vector>
