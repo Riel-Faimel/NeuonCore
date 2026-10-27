@@ -48,9 +48,15 @@ void Player::beginWave()
 
 void Player::update(const Context &ctx, float dt)
 {
-    const Math::Vec2 move = BaseService.movementAxis();
-    if (BaseService.mouseActive()) {
-        const Math::Vec2 aimDelta = BaseService.mousePosition() - state.pos;
+    // 输入由 GameSimulation::setInput() 写入 input（单机时来自 BaseService），
+    // Player 不再直接读全局键鼠状态。
+    if (input.dashRequested) {
+        state.dashBuffer = std::max(state.dashBuffer, 0.16f);
+        input.dashRequested = false;
+    }
+    const Math::Vec2 move = input.moveAxis;
+    if (input.mouseActive) {
+        const Math::Vec2 aimDelta = input.mousePosition - state.pos;
         if (aimDelta.lengthSquared() > 1.0f) {
             state.aim = std::atan2(aimDelta.y, aimDelta.x);
         }
@@ -123,7 +129,7 @@ void Player::update(const Context &ctx, float dt)
             RandomService.real(2.0f, 4.5f), Base::CyanSoft, 3.0f, 0.0f, 0});
     }
 
-    if (BaseService.shootingHeld() && state.shotTimer <= 0.0f) {
+    if (input.shooting && state.shotTimer <= 0.0f) {
         shoot(ctx);
         state.shotTimer = state.fireCd;
     }

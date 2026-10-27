@@ -42,6 +42,14 @@ void Arena::reset()
     feedback_ = Feedback{};
 }
 
+void Arena::setInput(const arena::InputState &input)
+{
+    // 冲刺请求可能在两次输入快照之间由 requestDash() 单独置位，不能被覆盖掉。
+    const bool dash = player().input.dashRequested;
+    player().input = input;
+    player().input.dashRequested = input.dashRequested || dash;
+}
+
 void Arena::beginWave()
 {
     const arena::Context ctx = context();
@@ -145,7 +153,7 @@ void Arena::clearForVictory()
 
 void Arena::requestDash()
 {
-    player().state.dashBuffer = 0.16f;
+    player().input.dashRequested = true;
 }
 
 void Arena::celebrateUpgrade()

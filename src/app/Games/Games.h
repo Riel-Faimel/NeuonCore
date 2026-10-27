@@ -2,8 +2,7 @@
 
 #include "Arena/Arena.h"
 #include "Games/Renderer/Renderer.h"
-#include "Games/Upgrades/Upgrades.h"
-#include "Games/Waves/Waves.h"
+#include "Games/Simulation/GameSimulation.h"
 #include "Shop/Shop.h"
 
 #include <QImage>
@@ -11,30 +10,17 @@
 
 class SelfTest;
 
-// Games 模块：一局游戏的全部内容。
-// Menu 在开局时构造它，并把这一局的安排（Level）交给它；构造即开局。
-// Games 持有安排但不再对外暴露，局外只能读到这一局的结果（分数/波次/时间）。
-class Games {
+// Games 模块：单机适配器。
+// 它继承 GameSimulation（Arena / Waves / Upgrades、状态、计时、输入），
+// 自己只负责表现：games::Renderer、BaseService 音效，以及把表现钩子接到渲染器上。
+// Menu 在开局时构造它；局外只能读到这一局的结果（分数/波次/时间）。
+class Games : public games::GameSimulation {
 public:
-    // 一局的安排：展示信息 + 起始波次 + 运行时提交的台本。
-    struct Level {
-        QString name;
-        QString subtitle;
-        int startWave = 1;
-        games::Script script;
-        int enemyLevel = 1;
-    };
+    using State = games::GameSimulation::State;
+    using Level = games::GameSimulation::Level;
 
-    enum class State {
-        Playing,
-        Upgrade,
-        Paused,
-        Victory,
-        Defeat,
-    };
-
-    Games(const Level &level);
-    ~Games();
+    explicit Games(const Level &level);
+    ~Games() override;
 
     Games(const Games &) = delete;
     Games &operator=(const Games &) = delete;
@@ -42,12 +28,8 @@ public:
     void update(float dt);
     void render();
 
-    State state() const { return state_; }
-    float runTime() const { return runTime_; }
     int runScore() const { return ShopService.score().run(); }
     int kills() const { return ShopService.score().kills(); }
-    int currentWave() const { return waves_.currentWave(); }
-    int totalWaves() const { return waves_.totalWaves(); }
     const QImage &frame() const { return renderer_.frame(); }
 
     void keyPress(int key, bool autoRepeat = false);
@@ -60,27 +42,20 @@ public:
 private:
     friend class SelfTest;
 
-    void startWave(int wave);
-    void enterUpgrade();
-    void selectUpgrade(int index);
-    void checkWaveClear(float dt);
-    void triggerVictory();
-    void finishVictory();
-    void triggerDefeat();
+    // 单机输入采集：BaseService -> arena::InputState -> GameSimulation。
+    arena::InputState localInput() const;
     void handleKeydown(int key);
-    void applyFeedback(const Arena::Feedback &feedback);
 
-    Level level_;
-    Arena arena_;
-    games::Waves waves_;
-    games::Upgrades upgrades_;
+    // GameSimulation 的表现钩子：模拟层不依赖 Renderer / 音效。
+    void onWaveStarted(int wave, bool boss, bool finalWave) override;
+    void onUpgradeOpened() override;
+    void onUpgradeSelected(const QColor &color) override;
+    void onBossDown() override;
+    void onWaveCleared(bool finalWave) override;
+    void onVictory() override;
+    void onVictoryFinished() override;
+    void onDefeat() override;
+    void onFeedback(const Arena::Feedback &feedback) override;
+
     games::Renderer renderer_;
-
-    State state_ = State::Playing;
-    float runTime_ = 0.0f;
-    bool victoryPending_ = false;
-    float victoryTimer_ = 0.0f;
-    float waveClearTimer_ = 0.0f;
-    bool waveClearAnnounced_ = false;
-    bool bossDownAnnounced_ = false;
 };

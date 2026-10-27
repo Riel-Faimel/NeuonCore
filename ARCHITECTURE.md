@@ -8,17 +8,18 @@
    - 波次台本由 `Menu` 定义成数据（`games::Script`），开局时提交给 `Games`；`games::Waves` 只按台本生成出生队列。
    - 强化池、可选性和强化效果由 `games::Upgrades` 决定。
    - 敌人 AI、碰撞、Boss 阶段、分数由 `Arena` 及其组件决定。
+   - 一局的模拟（`Arena / Waves / Upgrades`、状态、计时、输入）由 `games::GameSimulation` 决定。
    - 画面布局和局内表现反馈由 `Games` 的 `Renderer` 组件决定。
    - 主菜单、关卡选择和对局结算由 `Menu` 决定。
    - 输入、音频、字体和绘制原语由 `Base` 及其组件提供；`Base` 是进程级单例 `BaseService`，任何模块直接使用，不通过构造参数传递。
-   - `Games` 只负责一局游戏的局内状态机、组件组合和调用顺序。
+   - `Games` 是单机适配器：把本地 `BaseService` 输入转成 `arena::InputState`，并把模拟事件接到 `Renderer` / 音效。
 
 2. **模块是全局类，组件是 namespace 中的类**
    - 除 `main` / `WinMain` 外，没有自由函数。
    - 全局模块类：`GameConfig / Math / Random / Base / Arena / Games / Shop / Menu / GameWindow / SelfTest`。
    - 进程级单例服务（`extern` 全局对象，不挂在任何模块上）：`BaseService`（输入/音频/字体）、`RandomService`（随机引擎）、`ShopService`（钱包/库存）。业务模块直接引用它们，不通过构造参数传递。
    - `Base` 的组件在 `namespace base`：`Input / Audio / Music / Paint`。
-   - `Games` 的组件在 `namespace games`：`Waves / Upgrades`。
+   - `Games` 的组件在 `namespace games`：`GameSimulation / Waves / Upgrades / Renderer`。
    - `Arena` 的组件在 `namespace arena`：`Bullets / Combatants / Entities / Events / State`；它们是 `Arena` 的**私有基类**，不是成员，也不对外暴露。
    - 组件由模块组合（`Arena` 用私有继承 + `arena::Context` 注入，其余用成员）；外部模块只依赖模块的公共接口。
 
@@ -77,7 +78,8 @@ cpp/src/
 │  │     ├─ FloatingText.h/.cpp
 │  │     └─ Shockwave.h/.cpp
 │  ├─ Games/
-│  │  ├─ Games.h / Games.cpp
+│  │  ├─ Games.h / Games.cpp      单机适配器：GameSimulation + Renderer
+│  │  ├─ Simulation/GameSimulation.h/.cpp 组件：Arena / Waves / Upgrades、状态、计时、输入
 │  │  ├─ Waves/Waves.h/.cpp       组件：按台本出生敌人
 │  │  ├─ Upgrades/Upgrades.h/.cpp 组件：强化池、抽取与应用
 │  │  └─ Renderer/Renderer.h/.cpp 组件：局内画面与特效
@@ -146,22 +148,24 @@ cpp/src/
 
 ### Games
 
-`Games` 是全局模块类，组合 3 个 `namespace games` 组件：
+`Games` 是单机适配器，公开继承 `games::GameSimulation`，并拥有 `games::Renderer`。模拟和表现的分工：
 
 | 组件 | 职责 |
 | --- | --- |
+| `GameSimulation` | 持有 `Arena / Waves / Upgrades`、一局状态、运行时间、胜负/清波计时；只推进模拟，不依赖 Renderer |
 | `Waves` | 按运行时提交的台本生成出生队列、Boss 波判定、出生间隔 |
 | `Upgrades` | 强化定义、可选性、三选一、叠加、效果应用 |
 | `Renderer` | 局内画面与特效：背景/星空/发光合成、震屏闪屏、HUD、Boss 条、强化卡、暂停遮罩 |
 
-`Games` 还拥有 `Arena`，构造时只接收 `Level`（台本在里面）。`BaseService` / `RandomService` / `ShopService` 都是全局单例，不在构造参数里，负责：
+`GameSimulation` 构造时只接收 `Level`（台本在里面），负责：
 
 - 一局内的 `Playing / Upgrade / Paused / Victory / Defeat` 状态；
-- 将输入转发给 `BaseService` / `Arena`；
+- 通过 `setInput()` 接收 `arena::InputState`（移动轴、鼠标、射击、冲刺请求），`Player::update()` 不再直接读 `BaseService`；
 - 推进 `Arena` 和 `games::Waves`；
 - 波次清空后打开 `games::Upgrades`；
-- 把 `Arena::Feedback` 转发给 `games::Renderer`；
-- 把胜负结果交给 `Menu`，自己不再画标题或结算。
+- 把 `Arena::Feedback`、胜负、Boss 击破、清波等事件通过 `on*` 虚函数钩子交给适配器。
+
+`Games` 只负责单机表现：每帧从 `BaseService` 采集 `arena::InputState` 再调用 `GameSimulation::update()`，实现钩子调用 `renderer_.shake/flash/showBanner/burstConfetti` 和 `BaseService.playSound()`，并继续把胜负结果交给 `Menu`。`Renderer` 仍只读 `Games / Arena / Waves / Upgrades`；`GameSimulation` 可以脱离 `Renderer` 单独构造和 update。
 
 积分由全局 `ShopService.score()`（`shop::Score`，`src/app/Shop/Score/`）统一持有：`Games` 构造时调用 `beginRun()`（只重置本局统计），`arena::Events::handleKill()` 击杀时调用 `addKill(enemy.score)`。全局余额跨局累计并写入配置存储（Windows 注册表 `HKCU\Software\NeonCore\NeonCore`，其他平台 exe 同级 `settings.ini`；键 `score/total`），HUD 显示钱包，结算显示本局获得（`Games::runScore()`）；`Score::spend()` 供商店使用。
 
@@ -413,11 +417,12 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
                ├─ menu::Main ─────────► 关卡卡 / 商店与设置入口（数据由 Menu 提供）
 ├─ menu::Map ──────────► 星区地图节点（levels.json），Start → 开局
                ├─ menu::Match ────────► Games(Level)   ← 一局一个实例
-               │  └─ Games
-               │     ├─ Arena ────► 私有继承 arena::Bullets / Combatants / Entities / Events / State
-               │     │              （组件回调模块反馈走 arena::Host 虚接口）
-               │     ├─ games::Waves ─────► Arena, RandomService
-               │     ├─ games::Upgrades ──► Arena, RandomService（音效走 BaseService）
+               │  └─ Games（单机适配器）──► BaseService（输入/音效）
+               │     ├─ games::GameSimulation
+               │     │  ├─ Arena ────► 私有继承 arena::Bullets / Combatants / Entities / Events / State
+               │     │  │              （组件回调模块反馈走 arena::Host 虚接口）
+               │     │  ├─ games::Waves ─────► Arena, RandomService
+               │     │  └─ games::Upgrades ──► Arena, RandomService（音效走 BaseService）
                │     └─ games::Renderer ──► Games/Arena/Waves/Upgrades(只读), RandomService
                ├─ menu::Result ───────► 只读 Summary
                ├─ menu::Editor ───────► games::Script（自己持有）
@@ -431,10 +436,10 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
 - `BaseService` / `RandomService` / `ShopService` 是叶子服务：只被调用，不反向依赖任何业务模块；需要它们的模块直接引用全局符号。
 - `base::Pointer` 只依赖 `base::Paint` 的准星画法，不知道游戏业务。
 - `Menu` 只做状态机、输入路由和关卡表；界面在 `menu::*` 组件里，`Games` 由 `menu::Match` 持有。
-- `Games` 只负责一局内的逻辑，不知道 `Menu`；一局的安排由构造参数进入，之后不再外泄。
-- `Games` 只通过 `Arena` 公共接口访问战斗世界。
+- `Games` 是单机适配器：只负责输入采集与表现，模拟在 `GameSimulation`；它不知道 `Menu`，一局的安排由构造参数进入，之后不再外泄。
+- `GameSimulation` 只通过 `Arena` 公共接口访问战斗世界，不依赖 `Renderer` / `BaseService` 的键鼠状态。
+- `games::Renderer` 只读局内业务状态，不再画标题和结算。
 - `Waves` / `Upgrades` 不知道 UI。
-- `Renderer` 只读局内业务状态，不再画标题和结算。
 - `menu::Result` 只拿一份 `Summary`，不依赖 `Games`。
 - `Base` 不知道游戏业务。
 - `lib` 不依赖 `app`。
@@ -450,7 +455,8 @@ GameWindow::tick()
 │  ├─ Shop:   输入自处理（menu::Depot），Menu 不更新
 │  ├─ Match:  menu::Match → Games::update(dt)
 │  │          ├─ Renderer::update(dt)
-│  │          ├─ Playing: Arena→Waves→Feedback→胜负/波次判断
+│  │          ├─ BaseService → arena::InputState → GameSimulation::setInput()
+│  │          ├─ Playing: GameSimulation → Arena→Waves→Feedback→胜负/波次判断
 │  │          ├─ Upgrade: games::Upgrades 候选卡
 │  │          ├─ Paused: 冻结
 │  │          └─ Victory/Defeat: 只推进视觉
@@ -613,9 +619,11 @@ GPU 加速没有采用：当前是 `QImage` + `QPainter` 光栅管线，走 GPU 
 - 自定义台本编辑器只改内存里的 `customScript_`，没有存档；重启回到默认战役台本。
 - 敌人/强化/音效仍用字符串 ID。
 - 一局一个 `Games`：`Base`（输入/音频/字体）、`Random`、`Shop` 都是进程级单例，否则切局会重复初始化音频/随机源/钱包。
-- 一局的安排只经构造参数进入 `Games`；`Games` 不提供任何读回安排的接口，`Menu` 只保留展示用的关卡表。
+- 一局的安排只经构造参数进入 `GameSimulation`；`Games` 不提供任何读回安排的接口，`Menu` 只保留展示用的关卡表。
+- 模拟阶段 1：`Games` 继承 `GameSimulation`，表现钩子仍是虚函数；TCP / 快照 / `GameView` 尚未实现，单机仍走本地直连，不经过网络。
+- `Player` 只读 `InputState`（`moveAxis / mouseActive / mousePosition / shooting / dashRequested`），`BaseService` 只在 `Games` 单机适配器里采集输入。
 - `Arena` 的玩家状态对 `games::Upgrades` 开放写权限（`Arena::playerState()`），不再需要模块间 friend。
 - `Arena` 的 5 个组件是它的私有基类：外部只看到 `Arena` 的公共接口；组件之间通过 `arena::Context` 注入的兄弟引用协作，组件 → 模块的反馈走 `arena::Host` 虚函数。
 - `Arena` 只保留 `friend class SelfTest`（`-DDEBUG` 测试用来直接摆局面），没有业务 friend。
-- 没有 ECS。当前 5 个 Arena 组件 + 2 个 Games 组件的粒度更适合这个规模。
+- 没有 ECS。当前 5 个 Arena 组件 + `GameSimulation` + 2 个 Games 组件的粒度更适合这个规模。
 - `Menu` 只做界面/关卡创建，不读取 `Arena` 内部实体；它通过 `Games` 的 getter 获取对局信息。

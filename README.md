@@ -171,7 +171,8 @@ cpp/
 │  │  │  ├─ Paint/Paint.h/.cpp    组件：颜色/字体/绘制原语（Pass：世界/辉光通道）
 │  │  │  └─ ThreadPool/ThreadPool.h/.cpp 组件：帧内并行任务池
 │  │  ├─ Games/
-│  │  │  ├─ Games.h / Games.cpp   模块入口：局内状态机与组件编排
+│  │  │  ├─ Games.h / Games.cpp   单机适配器：GameSimulation + Renderer
+│  │  │  ├─ Simulation/GameSimulation.h/.cpp 组件：Arena / Waves / Upgrades、状态、计时、输入
 │  │  │  ├─ Waves/Waves.h/.cpp    组件：按提交的台本出生敌人
 │  │  │  ├─ Upgrades/Upgrades.h/.cpp 组件：强化池、抽取与应用
 │  │  │  └─ Renderer/Renderer.h/.cpp 组件：局内背景、发光、HUD、卡片、暂停
@@ -226,7 +227,7 @@ cpp/
 
 `src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Music`、`Pointer`、`Paint`、`ThreadPool` 六个 `namespace base` 组件。`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），Menu / Games / Arena / Renderer / Shop 都直接调用 `BaseService`，不再通过构造函数传递 `Base&`。`Base.h` 仍只暴露 Base 的输入/音频/指针/并行/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Music` 的 QMediaPlayer、`Pointer` 的位置/时钟/准星、`Paint` 的 QFontDatabase 细节、`ThreadPool` 的线程管理都在各自组件内。字体与工作线程由 `main()` 在 `QApplication` 之后调 `Base::initialize()` 初始化；音频由 `BaseService.initAudio()` 按需初始化，`main()` 退出前调 `BaseService.shutdown()`（先停线程池，再释放 Qt 音频对象）。窗口通过 `BaseService.pointerMoveTo/pointerSetVisible/pointerUpdate/pointerDraw` 驱动全局指针。
 
-`src/app/Games/` 是模块目录：`Games` 是全局模块类，组合 `Waves`、`Upgrades`、`Renderer` 三个 `namespace games` 组件，并拥有 `Arena`。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Renderer` 只负责这一局的画面与特效（标题/结算在 `menu::*`，鼠标指针在 `BaseService` 的 `base::Pointer`）。`Renderer` 把世界层放到 `ThreadPool` 工作线程、辉光层留在主线程并行绘制，字体仍在主线程；`Games` 负责局内状态机和调用顺序。随机数走全局 `RandomService`，不再作为构造参数传入。四个关卡分别使用 `waves/level-01..04.json`，`Games::Level.enemyLevel` 为 1–4，作为隐藏的敌人成长等级乘在血量/伤害/速度上；关卡越靠后波次越长、敌人组成越重。
+`src/app/Games/` 是模块目录：`Games` 是单机适配器，公开继承 `games::GameSimulation`（持有 `Arena / Waves / Upgrades`、一局状态、运行时间和输入），自己只拥有 `games::Renderer` 并实现模拟的表现钩子。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。`GameSimulation` 只推进模拟，不依赖 Renderer；`Games::update()` 每帧先从 `BaseService` 采集 `arena::InputState`（移动/鼠标/射击），再调用模拟，并通过 `on*` 钩子调用渲染器的震屏/闪屏/横幅/彩带和音效。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Renderer` 只负责这一局的画面与特效（标题/结算在 `menu::*`，鼠标指针在 `BaseService` 的 `base::Pointer`）。`Renderer` 把世界层放到 `ThreadPool` 工作线程、辉光层留在主线程并行绘制，字体仍在主线程。随机数走全局 `RandomService`，不再作为构造参数传入。四个关卡分别使用 `waves/level-01..04.json`，`GameSimulation::Level.enemyLevel` 为 1–4，作为隐藏的敌人成长等级乘在血量/伤害/速度上；关卡越靠后波次越长、敌人组成越重。
 
 积分和库存由进程级单例 `ShopService` 持有（`extern Shop ShopService;`）：`Shop` 组合 `shop::Score`（跨局钱包，键 `score/total`）和 `shop::Inventory`（地雷库存，键 `inventory/mines`），Windows 写注册表、其他平台写 `settings.ini`。`main()` 启动时调 `ShopService.load()`、退出前调 `ShopService.save()`；`arena::Events::handleKill()` 击杀上报积分；HUD 显示全局钱包，结算显示本局获得（`runScore()`）；`Shop::buyMine()` 负责扣款入库。
 

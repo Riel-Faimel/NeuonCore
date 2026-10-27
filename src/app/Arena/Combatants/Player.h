@@ -7,6 +7,16 @@ namespace arena {
 struct Context;
 
 // 玩家战斗者的可变状态。Arena 对外只暴露 playerState()（Upgrades 需要写权限）。
+// 一帧的玩家输入。模拟层只读这份快照，不再直接访问 BaseService；
+// 单机适配器（Games）每帧从 BaseService 填充，网络客户端将来从 InputCommand 填充。
+struct InputState {
+    Math::Vec2 moveAxis;
+    bool mouseActive = false;
+    Math::Vec2 mousePosition;
+    bool shooting = false;
+    bool dashRequested = false;
+};
+
 struct PlayerState {
     Math::Vec2 pos;
     Math::Vec2 vel;
@@ -55,6 +65,7 @@ public:
     float contactDamage() const override { return 0.0f; }
 
     PlayerState state;
+    InputState input;
 };
 
 } // namespace arena

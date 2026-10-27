@@ -8,35 +8,49 @@
 
 #include <algorithm>
 
-// 构造即开局：一局的安排（含台本）在这里被接收，之后只对内使用。
+// 构造即开局：GameSimulation 接收一局的安排，Games 只负责表现层初始化。
 // 新的一局就是一个新对象，因此不存在需要手工清空的跨局状态。
-// Base / Random / Shop 都是进程级单例（BaseService / RandomService / ShopService），
-// 不再作为构造参数传入；Games 只剩"这一局的安排"这一个输入。
+// Base / Random / Shop 都是进程级单例（BaseService / RandomService / ShopService）。
 Games::Games(const Level &level)
-    : level_(level), arena_(), waves_(arena_, level_.script, level_.enemyLevel),
-      upgrades_(arena_),
-      renderer_()
+    : GameSimulation(level), renderer_()
 {
     ShopService.score().beginRun();
     renderer_.initialize();
     BaseService.setMouseActive(true);
     BaseService.playSound(QStringLiteral("ui"));
     renderer_.flash(Base::Cyan, 35);
-    startWave(std::clamp(level_.startWave, 1, std::max(1, waves_.totalWaves())));
+    start();
 }
 
 Games::~Games() = default;
 
-void Games::startWave(int wave)
+void Games::update(float dt)
 {
-    waves_.start(wave);
-    arena_.beginWave();
-    waveClearTimer_ = 0.0f;
-    waveClearAnnounced_ = false;
-    bossDownAnnounced_ = false;
+    if (state_ != State::Paused) {
+        renderer_.update(dt);
+    }
+    setInput(localInput());
+    GameSimulation::update(dt);
+}
+
+void Games::render()
+{
+    renderer_.render(*this, arena_, waves_, upgrades_);
+}
+
+arena::InputState Games::localInput() const
+{
+    arena::InputState input;
+    input.moveAxis = BaseService.movementAxis();
+    input.mouseActive = BaseService.mouseActive();
+    input.mousePosition = BaseService.mousePosition();
+    input.shooting = BaseService.shootingHeld();
+    return input;
+}
+
+void Games::onWaveStarted(int wave, bool boss, bool finalWave)
+{
     // 横幅按“是不是最后一波”和“这一波有没有 Boss”两件事分别决定，互不绑定。
-    const bool boss = waves_.isBossWave();
-    const bool finalWave = waves_.isFinalWave();
     const QString title = finalWave ? QStringLiteral("最终波次")
                                     : QStringLiteral("第 %1 波").arg(wave);
     if (boss) {
@@ -51,131 +65,37 @@ void Games::startWave(int wave)
     }
 }
 
-void Games::enterUpgrade()
+void Games::onUpgradeOpened()
 {
-    arena_.clearProjectiles();
-    if (!upgrades_.open()) {
-        return;
-    }
-    state_ = State::Upgrade;
     renderer_.flash(Base::Cyan, 28);
 }
 
-void Games::selectUpgrade(int index)
+void Games::onUpgradeSelected(const QColor &color)
 {
-    if (state_ != State::Upgrade || index < 0
-        || index >= int(upgrades_.offers().size())) {
-        return;
-    }
-    const QColor color = upgrades_.offers().at(size_t(index)).color;
-    if (!upgrades_.apply(index)) {
-        return;
-    }
     renderer_.flash(color, 35);
-    state_ = State::Playing;
-    startWave(waves_.currentWave() + 1);
 }
 
-void Games::update(float dt)
+void Games::onBossDown()
 {
-    if (state_ != State::Paused) {
-        renderer_.update(dt);
-    }
-
-    switch (state_) {
-    case State::Playing: {
-        if (victoryPending_) {
-            victoryTimer_ -= dt;
-            arena_.updateVisuals(dt);
-            if (victoryTimer_ <= 0.0f) {
-                finishVictory();
-            }
-            break;
-        }
-
-        runTime_ += dt;
-        arena_.update(dt);
-        waves_.update(dt);
-        applyFeedback(arena_.takeFeedback());
-
-        if (arena_.playerDefeated()) {
-            triggerDefeat();
-            break;
-        }
-        // Boss 只是一个强敌：击杀它不代表这一局结束，胜负只由台本是否打完决定。
-        if (arena_.bossDefeated() && !bossDownAnnounced_) {
-            bossDownAnnounced_ = true;
-            renderer_.shake(12.0f);
-            renderer_.flash(Base::White, 90);
-            renderer_.showBanner(QStringLiteral("目标已摧毁"),
-                                 QStringLiteral("虚空吞噬者停止响应"), 1.8f,
-                                 Base::Cyan, QStringLiteral("BOSS DOWN"));
-        }
-        checkWaveClear(dt);
-        break;
-    }
-    case State::Upgrade:
-        break;
-    case State::Paused:
-        break;
-    case State::Defeat:
-    case State::Victory:
-        arena_.updateVisuals(dt);
-        break;
-    }
+    renderer_.shake(12.0f);
+    renderer_.flash(Base::White, 90);
+    renderer_.showBanner(QStringLiteral("目标已摧毁"),
+                         QStringLiteral("虚空吞噬者停止响应"), 1.8f,
+                         Base::Cyan, QStringLiteral("BOSS DOWN"));
 }
 
-void Games::render()
+void Games::onWaveCleared(bool finalWave)
 {
-    renderer_.render(*this, arena_, waves_, upgrades_);
-}
-
-void Games::applyFeedback(const Arena::Feedback &feedback)
-{
-    if (feedback.hasFlash) {
-        renderer_.flash(feedback.color, feedback.alpha);
-    }
-    if (feedback.shake > 0.0f) {
-        renderer_.shake(feedback.shake);
-    }
-}
-
-void Games::checkWaveClear(float dt)
-{
-    if (victoryPending_ || !waves_.isCleared()) {
-        waveClearTimer_ = 0.0f;
-        waveClearAnnounced_ = false;
+    if (finalWave) {
         return;
     }
-    if (!waveClearAnnounced_) {
-        waveClearAnnounced_ = true;
-        arena_.clearEnemyBullets();
-        if (!waves_.isFinalWave()) {
-            renderer_.showBanner(QStringLiteral("波次清理完毕"),
-                                 QStringLiteral("正在同步强化协议"),
-                                 1.4f, Base::Green, QStringLiteral("SECTOR CLEAR"));
-        }
-    }
-    waveClearTimer_ += dt;
-    if (waveClearTimer_ < 0.85f) {
-        return;
-    }
-    if (waves_.isFinalWave()) {
-        triggerVictory();
-    } else {
-        enterUpgrade();
-    }
+    renderer_.showBanner(QStringLiteral("波次清理完毕"),
+                         QStringLiteral("正在同步强化协议"),
+                         1.4f, Base::Green, QStringLiteral("SECTOR CLEAR"));
 }
 
-void Games::triggerVictory()
+void Games::onVictory()
 {
-    if (victoryPending_ || state_ != State::Playing) {
-        return;
-    }
-    victoryPending_ = true;
-    victoryTimer_ = 1.65f;
-    arena_.clearForVictory();
-    arena_.celebrateVictory();
     renderer_.shake(18.0f);
     renderer_.flash(Base::White, 130);
     renderer_.showBanner(QStringLiteral("区域已肃清"),
@@ -184,26 +104,26 @@ void Games::triggerVictory()
     BaseService.playSound(QStringLiteral("victory"));
 }
 
-void Games::finishVictory()
+void Games::onVictoryFinished()
 {
-    if (state_ == State::Victory) {
-        return;
-    }
-    state_ = State::Victory;
-    victoryPending_ = false;
     renderer_.burstConfetti();
 }
 
-void Games::triggerDefeat()
+void Games::onDefeat()
 {
-    if (state_ != State::Playing) {
-        return;
-    }
-    state_ = State::Defeat;
-    victoryPending_ = false;
     renderer_.shake(20.0f);
     renderer_.flash(Base::Red, 120);
     BaseService.playSound(QStringLiteral("defeat"));
+}
+
+void Games::onFeedback(const Arena::Feedback &feedback)
+{
+    if (feedback.hasFlash) {
+        renderer_.flash(feedback.color, feedback.alpha);
+    }
+    if (feedback.shake > 0.0f) {
+        renderer_.shake(feedback.shake);
+    }
 }
 
 void Games::keyPress(int key, bool autoRepeat)
@@ -265,7 +185,7 @@ void Games::handleKeydown(int key)
             state_ = State::Paused;
             BaseService.playSound(QStringLiteral("ui"));
         } else if (key == Qt::Key_Space) {
-            arena_.requestDash();
+            requestDash();
         }
     } else if (state_ == State::Paused) {
         if (key == Qt::Key_Escape || key == Qt::Key_P) {

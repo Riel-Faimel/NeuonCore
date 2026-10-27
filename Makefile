@@ -35,7 +35,8 @@ LIBS := -L$(QTDIR)/lib \
         -luser32 -lkernel32 -lgdi32 -lwinmm -limm32 -lversion \
         -ldwmapi -luxtheme -lmsimg32 -static-libgcc -static-libstdc++
 
-GAMES_COMPONENTS := Games Waves/Waves Upgrades/Upgrades Renderer/Renderer
+GAMES_COMPONENTS := Games Waves/Waves Upgrades/Upgrades Renderer/Renderer \
+                    Simulation/GameSimulation
 GAMES_OBJS := $(addprefix $(BUILD)/app/Games/,$(addsuffix .o,$(GAMES_COMPONENTS)))
 MENU_COMPONENTS := Menu Main/Main Map/Map Match/Match Result/Result Editor/Editor Depot/Depot Armory/Armory Settings/Settings
 MENU_OBJS := $(addprefix $(BUILD)/app/Menu/,$(addsuffix .o,$(MENU_COMPONENTS)))
@@ -103,6 +104,7 @@ $(BUILD):
 	@if not exist "$(BUILD_WIN)\app\Games\Waves" mkdir "$(BUILD_WIN)\app\Games\Waves"
 	@if not exist "$(BUILD_WIN)\app\Games\Upgrades" mkdir "$(BUILD_WIN)\app\Games\Upgrades"
 	@if not exist "$(BUILD_WIN)\app\Games\Renderer" mkdir "$(BUILD_WIN)\app\Games\Renderer"
+	@if not exist "$(BUILD_WIN)\app\Games\Simulation" mkdir "$(BUILD_WIN)\app\Games\Simulation"
 	@if not exist "$(BUILD_WIN)\app\Menu" mkdir "$(BUILD_WIN)\app\Menu"
 	@if not exist "$(BUILD_WIN)\app\Shop" mkdir "$(BUILD_WIN)\app\Shop"
 	@if not exist "$(BUILD_WIN)\app\Shop\Score" mkdir "$(BUILD_WIN)\app\Shop\Score"

@@ -44,7 +44,9 @@ public:
     Arena(const Arena &) = delete;
     Arena &operator=(const Arena &) = delete;
 
-    // ----- 局内流程 -----
+    // ----- 输入 / 局内流程 -----
+    // 一帧的玩家输入由 GameSimulation 通过这里注入；Player 不再直接读 BaseService。
+    void setInput(const arena::InputState &input);
     void reset();
     void beginWave();
     void update(float dt);
