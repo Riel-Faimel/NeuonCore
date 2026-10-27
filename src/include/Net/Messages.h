@@ -93,6 +93,28 @@ struct MatchEndMessage {
     bool operator==(const MatchEndMessage &) const = default;
 };
 
+struct RoomInfo {
+    quint32 id = 0;
+    QString name;
+    int players = 0;
+    int maxPlayers = 4;
+    bool playing = false;
+
+    bool operator==(const RoomInfo &) const = default;
+};
+
+struct RoomListMessage {
+    std::vector<RoomInfo> rooms;
+
+    bool operator==(const RoomListMessage &) const = default;
+};
+
+struct JoinRoomMessage {
+    quint32 roomId = 0;
+
+    bool operator==(const JoinRoomMessage &) const = default;
+};
+
 // ----- QDataStream payload 序列化 -----
 QByteArray serializeHello(const HelloMessage &message);
 bool deserializeHello(const QByteArray &payload, HelloMessage *message,
@@ -112,6 +134,14 @@ bool deserializeEvent(const QByteArray &payload, EventMessage *message,
 
 QByteArray serializeMatchEnd(const MatchEndMessage &message);
 bool deserializeMatchEnd(const QByteArray &payload, MatchEndMessage *message,
+                         QString *error = nullptr);
+
+QByteArray serializeRoomList(const RoomListMessage &message);
+bool deserializeRoomList(const QByteArray &payload, RoomListMessage *message,
+                         QString *error = nullptr);
+
+QByteArray serializeJoinRoom(const JoinRoomMessage &message);
+bool deserializeJoinRoom(const QByteArray &payload, JoinRoomMessage *message,
                          QString *error = nullptr);
 
 // ----- 带帧头的完整消息 -----
@@ -138,6 +168,16 @@ bool decodeEvent(const QByteArray &frame, EventMessage *message,
 QByteArray encodeMatchEnd(const MatchEndMessage &message,
                           quint16 version = kProtocolVersion);
 bool decodeMatchEnd(const QByteArray &frame, MatchEndMessage *message,
+                    QString *error = nullptr);
+
+QByteArray encodeRoomList(const RoomListMessage &message,
+                          quint16 version = kProtocolVersion);
+bool decodeRoomList(const QByteArray &frame, RoomListMessage *message,
+                    QString *error = nullptr);
+
+QByteArray encodeJoinRoom(const JoinRoomMessage &message,
+                          quint16 version = kProtocolVersion);
+bool decodeJoinRoom(const QByteArray &frame, JoinRoomMessage *message,
                     QString *error = nullptr);
 
 } // namespace net

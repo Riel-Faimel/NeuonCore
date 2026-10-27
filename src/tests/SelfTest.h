@@ -957,6 +957,20 @@ public:
                                    && !snapshotError.isEmpty(),
                                QStringLiteral("protocol version mismatch is rejected"));
 
+            net::RoomListMessage roomList;
+            net::RoomInfo room;
+            room.id = 7;
+            room.name = QStringLiteral("测试房间");
+            room.players = 2;
+            room.maxPlayers = 4;
+            room.playing = false;
+            roomList.rooms.push_back(room);
+            net::RoomListMessage decodedRooms;
+            success &= require(net::decodeRoomList(net::encodeRoomList(roomList),
+                                                   &decodedRooms)
+                                   && decodedRooms == roomList,
+                               QStringLiteral("room list roundtrips through the protocol"));
+
             client::GameView view;
             const Random::EngineState rngBeforeView = RandomService.engineState();
             view.apply(decoded);
@@ -1041,10 +1055,17 @@ public:
                                QStringLiteral("TCP client starts connecting"));
             success &= require(pumpUntil([&] { return tcpClient.welcomed(); }, 3000),
                                QStringLiteral("TCP client completes Hello/Welcome handshake"));
+            success &= require(pumpUntil([&] {
+                                   return tcpClient.inLobby()
+                                          && !tcpClient.rooms().empty();
+                               }, 3000),
+                               QStringLiteral("server presents a room before any match"));
             success &= require(tcpServer.startMatch(tcpLevel),
                                QStringLiteral("host starts the authoritative match locally"));
             success &= require(pumpUntil([&] { return tcpClient.snapshotCount() > 0; }, 3000),
                                QStringLiteral("TCP client receives snapshots"));
+            success &= require(!tcpClient.inLobby(),
+                               QStringLiteral("client leaves the room when the match starts"));
             success &= require(tcpServer.clientCount() == 1
                                    && tcpServer.snapshot().waves.totalWaves == 1,
                                QStringLiteral("server owns the authoritative match"));

@@ -308,6 +308,12 @@ void Menu::keyPress(int key, bool autoRepeat)
         if (!match_.active()) {
             break;
         }
+        if (match_.lobby()) {
+            if (key == Qt::Key_Escape || key == Qt::Key_Q) {
+                returnToMenu();
+            }
+            break;
+        }
         match_.keyPress(key, autoRepeat);
         if (key == Qt::Key_Q && match_.state() == Games::State::Paused) {
             returnToMenu();

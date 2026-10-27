@@ -44,7 +44,10 @@ cpp/src/
 │  │  │  ├─ Waves/Waves.h/.cpp
 │  │  │  └─ Upgrades/Upgrades.h/.cpp
 │  │  ├─ Net/Server.h/.cpp         QTcpServer：headless 模拟、60Hz tick、广播
-│  │  └─ main.cpp                  独立服务端入口（--port）
+│  │  ├─ Room/Room.h/.cpp           房间/大厅：没有对局时展示房间
+│  │  ├─ Shop/                      Score / Inventory（服务端权威）
+│  │  ├─ Loadout/                   发射器选择（服务端权威）
+│  │  └─ main.cpp                   独立服务端入口（--port，stdin 控制）
 │  └─ client/
 │     ├─ Base/                     窗口/输入/音频/绘制原语/线程池
 │     ├─ Games/
@@ -57,10 +60,8 @@ cpp/src/
 │     │  ├─ Main/ Map/ Match/ Result/
 │     │  ├─ Editor/ Depot/ Armory/
 │     │  └─ Settings/
-│     ├─ Shop/                     Score / Inventory
-│     ├─ Loadout/
 │     ├─ app.rc
-│     └─ main.cpp                  客户端入口/窗口；--server 走同一可执行文件的服务端模式
+│     └─ main.cpp                  客户端入口/窗口；服务端模式已移到 NeonCoreServer
 ├─ lib/
 │  ├─ Math.h / Math.cpp
 │  ├─ Json.h                        constexpr JSON 解析器
@@ -135,7 +136,7 @@ cpp/src/
 
 `Games` 只负责单机表现：每帧从 `BaseService` 采集 `arena::InputState` 再调用 `GameSimulation::update()`，实现钩子调用 `renderer_.shake/flash/showBanner/burstConfetti` 和 `BaseService.playSound()`，并继续把胜负结果交给 `Menu`。`Games::render()` 不再把模拟对象直接交给 `Renderer`：先 `writeSnapshot()` 提取 `net::Snapshot`，再用 `client::GameView::apply()` 重建视图，最后 `Renderer` 只读这份视图。单机和将来的 TCP 客户端因此共用同一条表现路径；`GameSimulation` 可以脱离 `Renderer` 单独构造和 update。
 
-积分由全局 `ShopService.score()`（`shop::Score`，`src/app/client/Shop/Score/`）统一持有：`Games` 构造时调用 `beginRun()`（只重置本局统计），`arena::Events::handleKill()` 击杀时调用 `addKill(enemy.score)`。全局余额跨局累计并写入配置存储（Windows 注册表 `HKCU\Software\NeonCore\NeonCore`，其他平台 exe 同级 `settings.ini`；键 `score/total`），HUD 显示钱包，结算显示本局获得（`Games::runScore()`）；`Score::spend()` 供商店使用。
+积分由全局 `ShopService.score()`（`shop::Score`，`src/app/server/Shop/Score/`）统一持有：`Games` 构造时调用 `beginRun()`（只重置本局统计），`arena::Events::handleKill()` 击杀时调用 `addKill(enemy.score)`。全局余额跨局累计并写入配置存储（Windows 注册表 `HKCU\Software\NeonCore\NeonCore`，其他平台 exe 同级 `settings.ini`；键 `score/total`），HUD 显示钱包，结算显示本局获得（`Games::runScore()`）；`Score::spend()` 供商店使用。
 
 一局的结束条件只由台本决定：清空最后一波即胜利。`Boss` 只是一个带阶段的强敌，击杀它不会结束对局，只触发表现反馈（目标摧毁横幅、震屏、音效），所以它可以被放在任意一波。
 
@@ -182,7 +183,7 @@ cpp/src/
 
 ### Loadout
 
-`Loadout` 是进程级单例 `LoadoutService`：从 `loadout.json` 读 `LauncherDef`（伤害/射速/弹速倍率、散射倍率、额外弹丸、穿透），把选择持久化到配置存储的 `loadout/launcher`。`Player::reset()` 应用倍率到 `PlayerState`，`Player::shoot()` 应用散射/额外弹丸/穿透；默认 `standard` 发射器所有倍率为 1，保持原弹道。`menu::Armory` 只展示与选择，不直接改子弹数据。
+`Loadout` 位于 `src/app/server/Loadout/`，是进程级单例 `LoadoutService`：从 `loadout.json` 读 `LauncherDef`（伤害/射速/弹速倍率、散射倍率、额外弹丸、穿透），把选择持久化到配置存储的 `loadout/launcher`。`Player::reset()` 应用倍率到 `PlayerState`，`Player::shoot()` 应用散射/额外弹丸/穿透；默认 `standard` 发射器所有倍率为 1，保持原弹道。`menu::Armory` 只展示与选择，不直接改子弹数据。
 
 ### Arena
 
@@ -263,15 +264,16 @@ public:
 | --- | --- | --- |
 | `net::Protocol` | `src/include/Net/Protocol.h` | 协议版本、消息 id、`[u32 length][u16 type][u16 version][payload]` 帧的打包/拆包、TCP 粘包缓冲 `FrameBuffer` |
 | `net::Input` | `src/include/Net/Input.h` | `InputCommand`：移动轴、鼠标、射击、冲刺、暂停、布雷、强化选择 |
-| `net::Messages` | `src/include/Net/Messages.h` | `Hello / Welcome / StartMatch / Event / MatchEnd` 的 payload 与带帧头的编码/解码 |
+| `net::Messages` | `src/include/Net/Messages.h` | `Hello / Welcome / StartMatch / Input / Snapshot / Event / MatchEnd / RoomList / JoinRoom` 的 payload 与带帧头的编码/解码 |
 | `net::Snapshot` | `src/include/Net/Snapshot.h` | 玩家、敌人（dataKey + 绘制字段）、子弹、传送门/掉落/地雷/粒子/飘字/冲击波、波次 HUD、强化卡、状态/时间/分数/击杀/Boss |
 | 提取 | `GameSimulation::snapshot()` | `Arena / Combatants / Bullets / Entities` 各自把只读数据写进快照，RTTI 在边界转 `Enemy::dataKeyFor()` |
-| `server::GameServer` | `src/app/server/Net/Server.*` | `QTcpServer`、会话、固定 60Hz tick、headless `GameSimulation`、`Snapshot/Event/MatchEnd` 广播、权威输入应用 |
+| `server::GameServer` | `src/app/server/Net/Server.*` | `QTcpServer`、会话、固定 60Hz tick、headless `GameSimulation`、`Snapshot/Event/MatchEnd/RoomList` 广播、权威输入应用 |
+| `server::RoomManager` | `src/app/server/Room/Room.*` | 房间/大厅：没有对局时展示房间，记录玩家数和是否对局中 |
 | `client::GameClient` | `src/app/client/Net/Client.*` | `QTcpSocket`、Hello/Welcome、输入发送、快照接收、`client::GameView`、重连与错误状态 |
 | `client::GameView` | `src/app/client/Client/GameView.*` | 把快照应用回一个只读 `Arena` 镜像：按 dataKey 重建敌人/传送门，填充绘制字段；不推进模拟 |
 | `games::Renderer` | `src/app/client/Games/Renderer/*` | 只读 `GameView` 画世界层/HUD/强化卡/暂停；世界绘制仍走 `Arena::draw()`，没有第二套画法 |
 
-服务端只拥有模拟，不链接/使用 Renderer、Menu 或 `BaseService` 的键鼠状态；`GameSimulation::Level` 里的台本由**本地宿主**通过 `GameServer::startMatch()` 或 `NeonCoreServer` 的 stdin 控制帧提交，TCP 客户端不能发 `StartMatch`。服务端用 `QElapsedTimer` 累加固定 1/60s 步长，每个 tick 后 `writeSnapshot()` 并广播；`ShopService.score().beginRun()` 在开局时重置本局统计，击杀仍由 `Arena::Events` 写回，因此比分/波次/胜负以服务端为准。表现事件（波次横幅、Boss 击破、震屏/闪屏、胜利/失败）通过 `Event` 消息发送，由客户端 `GameClient` 调用本地 `Renderer` 和音效；客户端不回传世界状态。
+服务端只拥有模拟，不链接/使用 Renderer、Menu 或 `BaseService` 的键鼠状态；`GameSimulation::Level` 里的台本由**本地宿主**通过 `GameServer::startMatch()` 或 `NeonCoreServer` 的 stdin 控制帧提交，TCP 客户端不能发 `StartMatch`。服务端用 `QElapsedTimer` 累加固定 1/60s 步长，每个 tick 后 `writeSnapshot()` 并广播；没有对局时 `RoomManager` 广播 `RoomList`，客户端进入房间/大厅而不是渲染对局；`ShopService.score().beginRun()` 在开局时重置本局统计，击杀仍由 `Arena::Events` 写回，因此比分/波次/胜负以服务端为准。表现事件（波次横幅、Boss 击破、震屏/闪屏、胜利/失败）通过 `Event` 消息发送，由客户端 `GameClient` 调用本地 `Renderer` 和音效；客户端不回传世界状态。
 
 `menu::Match` 默认是 `Mode::Network`：host 为空时在 127.0.0.1 上 `listen(0)` 启动内嵌 `GameServer`，再让 `GameClient` 连它的实际端口；`--connect host:port` 则连接远端。两条路径使用同一个协议和同一份快照。`Mode::Local` 保留本地直连 `Games` 路径，供 `SelfTest` 和 `--local` 回退。`--server --port N` 在 `QCoreApplication` 里只启动 `GameServer`，没有窗口/字体/音频。
 

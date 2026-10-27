@@ -67,13 +67,12 @@ CLIENT_COMPONENTS := Base/Base Base/Input/Input Base/Audio/Audio Base/Audio/Musi
                      Menu/Menu Menu/Main/Main Menu/Map/Map Menu/Match/Match \
                      Menu/Result/Result Menu/Editor/Editor Menu/Depot/Depot \
                      Menu/Armory/Armory \
-                     Menu/Settings/Settings \
-                     Shop/Shop Shop/Score/Score Shop/Inventory/Inventory \
-                     Loadout/Loadout
+                     Menu/Settings/Settings
 CLIENT_OBJS := $(addprefix $(BUILD)/app/client/,$(addsuffix .o,$(CLIENT_COMPONENTS)))
 
 SERVER_COMPONENTS := Games/Simulation/GameSimulation Games/Waves/Waves \
-                     Games/Upgrades/Upgrades Net/Server
+                     Games/Upgrades/Upgrades Net/Server Room/Room \
+                     Shop/Shop Shop/Score/Score Shop/Inventory/Inventory Loadout/Loadout
 SERVER_OBJS := $(addprefix $(BUILD)/app/server/,$(addsuffix .o,$(SERVER_COMPONENTS)))
 
 MAIN_RELEASE_OBJ := $(BUILD)/app/client/main_release.o
@@ -82,12 +81,10 @@ SERVER_MAIN_OBJ := $(BUILD)/app/server/main.o
 RC := $(MINGWDIR)/bin/windres.exe
 ICON_RES_OBJ := $(BUILD)/app/client/app_res.o
 
-# 独立服务端只链接模拟和它依赖的客户端基础服务（Base/Shop/Loadout），
+# 独立服务端只链接模拟和它依赖的基础服务（Base）；权威 Shop/Loadout 已在 server/。
 # 不链接 Menu / Renderer / GameView / TCP Client。
 SERVER_SUPPORT_COMPONENTS := Base/Base Base/Input/Input Base/Audio/Audio Base/Audio/Music \
-                             Base/Paint/Paint Base/Pointer/Pointer Base/ThreadPool/ThreadPool \
-                             Shop/Shop Shop/Score/Score Shop/Inventory/Inventory \
-                             Loadout/Loadout
+                             Base/Paint/Paint Base/Pointer/Pointer Base/ThreadPool/ThreadPool
 SERVER_SUPPORT_OBJS := $(addprefix $(BUILD)/app/client/,$(addsuffix .o,$(SERVER_SUPPORT_COMPONENTS)))
 SERVER_APP_OBJS := $(LIB_OBJS) $(SHARED_OBJS) $(SERVER_OBJS) $(SERVER_SUPPORT_OBJS)
 

@@ -124,6 +124,7 @@ GameServer::~GameServer()
 bool GameServer::listen(quint16 port, bool loopbackOnly, QString *error)
 {
     close();
+    rooms_.reset();
     lastError_.clear();
     const QHostAddress address =
         loopbackOnly ? QHostAddress(QHostAddress::LocalHost)
@@ -154,6 +155,7 @@ void GameServer::close()
     }
     sessions_.clear();
     controllerSocket_ = nullptr;
+    rooms_.reset();
     simulation_.reset();
     snapshot_.clear();
     matchEndSent_ = false;
@@ -214,6 +216,7 @@ void GameServer::onDisconnected(QTcpSocket *socket)
     }
     sessions_.remove(socket);
     socket->deleteLater();
+    broadcastRoomList();
 }
 
 void GameServer::handleFrame(QTcpSocket *socket, const QByteArray &frame)
@@ -252,10 +255,14 @@ void GameServer::handleFrame(QTcpSocket *socket, const QByteArray &frame)
     case net::MessageType::Input:
         handleInput(socket, frame);
         break;
+    case net::MessageType::JoinRoom:
+        handleJoinRoom(socket, frame);
+        break;
     case net::MessageType::Welcome:
     case net::MessageType::Snapshot:
     case net::MessageType::Event:
     case net::MessageType::MatchEnd:
+    case net::MessageType::RoomList:
         reject(socket, QStringLiteral("server-only message type received from client"));
         break;
     }
@@ -280,7 +287,37 @@ void GameServer::handleHello(QTcpSocket *socket, const QByteArray &frame)
         controllerSocket_ = socket;
     }
     sendWelcome(socket, true, QString());
+    broadcastRoomList();
 }
+
+void GameServer::handleJoinRoom(QTcpSocket *socket, const QByteArray &frame)
+{
+    net::JoinRoomMessage request;
+    QString error;
+    if (!net::decodeJoinRoom(frame, &request, &error)) {
+        reject(socket, error);
+        return;
+    }
+    auto it = sessions_.find(socket);
+    if (it == sessions_.end()) {
+        return;
+    }
+    bool found = false;
+    for (const Room &room : rooms_.rooms()) {
+        if (room.id == request.roomId) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        reject(socket, QStringLiteral("room not found"));
+        return;
+    }
+    it->roomId = request.roomId;
+    sendRoomList(socket);
+    broadcastRoomList();
+}
+
 
 bool GameServer::startMatch(const games::GameSimulation::Level &level, QString *error)
 {
@@ -297,6 +334,8 @@ bool GameServer::startMatch(const games::GameSimulation::Level &level, QString *
     };
     simulation_ = std::move(simulation);
     matchEndSent_ = false;
+    rooms_.setPlaying(true);
+    broadcastRoomList();
 
     // 服务端是比分/波次的权威：每局开始时重置本局统计，击杀由 Arena 写回 ShopService。
     ShopService.score().beginRun();
@@ -475,6 +514,40 @@ void GameServer::onTick()
     }
 }
 
+void GameServer::sendRoomList(QTcpSocket *socket)
+{
+    auto it = sessions_.find(socket);
+    if (it == sessions_.end() || !it->welcomed) {
+        return;
+    }
+    rooms_.setPlayers(int(sessions_.size()));
+    net::RoomListMessage message;
+    message.rooms.reserve(rooms_.rooms().size());
+    for (const Room &room : rooms_.rooms()) {
+        net::RoomInfo info;
+        info.id = room.id;
+        info.name = room.name;
+        info.players = room.players;
+        info.maxPlayers = room.maxPlayers;
+        info.playing = room.playing;
+        message.rooms.push_back(std::move(info));
+    }
+    const QByteArray frame = net::encodeRoomList(message);
+    if (!frame.isEmpty()) {
+        socket->write(frame);
+    }
+}
+
+void GameServer::broadcastRoomList()
+{
+    rooms_.setPlayers(int(sessions_.size()));
+    for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+        if (it->welcomed && it.key() != nullptr) {
+            sendRoomList(it.key());
+        }
+    }
+}
+
 void GameServer::sendWelcome(QTcpSocket *socket, bool accepted, const QString &reason)
 {
     auto it = sessions_.find(socket);
@@ -518,6 +591,8 @@ void GameServer::sendMatchEnd(QTcpSocket *socket, const QString &reason)
     } else {
         broadcastToWelcomed(frame);
     }
+    rooms_.setPlaying(false);
+    broadcastRoomList();
 }
 
 void GameServer::reject(QTcpSocket *socket, const QString &reason)

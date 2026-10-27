@@ -53,9 +53,12 @@ public:
 
     // 直接发送一条输入命令（测试/调试）；正常路径由 update() 每帧采集 BaseService。
     bool sendInput(const net::InputCommand &command);
+    bool joinRoom(quint32 roomId);
 
     bool welcomed() const { return welcomed_; }
     bool matchActive() const { return snapshotCount_ > 0; }
+    bool inLobby() const { return inLobby_; }
+    const std::vector<net::RoomInfo> &rooms() const { return rooms_; }
     bool failed() const { return failed_; }
     bool matchEnded() const { return matchEnded_; }
     bool autoReconnect() const { return autoReconnect_; }
@@ -87,6 +90,7 @@ private:
     void handleSnapshot(const QByteArray &frame);
     void handleEvent(const QByteArray &frame);
     void handleMatchEnd(const QByteArray &frame);
+    void handleRoomList(const QByteArray &frame);
 
     void sendHello();
     arena::InputState localInput() const;
@@ -103,6 +107,7 @@ private:
     games::Renderer renderer_;
     net::Snapshot lastSnapshot_;
     net::MatchEndMessage matchEnd_;
+    std::vector<net::RoomInfo> rooms_;
 
     QString host_;
     quint16 port_ = 0;
@@ -112,7 +117,9 @@ private:
     int snapshotCount_ = 0;
     int reconnectAttempts_ = 0;
 
-    bool matchRequested_ = false;    bool welcomed_ = false;
+    bool matchRequested_ = false;
+    bool welcomed_ = false;
+    bool inLobby_ = false;
     bool failed_ = false;
     bool matchEnded_ = false;
     bool autoReconnect_ = false;

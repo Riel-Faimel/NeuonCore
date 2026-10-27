@@ -45,6 +45,7 @@ public:
     void start(const Games::Level &level);
     void stop();
     bool active() const { return games_ != nullptr || client_ != nullptr; }
+    bool lobby() const;
     bool failed() const;
     QString error() const { return error_; }
 
@@ -76,6 +77,7 @@ private:
 
     void startLocal(const Games::Level &level);
     void startNetwork(const Games::Level &level);
+    void renderLobby();
 
     Mode mode_ = Mode::Network;
     QString host_;

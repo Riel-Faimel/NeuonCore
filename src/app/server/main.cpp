@@ -1,4 +1,6 @@
 #include "Net/Server.h"
+#include "Loadout/Loadout.h"
+#include "Shop/Shop.h"
 
 #include <QCoreApplication>
 #include <QMetaObject>
@@ -21,6 +23,9 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("NeonCore"));
     QCoreApplication::setOrganizationName(QStringLiteral("NeonCore"));
+    // 权威钱包/库存/发射器由服务端进程持有并持久化。
+    ShopService.load();
+    LoadoutService.load();
 
     quint16 port = 7777;
     const QStringList args = QCoreApplication::arguments();
@@ -98,5 +103,8 @@ int main(int argc, char **argv)
     });
     controlReader.detach();
 
-    return app.exec();
+    const int code = app.exec();
+    ShopService.save();
+    LoadoutService.save();
+    return code;
 }

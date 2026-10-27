@@ -7,6 +7,8 @@
 #include "Net/Server.h"
 #include "Shop/Shop.h"
 
+#include <QPainter>
+#include <QLinearGradient>
 #include <Qt>
 
 #include <utility>
@@ -119,6 +121,11 @@ bool Match::failed() const
     return client_ != nullptr && client_->failed();
 }
 
+bool Match::lobby() const
+{
+    return client_ != nullptr && client_->inLobby();
+}
+
 void Match::update(float dt)
 {
     if (games_) {
@@ -133,8 +140,62 @@ void Match::render()
     if (games_) {
         games_->render();
     } else if (client_) {
-        client_->render();
+        if (client_->inLobby()) {
+            renderLobby();
+        } else {
+            client_->render();
+        }
     }
+}
+
+void Match::renderLobby()
+{
+    fallback_.fill(QColor(2, 3, 9));
+    QPainter painter(&fallback_);
+    QLinearGradient background(0, 0, 0, GameConfig::ScreenHeight);
+    background.setColorAt(0.0, QColor(5, 15, 28));
+    background.setColorAt(0.6, QColor(3, 8, 18));
+    background.setColorAt(1.0, QColor(1, 3, 8));
+    painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
+                     background);
+    Base::text(painter, Base::techTinyFont(),
+               QStringLiteral("SERVER LOBBY  //  NO ACTIVE MATCH"),
+               QColor(121, 176, 194),
+               {GameConfig::ScreenWidth / 2.0f, 92}, QStringLiteral("center"), 190);
+    Base::glowText(painter, Base::bigFont(), QStringLiteral("房间"),
+                   Base::White, {GameConfig::ScreenWidth / 2.0f, 148},
+                   QStringLiteral("center"));
+    Base::text(painter, Base::smallFont(),
+               QStringLiteral("主机尚未开始对局，等待服务端控制。"),
+               Base::Muted, {GameConfig::ScreenWidth / 2.0f, 188},
+               QStringLiteral("center"), 210);
+
+    float top = 240.0f;
+    if (client_ != nullptr) {
+        for (const net::RoomInfo &room : client_->rooms()) {
+            const QRectF card(300.0f, top, 680.0f, 76.0f);
+            Base::panel(painter, card, room.playing ? Base::Green : Base::Cyan,
+                        220, 10, QColor(6, 16, 27));
+            Base::text(painter, Base::mediumFont(), room.name, Base::White,
+                       {float(card.left()) + 20.0f, float(card.center().y()) - 10.0f},
+                       QStringLiteral("midleft"), 230);
+            Base::text(painter, Base::tinyFont(),
+                       QStringLiteral("%1 / %2 人 · %3")
+                           .arg(room.players)
+                           .arg(room.maxPlayers)
+                           .arg(room.playing ? QStringLiteral("对局中")
+                                             : QStringLiteral("等待中")),
+                       Base::Muted,
+                       {float(card.left()) + 20.0f, float(card.center().y()) + 16.0f},
+                       QStringLiteral("midleft"), 200);
+            top += 90.0f;
+        }
+    }
+    Base::text(painter, Base::tinyFont(),
+               QStringLiteral("ESC 返回主菜单 · 对局开始后自动进入战斗"),
+               QColor(105, 138, 158),
+               {GameConfig::ScreenWidth / 2.0f, GameConfig::ScreenHeight - 34.0f},
+               QStringLiteral("center"), 170);
 }
 
 const QImage &Match::frame() const
@@ -143,7 +204,7 @@ const QImage &Match::frame() const
         return games_->frame();
     }
     if (client_) {
-        return client_->frame();
+        return client_->inLobby() ? fallback_ : client_->frame();
     }
     return fallback_;
 }

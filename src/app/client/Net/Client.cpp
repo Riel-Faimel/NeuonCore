@@ -61,6 +61,8 @@ bool GameClient::connectToHost(const QString &host, quint16 port)
     matchEnded_ = false;
     closedByUser_ = false;
     matchRequested_ = false;
+    rooms_.clear();
+    inLobby_ = false;
     pendingDash_ = false;
     pendingPause_ = false;
     pendingMine_ = false;
@@ -183,6 +185,20 @@ bool GameClient::sendInput(const net::InputCommand &command)
     return socket_.write(frame) != -1;
 }
 
+bool GameClient::joinRoom(quint32 roomId)
+{
+    if (socket_.state() != QAbstractSocket::ConnectedState) {
+        return false;
+    }
+    net::JoinRoomMessage message;
+    message.roomId = roomId;
+    const QByteArray frame = net::encodeJoinRoom(message);
+    if (frame.isEmpty()) {
+        return false;
+    }
+    return socket_.write(frame) != -1;
+}
+
 void GameClient::setFatalError(const QString &reason)
 {
     fail(reason);
@@ -290,9 +306,13 @@ void GameClient::handleFrame(const QByteArray &frame)
     case net::MessageType::MatchEnd:
         handleMatchEnd(frame);
         break;
+    case net::MessageType::RoomList:
+        handleRoomList(frame);
+        break;
     case net::MessageType::Hello:
     case net::MessageType::StartMatch:
     case net::MessageType::Input:
+    case net::MessageType::JoinRoom:
         fail(QStringLiteral("client-only message type received from server"));
         socket_.abort();
         break;
@@ -334,6 +354,25 @@ void GameClient::handleSnapshot(const QByteArray &frame)
     view_.apply(lastSnapshot_);
     ++snapshotCount_;
     matchRequested_ = true;
+    inLobby_ = false;
+}
+
+void GameClient::handleRoomList(const QByteArray &frame)
+{
+    net::RoomListMessage message;
+    QString error;
+    if (!net::decodeRoomList(frame, &message, &error)) {
+        return;
+    }
+    rooms_ = std::move(message.rooms);
+    bool lobby = false;
+    for (const net::RoomInfo &room : rooms_) {
+        if (!room.playing) {
+            lobby = true;
+            break;
+        }
+    }
+    inLobby_ = lobby && snapshotCount_ == 0;
 }
 
 void GameClient::handleEvent(const QByteArray &frame)

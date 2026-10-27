@@ -229,6 +229,71 @@ bool deserializeMatchEnd(const QByteArray &payload, MatchEndMessage *message,
                        error);
 }
 
+QByteArray serializeRoomList(const RoomListMessage &message)
+{
+    return serialize([&](QDataStream &stream) {
+        stream << quint32(message.rooms.size());
+        for (const RoomInfo &room : message.rooms) {
+            stream << room.id << room.name << qint32(room.players)
+                   << qint32(room.maxPlayers) << room.playing;
+        }
+    });
+}
+
+bool deserializeRoomList(const QByteArray &payload, RoomListMessage *message,
+                         QString *error)
+{
+    if (message == nullptr) {
+        setError(error, QStringLiteral("null room list destination"));
+        return false;
+    }
+    return deserialize(
+        payload,
+        [&](QDataStream &stream) {
+            quint32 count = 0;
+            if (!readCount(stream, &count, kMaxSnapshotItems, error)) {
+                return false;
+            }
+            message->rooms.clear();
+            message->rooms.reserve(count);
+            for (quint32 i = 0; i < count; ++i) {
+                RoomInfo room;
+                qint32 players = 0;
+                qint32 maxPlayers = 0;
+                stream >> room.id >> room.name >> players >> maxPlayers
+                    >> room.playing;
+                if (stream.status() != QDataStream::Ok) {
+                    return false;
+                }
+                room.players = int(players);
+                room.maxPlayers = int(maxPlayers);
+                message->rooms.push_back(std::move(room));
+            }
+            return true;
+        },
+        error);
+}
+
+QByteArray serializeJoinRoom(const JoinRoomMessage &message)
+{
+    return serialize([&](QDataStream &stream) { stream << message.roomId; });
+}
+
+bool deserializeJoinRoom(const QByteArray &payload, JoinRoomMessage *message,
+                         QString *error)
+{
+    if (message == nullptr) {
+        setError(error, QStringLiteral("null join room destination"));
+        return false;
+    }
+    return deserialize(payload,
+                       [&](QDataStream &stream) {
+                           stream >> message->roomId;
+                           return stream.status() == QDataStream::Ok;
+                       },
+                       error);
+}
+
 QByteArray encodeHello(const HelloMessage &message, quint16 version)
 {
     const QByteArray payload = serializeHello(message);
@@ -298,6 +363,34 @@ bool decodeMatchEnd(const QByteArray &frame, MatchEndMessage *message, QString *
     QByteArray payload;
     return decodeMessageFrame(frame, MessageType::MatchEnd, &payload, error)
            && deserializeMatchEnd(payload, message, error);
+}
+
+QByteArray encodeRoomList(const RoomListMessage &message, quint16 version)
+{
+    const QByteArray payload = serializeRoomList(message);
+    return payload.isEmpty() ? QByteArray()
+                             : frameMessage(MessageType::RoomList, payload, version);
+}
+
+bool decodeRoomList(const QByteArray &frame, RoomListMessage *message, QString *error)
+{
+    QByteArray payload;
+    return decodeMessageFrame(frame, MessageType::RoomList, &payload, error)
+           && deserializeRoomList(payload, message, error);
+}
+
+QByteArray encodeJoinRoom(const JoinRoomMessage &message, quint16 version)
+{
+    const QByteArray payload = serializeJoinRoom(message);
+    return payload.isEmpty() ? QByteArray()
+                             : frameMessage(MessageType::JoinRoom, payload, version);
+}
+
+bool decodeJoinRoom(const QByteArray &frame, JoinRoomMessage *message, QString *error)
+{
+    QByteArray payload;
+    return decodeMessageFrame(frame, MessageType::JoinRoom, &payload, error)
+           && deserializeJoinRoom(payload, message, error);
 }
 
 } // namespace net

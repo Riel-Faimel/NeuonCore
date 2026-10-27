@@ -4,6 +4,7 @@
 #include "Net/Protocol.h"
 #include "Net/Snapshot.h"
 #include "Games/Simulation/GameSimulation.h"
+#include "Room/Room.h"
 
 #include <QByteArray>
 #include <QElapsedTimer>
@@ -69,6 +70,7 @@ private:
         bool hello = false;
         bool welcomed = false;
         quint32 id = 0;
+        quint32 roomId = 0;
     };
 
     void onNewConnection();
@@ -79,6 +81,7 @@ private:
     void handleFrame(QTcpSocket *socket, const QByteArray &frame);
     void handleHello(QTcpSocket *socket, const QByteArray &frame);
     void handleInput(QTcpSocket *socket, const QByteArray &frame);
+    void handleJoinRoom(QTcpSocket *socket, const QByteArray &frame);
     void applyInput(const net::InputCommand &command);
     bool startMatchMessage(const net::StartMatchMessage &request, QString *error);
     void startMatchSocket(QTcpSocket *socket, const net::StartMatchMessage &request);
@@ -86,6 +89,8 @@ private:
     void sendMatchEnd(QTcpSocket *socket, const QString &reason);
     void reject(QTcpSocket *socket, const QString &reason);
     void broadcastSnapshot();
+    void sendRoomList(QTcpSocket *socket);
+    void broadcastRoomList();
     void broadcastEvent(const net::EventMessage &event);
     void broadcastToWelcomed(const QByteArray &frame);
 
@@ -94,6 +99,7 @@ private:
     QElapsedTimer tickClock_;
     double accumulator_ = 0.0;
     QHash<QTcpSocket *, Session> sessions_;
+    RoomManager rooms_;
     std::unique_ptr<games::GameSimulation> simulation_;
     net::Snapshot snapshot_;
     QTcpSocket *controllerSocket_ = nullptr;

@@ -48,7 +48,7 @@ NeonCoreServer.exe --port 7777
                         独立服务端（无窗口、60Hz 固定 tick）
 ```
 
-`build\NeonCoreServer.exe --port 7777` 是独立服务端，保留控制台输出，便于排查端口占用等问题；服务端模式已从 GUI 客户端移除，统一用 `NeonCoreServer.exe`。服务端只跑 `GameSimulation`（没有 Renderer / Menu / 输入采集）。控制面不走 TCP：`StartMatch` 只接受本地宿主（内嵌 `Match` 或 `NeonCoreServer` 的 stdin）；TCP 客户端只做 Hello / Input / 接收 `Snapshot / Event / MatchEnd`，不能开局或改服务器配置。独立服务端的 stdin 接受与 TCP 相同的 `[u32 length][payload]` 控制帧（`StartMatch` / `Input`），stdout 只输出启动日志；这样只有启动它的父进程能控制对局，网络客户端无法提交 `StartMatch`。端口被占用、握手协议版本不匹配、客户端断线和重连失败都会返回错误并保持进程不崩溃。
+`build\NeonCoreServer.exe --port 7777` 是独立服务端，保留控制台输出，便于排查端口占用等问题；服务端模式已从 GUI 客户端移除，统一用 `NeonCoreServer.exe`。服务端只跑 `GameSimulation`（没有 Renderer / Menu / 输入采集）。控制面不走 TCP：`StartMatch` 只接受本地宿主（内嵌 `Match` 或 `NeonCoreServer` 的 stdin）；TCP 客户端只做 Hello / Input / 接收 `Snapshot / Event / MatchEnd`，不能开局或改服务器配置。独立服务端的 stdin 接受与 TCP 相同的 `[u32 length][payload]` 控制帧（`StartMatch` / `Input`），stdout 只输出启动日志；这样只有启动它的父进程能控制对局，网络客户端无法提交 `StartMatch`。没有对局时服务端广播 `RoomList`，客户端显示房间/大厅；对局开始后才切换到快照。端口被占用、握手协议版本不匹配、客户端断线和重连失败都会返回错误并保持进程不崩溃。
 
 ## 操作
 
@@ -189,7 +189,10 @@ cpp/
 │  │  │  │  ├─ Waves/Waves.h/.cpp    按提交的台本出生敌人
 │  │  │  │  └─ Upgrades/Upgrades.h/.cpp 强化池、抽取与应用
 │  │  │  ├─ Net/Server.h/.cpp        QTcpServer：headless GameSimulation + 60Hz 广播
-│  │  │  └─ main.cpp                 独立服务端入口（--port）
+│  │  │  ├─ Room/Room.h/.cpp         房间/大厅：没有对局时展示房间
+│  │  │  ├─ Shop/                    权威积分 + 地雷库存（持久化）
+│  │  │  ├─ Loadout/                 权威发射器（持久化）
+│  │  │  └─ main.cpp                 独立服务端入口（--port，stdin 控制）
 │  │  └─ client/
 │  │     ├─ Base/
 │  │     │  ├─ Base.h / Base.cpp     模块入口：Input / Audio / Music / Pointer / Paint / ThreadPool + BaseService
@@ -205,8 +208,6 @@ cpp/
 │  │     │  ├─ Depot/ / Armory/
 │  │     │  ├─ Editor/Editor.h/.cpp      自定义协议：三个选项卡 + 台本/服务器编辑
 │  │     │  └─ Settings/
-│  │     ├─ Shop/                    全局积分 + 地雷库存（持久化）
-│  │     ├─ Loadout/                 当前发射器（持久化）
 │  │     ├─ app.rc                   Windows 资源：嵌入应用图标
 │  │     └─ main.cpp                 QWidget 窗口、输入桥接、全局服务初始化、客户端入口
 │  ├─ lib/
@@ -254,9 +255,9 @@ cpp/
 
 `src/app/shared/Net/` 是服务端 / 客户端共享的网络协议层：`Protocol` 负责 `[u32 length][u16 type][u16 version][payload]` 帧和 TCP 粘包缓冲，`Input / Messages / Snapshot` 负责各类 payload 的 `QDataStream` 序列化。`src/app/server/Net/Server.*` 是 `QTcpServer`：拥有 headless `games::GameSimulation`，固定 60Hz 广播快照；`src/app/client/Net/Client.*` 是 `QTcpSocket`：握手、发送输入、接收快照并维护 `client::GameView`。`menu::Match` 默认使用网络路径：单机时在 127.0.0.1 上自动选端口启动内嵌服务端，`--connect host:port` 连远端；`--local` 或 `Menu(..., offline=true)` 保留本地直连模式给自动化测试和回退。自定义协议的联机设置内嵌在 `menu::Editor`：顶部三个选项卡决定下方显示台本编辑（单机/主机）或加入主机表单；局域网主机在波次编辑下方多一行端口。
 
-`src/app/client/Shop/` 和 `Arena/` 同构：`Shop` 是全局模块类（进程级单例 `ShopService`），组合 `Score`（全局钱包/本局统计）和 `Inventory`（地雷库存）两个 `namespace shop` 组件，负责 `load()/save()` 与 `buyMine()`；补给站界面是 `menu::Depot`，只展示和调用接口，不直接改数据。
+`src/app/server/Shop/` 和 `Arena/` 同构：`Shop` 是全局模块类（进程级单例 `ShopService`），组合 `Score`（全局钱包/本局统计）和 `Inventory`（地雷库存）两个 `namespace shop` 组件，负责 `load()/save()` 与 `buyMine()`；补给站界面是 `menu::Depot`，只展示和调用接口，不直接改数据。
 
-`src/app/client/Loadout/` 是战备全局模块（`LoadoutService`）：从 `loadout.json` 读发射器数值，选择持久化到 `loadout/launcher`；`Player::reset()` 应用伤害/射速/弹速倍率，`Player::shoot()` 应用散射倍率、额外弹丸和穿透。界面是 `menu::Armory`，默认标准发射器保持原弹道。
+`src/app/server/Loadout/` 是战备全局模块（`LoadoutService`）：从 `loadout.json` 读发射器数值，选择持久化到 `loadout/launcher`；`Player::reset()` 应用伤害/射速/弹速倍率，`Player::shoot()` 应用散射倍率、额外弹丸和穿透。界面是 `menu::Armory`，默认标准发射器保持原弹道。
 
 `src/app/client/Menu/` 和 `Arena/` 同构：`Menu` 只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop`/`Loadout` 都是全局单例，不在 `Menu` 里），八个界面是 `namespace menu` 组件——`Main`（标题/关卡卡/设置入口）、`Map`（星区地图）、`Match`（默认持有网络 `GameClient` + 内嵌/远端服务端，`--local`/测试时持有这一局的 `Games`）、`Result`（只读 `Summary` 的结算层）、`Editor`（自定义协议：顶部三个选项卡，单机/局域网主机显示台本编辑，主机追加服务器端口，加入主机显示地址和端口）、`Depot`（补给站/商店）、`Armory`（战备/发射器）、`Settings`（音量 + 配置存储）。组件把玩家意图作为 `Action` 交回 `Menu`，`Menu` 负责开局、进编辑器和回主菜单；“自定义协议”点开即进编辑界面，逐波编辑台本（1–12 波、四种敌人数量、单 Boss），`ENTER` 直接按当前选项卡开始：单机本地、主机绑定端口、加入连接远端。
 
@@ -344,7 +345,7 @@ mingw32-make -j12 test
 - 快照：完整场景提取 → QDataStream 序列化 → 反序列化，逐字段相等；帧长度/协议版本不匹配被拒绝
 - GameView：快照重建后的玩家/敌人/子弹/实体/HUD/强化卡/Boss 条正确，并能用现有 `Renderer` 画出完整一帧
 - 单机路径：`GameSimulation -> Snapshot -> GameView -> Renderer` 的视图与模拟状态一致
-- TCP 回环：真实 `QTcpServer/QTcpSocket` 握手、宿主本地 StartMatch、输入命令、权威模拟位移、快照重建、双客户端广播；TCP StartMatch 被拒绝
+- TCP 回环：真实 `QTcpServer/QTcpSocket` 握手、房间大厅、宿主本地 StartMatch、输入命令、权威模拟位移、快照重建、双客户端广播；TCP StartMatch 被拒绝
 - 错误路径：端口占用、协议版本不匹配、客户端断线、连接失败/重连调度都不会崩溃
 - 内嵌单机：默认 `Menu` 网络路径启动 127.0.0.1 自动端口服务端并渲染一帧
 - 输出到当前目录的 `smoke.log`

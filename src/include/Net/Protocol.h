@@ -30,6 +30,8 @@ enum class MessageType : quint16 {
     Snapshot = 5,     // S→C：世界快照
     Event = 6,        // S→C：音效、横幅、震屏/闪屏等表现事件
     MatchEnd = 7,     // S→C：胜负、统计、可重试
+    RoomList = 8,     // S→C：没有对局时，服务端展示房间而不是对局
+    JoinRoom = 9,     // C→S：请求加入房间
 };
 
 struct MessageHeader {
