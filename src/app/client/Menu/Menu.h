@@ -10,7 +10,6 @@
 #include "Menu/Map/Map.h"
 #include "Menu/Match/Match.h"
 #include "Menu/Result/Result.h"
-#include "Menu/ServerSetup/ServerSetup.h"
 #include "Menu/Settings/Settings.h"
 
 #include <QImage>
@@ -19,7 +18,7 @@
 
 class SelfTest;
 
-// Menu 模块：只组合 9 个界面组件和进程级资源（Shop、Loadout、关卡表），
+// Menu 模块：只组合 8 个界面组件和进程级资源（Shop、Loadout、关卡表），
 // 负责屏幕状态机、输入路由和组件之间的数据传递。
 // 和 Arena 一样，组件在 namespace menu 里，Menu 是唯一的模块入口。
 // Base 不再由 Menu 拥有：它是进程级单例 BaseService（见 Base/Base.h）。
@@ -33,7 +32,6 @@ public:
         Editor,
         Shop,
         Armory,
-        ServerSetup,
         Settings,
     };
 
@@ -74,7 +72,7 @@ private:
 
     void startLevel(int index);
     void startCampaign(int index);
-    void startCustom(const menu::ServerSetup::Config &config);
+    void startCustom(const menu::Editor::Config &config);
     void retry();
     void returnToMenu();
     void openEditor();
@@ -89,7 +87,6 @@ private:
     menu::Editor editor_;
     menu::Depot depot_;
     menu::Armory armory_;
-    menu::ServerSetup serverSetup_;
     menu::Settings settings_;
 
     Screen screen_ = Screen::Main;
@@ -103,5 +100,5 @@ private:
     bool offline_ = false;
     QString defaultHost_;
     quint16 defaultPort_ = 0;
-    menu::ServerSetup::Config customConfig_;
+    menu::Editor::Config customConfig_;
 };

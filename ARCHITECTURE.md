@@ -56,7 +56,6 @@ cpp/src/
 │     │  ├─ Menu.h / Menu.cpp
 │     │  ├─ Main/ Map/ Match/ Result/
 │     │  ├─ Editor/ Depot/ Armory/
-│     │  ├─ ServerSetup/ServerSetup.h/.cpp 自定义协议：单机/开房/加入 + 端口
 │     │  └─ Settings/
 │     ├─ Shop/                     Score / Inventory
 │     ├─ Loadout/
@@ -144,7 +143,7 @@ cpp/src/
 
 ### Menu
 
-`Menu` 是顶层界面模块入口，结构和 `Arena` 一样：自己只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop` 都是全局单例，不在 `Menu` 里），把九个界面拆成 `namespace menu` 组件：
+`Menu` 是顶层界面模块入口，结构和 `Arena` 一样：自己只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop` 都是全局单例，不在 `Menu` 里），把八个界面拆成 `namespace menu` 组件：
 
 | 组件 | 职责 |
 | --- | --- |
@@ -152,24 +151,23 @@ cpp/src/
 | `Map` | 星区地图：关卡节点、锁定状态、选择与进入 |
 | `Match` | 默认持有网络 `GameClient`（内嵌/远端 `GameServer`）+ `GameView`/`Renderer`；`--local`/测试时持有本地 `Games`。负责开局、输入转发、推进、渲染和断线状态 |
 | `Result` | 结算覆盖层：只接收一份只读 `Summary`，不读取 `Games` |
-| `Editor` | 自定义台本编辑器：动态列（底部敌人库拖入）、逐波编辑 |
+| `Editor` | 自定义协议编辑：顶部单机/局域网主机/加入主机选项卡；单机与主机编辑台本，主机在波次下方追加端口，加入主机显示地址和端口 |
 | `Depot` | 补给站界面：展示钱包/库存，把购买意图转给全局 `Shop` |
 | `Armory` | 战备界面：展示/选择发射器，把装备意图转给全局 `Loadout` |
-| `ServerSetup` | 自定义协议联机设置：单机 / 局域网主机 / 加入主机，端口和地址 |
 | `Settings` | 音效 / 背景音乐音量，读写配置存储 |
 
 `Menu` 自己只负责：
 
-- 屏幕状态机（`Main / Map / Match / Result / Editor / Shop / Armory / ServerSetup / Settings`）和输入路由；
-- 把 `Main` / `Map` / `Editor` / `Depot` / `Armory` / `ServerSetup` / `Settings` 的意图（`OpenMap / Start / OpenEditor / OpenShop / OpenArmory / Deploy / Back` 等 `Action`）翻译成进地图、开局、进编辑器、进商店/战备、回主菜单；
+- 屏幕状态机（`Main / Map / Match / Result / Editor / Shop / Armory / Settings`）和输入路由；
+- 把 `Main` / `Map` / `Editor` / `Depot` / `Armory` / `Settings` 的意图（`OpenMap / Start / OpenEditor / OpenShop / OpenArmory / Deploy / Back` 等 `Action`）翻译成进地图、开局、进编辑器、进商店/战备、回主菜单；
 - 开局时把 `Games::Level`（展示信息 + 台本 + 起始波）交给 `Match`；回主菜单时让 `Match` 销毁这一局；
 - 给 `Result` 组装 `Summary`（胜负、得分、击杀、波次、时间）；
-- 管理关卡表 `campaignLevels_`（四个关卡）与 `levels_`（标准/自定义卡）：地图节点按 campaign 索引开局，自定义协议部署时先进入 `ServerSetup`，再用 `Editor::script()` 覆盖台本、固定从第 1 波开始；标准协议始终使用默认服务器配置；
+- 管理关卡表 `campaignLevels_`（四个关卡）与 `levels_`（标准/自定义卡）：地图节点按 campaign 索引开局，自定义协议在 `Editor` 顶部的三个选项卡里选择单机/主机/加入，按当前选项卡的配置开始，并用 `Editor::script()` 覆盖台本、固定从第 1 波开始；标准协议始终使用默认服务器配置；
 - 启动时按需初始化音频（`BaseService.initAudio()`），并按配置存储恢复音量（`Shop` 的加载/保存在 `main()`）；
 
 `Games` 一旦构造就由 `Match` 持有，`Menu` 不再直接访问；`Menu` 不参与战斗、波次或强化计算，也不直接画任何屏幕（组件的 `render()` 才画）。
 
-自定义协议的部署流程是 `Editor → ServerSetup → Match`。`ServerSetup` 的 `Single` 使用本地直连，不监听端口；`Host` 只填端口，`Match` 在 `0.0.0.0` 上启动内嵌服务端；`Join` 填地址和端口，只创建 `GameClient`，不创建本地服务端。标准协议的 `startCampaign()` 每次都会重新套用 `Menu` 构造时的默认 host/port（无参数时是自动端口回环），不会继承上一次自定义联机设置。
+自定义协议的流程是 `Main → Editor（三个选项卡）→ Match`。`Single` 使用本地直连，不监听端口；`Host` 在编辑页波次下方显示端口，`Match` 在 `0.0.0.0` 上启动内嵌服务端；`Join` 只显示地址和端口，只创建 `GameClient`，不创建本地服务端。标准协议的 `startCampaign()` 每次都会重新套用 `Menu` 构造时的默认 host/port（无参数时是自动端口回环），不会继承上一次自定义联机设置。
 
 ### Shop
 
@@ -407,7 +405,7 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
             ├─ BaseService ────────► base::Input / Audio / Music / Pointer / Paint / ThreadPool（全局单例）
             ├─ RandomService ──────► 随机引擎（全局单例）
             ├─ ShopService ────────► shop::Score / Inventory（全局单例，注册表 / ini）
-            └─ Menu（持有四个关卡表，组合 9 个界面组件）
+            └─ Menu（持有四个关卡表，组合 8 个界面组件）
                ├─ menu::Main ─────────► 关卡卡 / 商店与设置入口（数据由 Menu 提供）
 ├─ menu::Map ──────────► 星区地图节点（levels.json），Start → 开局
                ├─ menu::Match ────────► Network: client::GameClient ──► net::Snapshot / Event

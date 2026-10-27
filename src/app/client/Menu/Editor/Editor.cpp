@@ -55,6 +55,59 @@ void Editor::prepare()
     hold_ = 0;
     holdTimer_ = 0.0f;
     dragKind_ = -1;
+    mode_ = Mode::Single;
+    focus_ = Focus::Grid;
+}
+
+Editor::Config Editor::config() const
+{
+    Config result;
+    result.mode = mode_;
+    result.host = hostText_.trimmed();
+    const uint value = portText_.toUInt();
+    result.port = value > 0 && value <= 65535 ? quint16(value) : 0;
+    if (mode_ == Mode::Single) {
+        result.host.clear();
+        result.port = 0;
+    } else if (mode_ == Mode::Host) {
+        result.host.clear();
+    }
+    return result;
+}
+
+void Editor::setMode(Mode mode)
+{
+    mode_ = mode;
+    focus_ = mode == Mode::Join ? Focus::Host : Focus::Grid;
+}
+
+void Editor::setPort(quint16 port)
+{
+    portText_ = QString::number(std::max<quint16>(1, port));
+}
+
+void Editor::setHost(const QString &host)
+{
+    hostText_ = host;
+}
+
+void Editor::cycleMode(int direction)
+{
+    const int next = (int(mode_) + (direction >= 0 ? 1 : 2)) % 3;
+    setMode(Mode(next));
+    BaseService.playSound(QStringLiteral("ui"));
+}
+
+bool Editor::startValid() const
+{
+    const Config cfg = config();
+    if (cfg.mode == Mode::Single) {
+        return true;
+    }
+    if (cfg.mode == Mode::Join) {
+        return !cfg.host.isEmpty() && cfg.port != 0;
+    }
+    return cfg.port != 0;
 }
 
 arena::EnemyType Editor::kindType(int kind)
@@ -305,6 +358,75 @@ int Editor::totalEnemies() const
 
 Editor::Action Editor::keyPress(int key, bool autoRepeat)
 {
+    if (key == Qt::Key_F1) {
+        setMode(Mode::Single);
+        return Action::None;
+    }
+    if (key == Qt::Key_F2) {
+        setMode(Mode::Host);
+        return Action::None;
+    }
+    if (key == Qt::Key_F3) {
+        setMode(Mode::Join);
+        return Action::None;
+    }
+    if (key == Qt::Key_Tab) {
+        cycleMode(1);
+        return Action::None;
+    }
+    if (key == Qt::Key_Backtab) {
+        cycleMode(-1);
+        return Action::None;
+    }
+    if (key == Qt::Key_Escape || key == Qt::Key_Q) {
+        return Action::Back;
+    }
+    if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+        if (startValid()) {
+            return Action::Deploy;
+        }
+        BaseService.playSound(QStringLiteral("ui"));
+        return Action::None;
+    }
+    if (mode_ == Mode::Join || (mode_ == Mode::Host && focus_ == Focus::Port)) {
+        if (key == Qt::Key_Backspace) {
+            if (focus_ == Focus::Host && !hostText_.isEmpty()) {
+                hostText_.chop(1);
+            } else if (focus_ == Focus::Port && !portText_.isEmpty()) {
+                portText_.chop(1);
+            }
+            return Action::None;
+        }
+        QChar character;
+        if (key >= Qt::Key_0 && key <= Qt::Key_9) {
+            character = QChar(QLatin1Char('0' + char(key - Qt::Key_0)));
+        } else if (key >= Qt::Key_A && key <= Qt::Key_Z) {
+            character = QChar(QLatin1Char('a' + char(key - Qt::Key_A)));
+        } else if (key == Qt::Key_Period) {
+            character = QLatin1Char('.');
+        } else if (key == Qt::Key_Minus) {
+            character = QLatin1Char('-');
+        }
+        if (!character.isNull()) {
+            if (focus_ == Focus::Port) {
+                if (character.isDigit() && portText_.size() < 5) {
+                    if (portText_ == QStringLiteral("7777")) {
+                        portText_.clear();
+                    }
+                    portText_.append(character);
+                }
+            } else if (focus_ == Focus::Host
+                       && (character.isLetterOrNumber()
+                           || character == QLatin1Char('.')
+                           || character == QLatin1Char('-')
+                           || character == QLatin1Char(':'))
+                       && hostText_.size() < 64) {
+                hostText_.append(character);
+            }
+        }
+        return Action::None;
+    }
+
     const bool adjustKey = key == Qt::Key_Plus || key == Qt::Key_Equal
                            || key == Qt::Key_Minus;
     // 连发由 update() 自己控制节拍，系统自动重复不再单独处理。
@@ -342,10 +464,6 @@ Editor::Action Editor::keyPress(int key, bool autoRepeat)
         addWave();
     } else if (key == Qt::Key_X) {
         removeWave();
-    } else if (key == Qt::Key_Return || key == Qt::Key_Enter) {
-        return Action::Deploy;
-    } else if (key == Qt::Key_Escape || key == Qt::Key_Q) {
-        return Action::Back;
     }
     return Action::None;
 }
@@ -378,7 +496,33 @@ Editor::Action Editor::mousePress(const Math::Vec2 &position)
         return Action::Back;
     }
     if (deployRect().contains(point)) {
-        return Action::Deploy;
+        if (startValid()) {
+            return Action::Deploy;
+        }
+        BaseService.playSound(QStringLiteral("ui"));
+        return Action::None;
+    }
+    for (int mode = 0; mode < 3; ++mode) {
+        if (tabRect(mode).contains(point)) {
+            setMode(Mode(mode));
+            BaseService.playSound(QStringLiteral("ui"));
+            return Action::None;
+        }
+    }
+    if (mode_ == Mode::Join && hostRect().contains(point)) {
+        focus_ = Focus::Host;
+        BaseService.playSound(QStringLiteral("ui"));
+        return Action::None;
+    }
+    if ((mode_ == Mode::Join || mode_ == Mode::Host)
+        && portRect().contains(point)) {
+        focus_ = Focus::Port;
+        BaseService.playSound(QStringLiteral("ui"));
+        return Action::None;
+    }
+    focus_ = Focus::Grid;
+    if (mode_ == Mode::Join) {
+        return Action::None;
     }
     if (addWaveRect().contains(point)) {
         addWave();
@@ -489,22 +633,45 @@ QRectF Editor::plusRect() const
 
 QRectF Editor::addWaveRect() const
 {
-    return QRectF(Right - 634.0f, 190.0f, 150.0f, 34.0f);
+    return QRectF(Right - 634.0f, 160.0f, 150.0f, 34.0f);
 }
 
 QRectF Editor::removeWaveRect() const
 {
-    return QRectF(Right - 472.0f, 190.0f, 150.0f, 34.0f);
+    return QRectF(Right - 472.0f, 160.0f, 150.0f, 34.0f);
 }
 
 QRectF Editor::deployRect() const
 {
-    return QRectF(Right - 310.0f, 190.0f, 150.0f, 34.0f);
+    return QRectF(Right - 310.0f, 160.0f, 150.0f, 34.0f);
 }
 
 QRectF Editor::backRect() const
 {
-    return QRectF(Right - 148.0f, 190.0f, 148.0f, 34.0f);
+    return QRectF(Right - 148.0f, 160.0f, 148.0f, 34.0f);
+}
+
+QRectF Editor::tabRect(int index) const
+{
+    constexpr float width = 220.0f;
+    constexpr float gap = 18.0f;
+    const float total = width * 3.0f + gap * 2.0f;
+    const float left = (GameConfig::ScreenWidth - total) / 2.0f;
+    return QRectF(left + float(index) * (width + gap), 82.0f, width, 42.0f);
+}
+
+QRectF Editor::portRect() const
+{
+    if (mode_ == Mode::Join) {
+        return QRectF(440.0f, 392.0f, 400.0f, 44.0f);
+    }
+    const float top = std::min(522.0f, RowsTop + float(waveCount()) * RowHeight + 12.0f);
+    return QRectF(440.0f, top, 400.0f, 44.0f);
+}
+
+QRectF Editor::hostRect() const
+{
+    return QRectF(440.0f, 322.0f, 400.0f, 44.0f);
 }
 
 QRectF Editor::paletteRect() const
@@ -546,23 +713,95 @@ void Editor::render(QPainter &painter, bool muted) const
     painter.restore();
 
     Base::text(painter, Base::techTinyFont(),
-               muted ? QStringLiteral("SCRIPT EDITOR  //  CUSTOM PROTOCOL  //  MUTED")
-                     : QStringLiteral("SCRIPT EDITOR  //  CUSTOM PROTOCOL"),
+               muted ? QStringLiteral("CUSTOM PROTOCOL  //  SCRIPT + SERVER  //  MUTED")
+                     : QStringLiteral("CUSTOM PROTOCOL  //  SCRIPT + SERVER"),
                QColor(121, 176, 194),
-               {GameConfig::ScreenWidth / 2.0f, 70}, QStringLiteral("center"), 190);
-    Base::glowText(painter, Base::bigFont(), QStringLiteral("自定义协议"),
-                   Base::White, {GameConfig::ScreenWidth / 2.0f, 118},
-                   QStringLiteral("center"));
+               {GameConfig::ScreenWidth / 2.0f, 42}, QStringLiteral("center"), 190);
+    for (int tab = 0; tab < 3; ++tab) {
+        const QRectF rect = tabRect(tab);
+        const bool selected = int(mode_) == tab;
+        const QColor accent = tab == 0 ? Base::Cyan
+                                      : (tab == 1 ? Base::Green : Base::Amber);
+        Base::panel(painter, rect, selected ? accent : QColor(48, 91, 112),
+                    selected ? 235 : 180, 9,
+                    selected ? QColor(9, 24, 38) : QColor(6, 14, 25));
+        Base::text(painter, Base::smallFont(),
+                   tab == 0 ? QStringLiteral("单机")
+                            : (tab == 1 ? QStringLiteral("局域网主机")
+                                        : QStringLiteral("加入主机")),
+                   selected ? Base::White : Base::Text,
+                   {float(rect.center().x()), float(rect.center().y())},
+                   QStringLiteral("center"), 220);
+    }
     Base::text(painter, Base::smallFont(),
-               QStringLiteral("把底部敌人拖到波次上，或按 1–9、0 添加；ENTER 部署"),
-               Base::Text,
-               {GameConfig::ScreenWidth / 2.0f, 154}, QStringLiteral("center"), 215);
+               mode_ == Mode::Single
+                   ? QStringLiteral("单机：编辑台本，不开放端口")
+                   : (mode_ == Mode::Host
+                          ? QStringLiteral("局域网主机：编辑台本，端口追加在波次下方")
+                          : QStringLiteral("加入主机：填写主机地址和端口")),
+               Base::Muted, {GameConfig::ScreenWidth / 2.0f, 140},
+               QStringLiteral("center"), 220);
 
     Base::text(painter, Base::techSmallFont(),
-               QStringLiteral("%1 波 · %2 个目标")
-                   .arg(waveCount(), 2, 10, QChar('0'))
-                   .arg(totalEnemies()),
-               Base::Muted, {Left, 206}, QStringLiteral("midleft"), 210);
+               mode_ == Mode::Join
+                   ? QStringLiteral("JOIN")
+                   : QStringLiteral("%1 波 · %2 个目标")
+                         .arg(waveCount(), 2, 10, QChar('0'))
+                         .arg(totalEnemies()),
+               Base::Muted, {Left, 174}, QStringLiteral("midleft"), 210);
+
+    if (mode_ == Mode::Join) {
+        Base::panel(painter, QRectF(240, 220, 800, 270), QColor(43, 83, 103),
+                    180, 12, QColor(5, 13, 23));
+        Base::text(painter, Base::mediumFont(), QStringLiteral("加入已有主机"),
+                   Base::White, {262, 252}, QStringLiteral("midleft"), 230);
+        Base::text(painter, Base::tinyFont(),
+                   QStringLiteral("连接后由主机推进台本；本机只发送输入和渲染快照"),
+                   Base::Muted, {262, 278}, QStringLiteral("midleft"), 200);
+
+        Base::text(painter, Base::techTinyFont(), QStringLiteral("HOST ADDRESS"),
+                   Base::Muted, {440, 306}, QStringLiteral("midleft"), 170);
+        Base::panel(painter, hostRect(),
+                    focus_ == Focus::Host ? Base::Amber : QColor(60, 104, 126),
+                    focus_ == Focus::Host ? 240 : 190, 8, QColor(3, 10, 18));
+        Base::text(painter, Base::mediumFont(),
+                   hostText_.isEmpty() ? QStringLiteral("输入主机地址") : hostText_,
+                   hostText_.isEmpty() ? Base::Muted : Base::White,
+                   {456, 344}, QStringLiteral("midleft"), 220);
+
+        Base::text(painter, Base::techTinyFont(), QStringLiteral("PORT"),
+                   Base::Muted, {440, 378}, QStringLiteral("midleft"), 170);
+        Base::panel(painter, portRect(),
+                    focus_ == Focus::Port ? Base::Cyan : QColor(60, 104, 126),
+                    focus_ == Focus::Port ? 240 : 190, 8, QColor(3, 10, 18));
+        Base::text(painter, Base::mediumFont(), portText_,
+                   portText_.isEmpty() ? Base::Muted : Base::White,
+                   {456, 414}, QStringLiteral("midleft"), 220);
+        Base::text(painter, Base::tinyFont(),
+                   startValid() ? QStringLiteral("ENTER 连接主机")
+                                : QStringLiteral("地址或端口无效"),
+                   startValid() ? Base::Green : Base::Muted,
+                   {262, 462}, QStringLiteral("midleft"), 200);
+
+        Base::panel(painter, deployRect(), startValid() ? Base::Green
+                                                        : QColor(60, 82, 94),
+                    210, 8, QColor(6, 16, 26));
+        Base::panel(painter, backRect(), QColor(65, 104, 124), 210, 8,
+                    QColor(7, 14, 25));
+        Base::text(painter, Base::techSmallFont(), QStringLiteral("ENTER  连接"),
+                   startValid() ? Base::Text : Base::Muted,
+                   {float(deployRect().center().x()), float(deployRect().center().y())},
+                   QStringLiteral("center"));
+        Base::text(painter, Base::techSmallFont(), QStringLiteral("ESC  返回"), Base::Text,
+                   {float(backRect().center().x()), float(backRect().center().y())},
+                   QStringLiteral("center"));
+        Base::text(painter, Base::tinyFont(),
+                   QStringLiteral("F1 单机  F2 局域网主机  F3 加入主机  点击字段编辑"),
+                   QColor(105, 138, 158),
+                   {GameConfig::ScreenWidth / 2.0f, GameConfig::ScreenHeight - 26.0f},
+                   QStringLiteral("center"), 170);
+        return;
+    }
 
     const std::vector<int> kinds = visibleKinds();
 
@@ -632,6 +871,26 @@ void Editor::render(QPainter &painter, bool muted) const
                        {float(cell.center().x()), float(cell.center().y())},
                        QStringLiteral("center"), active ? 240 : 210);
         }
+    }
+
+    if (mode_ == Mode::Host) {
+        Base::panel(painter, QRectF(Left, portRect().top() - 6.0f, Right - Left, 40.0f),
+                    QColor(43, 83, 103), 180, 8, QColor(5, 13, 23));
+        Base::text(painter, Base::techTinyFont(), QStringLiteral("服务器端口"),
+                   Base::Muted, {Left + 18.0f, float(portRect().center().y()) + 2.0f},
+                   QStringLiteral("midleft"), 200);
+        Base::panel(painter, portRect(),
+                    focus_ == Focus::Port ? Base::Cyan : QColor(60, 104, 126),
+                    focus_ == Focus::Port ? 240 : 190, 8, QColor(3, 10, 18));
+        Base::text(painter, Base::mediumFont(), portText_,
+                   portText_.isEmpty() ? Base::Muted : Base::White,
+                   {456, float(portRect().center().y()) + 2.0f},
+                   QStringLiteral("midleft"), 220);
+        Base::text(painter, Base::tinyFont(),
+                   QStringLiteral("自机房：同一局域网客户端填本机地址 + 此端口"),
+                   Base::Muted, {float(portRect().right()) + 18.0f,
+                                 float(portRect().center().y()) + 2.0f},
+                   QStringLiteral("midleft"), 200);
     }
 
     Base::panel(painter, addWaveRect(), QColor(65, 104, 124), 210, 8,
@@ -705,6 +964,12 @@ void Editor::render(QPainter &painter, bool muted) const
                    {float(ghost.center().x()), float(ghost.center().y())},
                    QStringLiteral("center"), 240);
     }
+
+    Base::text(painter, Base::tinyFont(),
+               QStringLiteral("F1 单机  F2 局域网主机  F3 加入主机  ENTER 按当前选项卡开始"),
+               QColor(105, 138, 158),
+               {GameConfig::ScreenWidth / 2.0f, GameConfig::ScreenHeight - 26.0f},
+               QStringLiteral("center"), 170);
 }
 
 } // namespace menu

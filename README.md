@@ -65,7 +65,7 @@ NeonCoreServer.exe --port 7777
 | `R` | 胜利 / 失败后重开 |
 | `Q` | 暂停界面返回标题 |
 
-标题页另有：`↑` `↓` / `W` `S` 切换卡片；选中“标准协议”时 `ENTER`（或点卡片）进入 **星区地图**，地图上 `←` `→` 选择区域、`ENTER` 进入当前区域、`ESC` 返回；选中“自定义协议”时 `ENTER`（或点卡片）进入台本编辑器，部署后进入 **联机设置**：单机直接开始，局域网主机填端口，加入主机填地址和端口；`1` 进地图，`2` 进编辑器，`3` 进战备。标题页右上角还有“战备”入口，可选择发射器（标准/散射/磁轨）。
+标题页另有：`↑` `↓` / `W` `S` 切换卡片；选中“标准协议”时 `ENTER`（或点卡片）进入 **星区地图**，地图上 `←` `→` 选择区域、`ENTER` 进入当前区域、`ESC` 返回；选中“自定义协议”时 `ENTER`（或点卡片）进入带三个选项卡的编辑界面：**单机 / 局域网主机 / 加入主机**；单机与局域网主机显示台本编辑，主机额外在波次下方显示服务器端口，加入主机只显示地址和端口；`1` 进地图，`2` 进编辑器，`3` 进战备。标题页右上角还有“战备”入口，可选择发射器（标准/散射/磁轨）。
 
 台本编辑器：表格只显示当前用到的敌人列；从底部“敌人库”把敌人**拖到某一波**（或按 `1`–`9`、`0`）才会加入该列。`↑` `↓` / `W` `S` 选波次，`←` `→` / `A` `D` 选列，`+` / `-` 调数量或开关 Boss（**按住不放会连续快速加减**），`N` 新增波次、`X` 删除末波（1–12 波，单格 0–20），`ENTER` 部署，`ESC` 返回。编辑结果只存在内存里，重启回到默认台本。
 
@@ -202,8 +202,8 @@ cpp/
 │  │     ├─ Menu/
 │  │     │  ├─ Menu.h/.cpp           屏幕状态机、输入路由、关卡表
 │  │     │  ├─ Main/ Map/ Match/ Result/
-│  │     │  ├─ Editor/ / Depot/ / Armory/
-│  │     │  ├─ ServerSetup/ServerSetup.h/.cpp 自定义协议：单机/开房/加入 + 端口
+│  │     │  ├─ Depot/ / Armory/
+│  │     │  ├─ Editor/Editor.h/.cpp      自定义协议：三个选项卡 + 台本/服务器编辑
 │  │     │  └─ Settings/
 │  │     ├─ Shop/                    全局积分 + 地雷库存（持久化）
 │  │     ├─ Loadout/                 当前发射器（持久化）
@@ -252,13 +252,13 @@ cpp/
 
 `src/app/client/Games/` 是单机适配器目录：`Games` 公开继承 `games::GameSimulation`，自己只拥有 `games::Renderer` 并实现模拟的表现钩子。`GameSimulation` 在 `src/app/server/Games/Simulation/`，只推进 `Arena / Waves / Upgrades`、一局状态、运行时间和输入，不依赖 Renderer；`Waves` 和 `Upgrades` 在 `src/app/server/Games/`。`Games::update()` 每帧先从 `BaseService` 采集 `arena::InputState`（移动/鼠标/射击），再调用模拟，并通过 `on*` 钩子调用渲染器的震屏/闪屏/横幅/彩带和音效。`Games::render()` 先 `writeSnapshot()` 提取 `net::Snapshot`，再让 `client::GameView::apply()` 重建只读世界，最后交给 `Renderer` 绘制——本地离线路径和 TCP 客户端共用同一条表现路径（标题/结算在 `menu::*`）。四个关卡分别使用 `waves/level-01..04.json`，`GameSimulation::Level.enemyLevel` 为 1–4，作为隐藏的敌人成长等级乘在血量/伤害/速度上。
 
-`src/app/shared/Net/` 是服务端 / 客户端共享的网络协议层：`Protocol` 负责 `[u32 length][u16 type][u16 version][payload]` 帧和 TCP 粘包缓冲，`Input / Messages / Snapshot` 负责各类 payload 的 `QDataStream` 序列化。`src/app/server/Net/Server.*` 是 `QTcpServer`：拥有 headless `games::GameSimulation`，固定 60Hz 广播快照；`src/app/client/Net/Client.*` 是 `QTcpSocket`：握手、发送输入、接收快照并维护 `client::GameView`。`menu::Match` 默认使用网络路径：单机时在 127.0.0.1 上自动选端口启动内嵌服务端，`--connect host:port` 连远端；`--local` 或 `Menu(..., offline=true)` 保留本地直连模式给自动化测试和回退。自定义协议的联机设置由 `menu::ServerSetup` 提供：单机不监听端口，局域网主机只填端口，加入主机填地址和端口。
+`src/app/shared/Net/` 是服务端 / 客户端共享的网络协议层：`Protocol` 负责 `[u32 length][u16 type][u16 version][payload]` 帧和 TCP 粘包缓冲，`Input / Messages / Snapshot` 负责各类 payload 的 `QDataStream` 序列化。`src/app/server/Net/Server.*` 是 `QTcpServer`：拥有 headless `games::GameSimulation`，固定 60Hz 广播快照；`src/app/client/Net/Client.*` 是 `QTcpSocket`：握手、发送输入、接收快照并维护 `client::GameView`。`menu::Match` 默认使用网络路径：单机时在 127.0.0.1 上自动选端口启动内嵌服务端，`--connect host:port` 连远端；`--local` 或 `Menu(..., offline=true)` 保留本地直连模式给自动化测试和回退。自定义协议的联机设置内嵌在 `menu::Editor`：顶部三个选项卡决定下方显示台本编辑（单机/主机）或加入主机表单；局域网主机在波次编辑下方多一行端口。
 
 `src/app/client/Shop/` 和 `Arena/` 同构：`Shop` 是全局模块类（进程级单例 `ShopService`），组合 `Score`（全局钱包/本局统计）和 `Inventory`（地雷库存）两个 `namespace shop` 组件，负责 `load()/save()` 与 `buyMine()`；补给站界面是 `menu::Depot`，只展示和调用接口，不直接改数据。
 
 `src/app/client/Loadout/` 是战备全局模块（`LoadoutService`）：从 `loadout.json` 读发射器数值，选择持久化到 `loadout/launcher`；`Player::reset()` 应用伤害/射速/弹速倍率，`Player::shoot()` 应用散射倍率、额外弹丸和穿透。界面是 `menu::Armory`，默认标准发射器保持原弹道。
 
-`src/app/client/Menu/` 和 `Arena/` 同构：`Menu` 只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop`/`Loadout` 都是全局单例，不在 `Menu` 里），九个界面是 `namespace menu` 组件——`Main`（标题/关卡卡/设置入口）、`Map`（星区地图）、`Match`（默认持有网络 `GameClient` + 内嵌/远端服务端，`--local`/测试时持有这一局的 `Games`）、`Result`（只读 `Summary` 的结算层）、`Editor`（持有自定义台本）、`Depot`（补给站/商店）、`Armory`（战备/发射器）、`ServerSetup`（自定义协议联机设置）、`Settings`（音量 + 配置存储）。组件把玩家意图作为 `Action` 交回 `Menu`，`Menu` 负责开局、进编辑器和回主菜单；“自定义协议”点开即进编辑器，逐波编辑台本（1–12 波、四种敌人数量、单 Boss），按 `ENTER` 部署后进入 `ServerSetup`：单机走默认本地路径，局域网主机填端口，加入主机填地址和端口；再把 `Editor::script()` 写进 `Level.script` 交给 `Match`。
+`src/app/client/Menu/` 和 `Arena/` 同构：`Menu` 只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop`/`Loadout` 都是全局单例，不在 `Menu` 里），八个界面是 `namespace menu` 组件——`Main`（标题/关卡卡/设置入口）、`Map`（星区地图）、`Match`（默认持有网络 `GameClient` + 内嵌/远端服务端，`--local`/测试时持有这一局的 `Games`）、`Result`（只读 `Summary` 的结算层）、`Editor`（自定义协议：顶部三个选项卡，单机/局域网主机显示台本编辑，主机追加服务器端口，加入主机显示地址和端口）、`Depot`（补给站/商店）、`Armory`（战备/发射器）、`Settings`（音量 + 配置存储）。组件把玩家意图作为 `Action` 交回 `Menu`，`Menu` 负责开局、进编辑器和回主菜单；“自定义协议”点开即进编辑界面，逐波编辑台本（1–12 波、四种敌人数量、单 Boss），`ENTER` 直接按当前选项卡开始：单机本地、主机绑定端口、加入连接远端。
 
 `src/app/shared/Arena/` 是模块目录：`Arena` 是全局模块类，**私有继承** `Bullets`、`Combatants`、`Entities`、`Events`、`State` 五个 `namespace arena` 组件。私有继承意味着这些组件是 `Arena` 的实现细节：外部只能调用 `Arena` 自己声明的接口（`beginWave/update/draw/placeMine/playerState/bossInfo/clear*/celebrate*/takeFeedback` 等），看不到 `enemies()`、`submit()`、`player()` 这类组件方法。组件之间通过 `Arena/Context.h` 的 `arena::Context` 协作——`Arena` 调用组件时把 `Host&` 和 5 个兄弟组件引用显式注入，组件头文件因此不需要知道 `Arena`；组件 → 模块的反馈（闪屏/震屏）通过 `Arena/Host.h` 的 `arena::Host` 虚接口回调 `Arena::addFeedback()`。`Bullet` 是 `src/include/Bullet.h` 里的全局纯虚接口，具体弹种（目前是 `StandardBullet`）在 `Arena/Bullets/`；发射方只 `submit()` 对象，推进、回收和绘制都由池统一做。`Fighter` 也放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段和玩家失败（积分在 `ShopService` 的 `Score` 组件）。`SelfTest` 是 `Arena` 唯一保留的 friend（测试要直接摆局面）。
 
@@ -327,7 +327,7 @@ mingw32-make -j12 test
 - Boss 生成、Boss 死亡记录、最后一波清空后胜利
 - 中局 Boss：非最后一波击杀 Boss 不会结束对局，清波后照常进入强化
 - 死亡、失败、重新开始
-- 自定义模式：点开卡片直接进编辑器，增删波次、调格子数量、开关 Boss、部署后进入联机设置（单机/局域网主机/加入主机）；单机不需要配置服务器
+- 自定义模式：点开卡片进入带三个选项卡的编辑界面；单机/局域网主机编辑台本，主机在波次下方填端口，加入主机填地址和端口
 - 运行时提交的台本：用一份临时两波台本开局，验证波数与出生队列都来自这份数据
 - 完整 8 波自动游玩，直到击败 Boss
 - 音频初始化（可选：设置 `NEON_AUDIO_TEST=1`）
@@ -337,7 +337,7 @@ mingw32-make -j12 test
 - 地雷：右键布置扣库存、敌人接触即引爆并造成击杀
 - 星区地图：ENTER 进地图、方向键选择、四个区域可进入、关卡 2/4 波数与敌方等级正确
 - 编辑器：底部敌人库拖拽新增列、按住 `+`/`-` 连续快速加减；部署后进入联机设置
-- 联机设置：默认单机不占端口、局域网主机端口绑定、加入主机地址/端口、Esc 返回编辑器
+- 自定义选项卡：默认单机不占端口、局域网主机端口绑定、加入主机地址/端口、F1/F2/F3 切换
 - 战备：标题页入口、发射器装备、玩家伤害/射速随发射器变化
 - 敌人等级：升级后血量/伤害提高，战斗界面不显示等级
 - 支援敌人：增伤光环、伤害分担、群体治疗、高速突进、概率复活、召唤进度
@@ -395,4 +395,4 @@ $env:NEON_RENDER_THREADS=2
 - 鼠标指针是全局元素，属于 `Base` 的 `base::Pointer` 组件（`src/app/client/Base/Pointer/`）：窗口每帧通过 `BaseService.pointerDraw()` 把它叠在画面最上层，`base::Paint::reticle()` 是唯一画法，所有界面共用同一个指针和同一个时钟（局内暂停时外弧也照常旋转）；窗口内隐藏系统光标，指针移出窗口时恢复系统箭头。
 - 第三方运行库：Qt 6（LGPLv3）与 FFmpeg（LGPLv2.1+）。分发时请保留相应的许可证信息，见 [`THIRD_PARTY.txt`](THIRD_PARTY.txt)。
 
-更多画面：[标题](screenshots/title.png) · [星区地图](screenshots/map.png) · [战备](screenshots/armory.png) · [商店](screenshots/shop.png) · [设置](screenshots/settings.png) · [台本编辑器](screenshots/editor.png) · [联机设置](screenshots/server_setup.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)
+更多画面：[标题](screenshots/title.png) · [星区地图](screenshots/map.png) · [战备](screenshots/armory.png) · [商店](screenshots/shop.png) · [设置](screenshots/settings.png) · [台本编辑器](screenshots/editor.png) · [局域网主机](screenshots/server_setup.png) · [加入主机](screenshots/server_join.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)

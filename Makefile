@@ -66,7 +66,7 @@ CLIENT_COMPONENTS := Base/Base Base/Input/Input Base/Audio/Audio Base/Audio/Musi
                      Net/Client \
                      Menu/Menu Menu/Main/Main Menu/Map/Map Menu/Match/Match \
                      Menu/Result/Result Menu/Editor/Editor Menu/Depot/Depot \
-                     Menu/Armory/Armory Menu/ServerSetup/ServerSetup \
+                     Menu/Armory/Armory \
                      Menu/Settings/Settings \
                      Shop/Shop Shop/Score/Score Shop/Inventory/Inventory \
                      Loadout/Loadout

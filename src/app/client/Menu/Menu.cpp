@@ -161,8 +161,6 @@ void Menu::render()
         depot_.render(painter);
     } else if (screen_ == Screen::Armory) {
         armory_.render(painter);
-    } else if (screen_ == Screen::ServerSetup) {
-        serverSetup_.render(painter);
     } else if (screen_ == Screen::Settings) {
         settings_.render(painter);
     } else {
@@ -186,7 +184,7 @@ void Menu::startCampaign(int index)
     BaseService.keyRelease(Qt::Key_Escape);
 }
 
-void Menu::startCustom(const menu::ServerSetup::Config &config)
+void Menu::startCustom(const menu::Editor::Config &config)
 {
     customConfig_ = config;
     campaignActive_ = false;
@@ -195,10 +193,10 @@ void Menu::startCustom(const menu::ServerSetup::Config &config)
     level.script = editor_.script();
     level.startWave = 1;
 
-    if (config.mode == menu::ServerSetup::Mode::Single) {
+    if (config.mode == menu::Editor::Mode::Single) {
         // 单机自定义：不开放端口，使用本地直连路径。
         match_.configure(menu::Match::Mode::Local);
-    } else if (config.mode == menu::ServerSetup::Mode::Host) {
+    } else if (config.mode == menu::Editor::Mode::Host) {
         // 本机开房：port 非 0 让 Match 在 0.0.0.0 上启动内嵌服务端。
         match_.configure(menu::Match::Mode::Network, QString(), config.port);
     } else {
@@ -222,7 +220,7 @@ void Menu::startLevel(int index)
     }
     if (index == CustomLevelIndex) {
         // 直接进入自定义关卡时等价于“单机自定义”；编辑器部署会先走联机设置。
-        startCustom(menu::ServerSetup::Config{});
+        startCustom(menu::Editor::Config{});
         return;
     }
     campaignActive_ = false;
@@ -327,21 +325,9 @@ void Menu::keyPress(int key, bool autoRepeat)
     case Screen::Editor: {
         const menu::Editor::Action action = editor_.keyPress(key, autoRepeat);
         if (action == menu::Editor::Action::Deploy) {
-            serverSetup_.open();
-            screen_ = Screen::ServerSetup;
-            BaseService.playSound(QStringLiteral("ui"));
+            startCustom(editor_.config());
         } else if (action == menu::Editor::Action::Back) {
             returnToMenu();
-        }
-        break;
-    }
-    case Screen::ServerSetup: {
-        const menu::ServerSetup::Action action = serverSetup_.keyPress(key);
-        if (action == menu::ServerSetup::Action::Start) {
-            startCustom(serverSetup_.config());
-        } else if (action == menu::ServerSetup::Action::Back) {
-            screen_ = Screen::Editor;
-            BaseService.playSound(QStringLiteral("ui"));
         }
         break;
     }
@@ -455,21 +441,9 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
     case Screen::Editor: {
         const menu::Editor::Action action = editor_.mousePress(position);
         if (action == menu::Editor::Action::Deploy) {
-            serverSetup_.open();
-            screen_ = Screen::ServerSetup;
-            BaseService.playSound(QStringLiteral("ui"));
+            startCustom(editor_.config());
         } else if (action == menu::Editor::Action::Back) {
             returnToMenu();
-        }
-        break;
-    }
-    case Screen::ServerSetup: {
-        const menu::ServerSetup::Action action = serverSetup_.mousePress(position);
-        if (action == menu::ServerSetup::Action::Start) {
-            startCustom(serverSetup_.config());
-        } else if (action == menu::ServerSetup::Action::Back) {
-            screen_ = Screen::Editor;
-            BaseService.playSound(QStringLiteral("ui"));
         }
         break;
     }
