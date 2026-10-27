@@ -23,7 +23,7 @@ cpp\dist\NeonCore\NeonCore.exe
 
 双击仓库根目录的 **`start_cpp.bat`**，或 `cpp\run.bat` 即可启动。`dist\NeonCore` 已经包含运行所需的 Qt 6 和 FFmpeg DLL，不需要安装 Qt。
 
-默认启动方式已经是“客户端 + 服务端”结构：客户端在 127.0.0.1 上自动选择一个空闲端口，启动一个**内嵌的本地服务端**，再通过真实 TCP 连接进入对局。单机和联机使用同一套协议，因此不需要为了单机维护第二条逻辑。
+默认启动方式已经是“客户端 + 服务端”结构：客户端在 127.0.0.1 上自动选择一个空闲端口，启动一个**内嵌的本地服务端**，再通过真实 TCP 连接进入对局。单机和联机使用同一套协议，因此不需要为了单机维护第二条逻辑。协议版本 2 支持真正的多玩家会话：房间里的 2–4 个客户端各拿到一个稳定 playerId/slot，各自控制自己的飞机（不同出生点/颜色），快照同时包含所有玩家并为每个客户端标记 `localPlayerId`。单机仍是 1 架飞机，HUD/操作不变。
 
 ## 服务端 / 联机
 
@@ -48,17 +48,17 @@ NeonCoreServer.exe --port 7777
                         独立服务端（无窗口、60Hz 固定 tick）
 ```
 
-`build\NeonCoreServer.exe --port 7777` 是独立服务端，保留控制台输出，便于排查端口占用等问题；服务端模式已从 GUI 客户端移除，统一用 `NeonCoreServer.exe`。服务端只跑 `GameSimulation`（没有 Renderer / Menu / 输入采集）。控制面不走 TCP：`StartMatch` 只接受本地宿主（内嵌 `Match` 或 `NeonCoreServer` 的 stdin）；TCP 客户端只做 Hello / Input / 接收 `Snapshot / Event / MatchEnd`，不能开局或改服务器配置。独立服务端的 stdin 接受与 TCP 相同的 `[u32 length][payload]` 控制帧（`StartMatch` / `Input`），stdout 只输出启动日志；这样只有启动它的父进程能控制对局，网络客户端无法提交 `StartMatch`。没有对局时服务端广播 `RoomList`，客户端显示房间/大厅；房间的名字、人数、房主会话和对局状态全部由服务端 `RoomManager` 决定。对局开始后才切换到快照。房主解散房间时服务端先广播 `MatchEnd("房间已解散")` 再关闭监听/断开连接；客户端无论收到消息还是纯断线，都会进入独立的“无法连接服务器 / 房间已解散”失败页，而不是空对局或通用失败结算。端口被占用、握手协议版本不匹配、客户端断线、连接失败和重连失败都会返回错误并保持进程不崩溃。
+`build\NeonCoreServer.exe --port 7777` 是独立服务端，保留控制台输出，便于排查端口占用等问题；服务端模式已从 GUI 客户端移除，统一用 `NeonCoreServer.exe`。服务端只跑 `GameSimulation`（没有 Renderer / Menu / 输入采集）。控制面不走 TCP：`StartMatch` 只接受本地宿主（内嵌 `Match` 或 `NeonCoreServer` 的 stdin）；TCP 客户端只做 Hello / Input / 接收 `Snapshot / Event / MatchEnd`，不能开局或改服务器配置。独立服务端的 stdin 接受与 TCP 相同的 `[u32 length][payload]` 控制帧（`StartMatch` / `Input`，可用 `InputCommand.playerId` 选择控制哪一架飞机），stdout 只输出启动日志；这样只有启动它的父进程能控制对局，网络客户端无法提交 `StartMatch`。没有对局时服务端广播 `RoomList`，客户端显示房间/大厅；房间的名字、人数、房主会话和会话槽位全部由服务端 `RoomManager` 决定，人数与成员列表随连接/断开实时更新（最多 4 人，第 5 个连接会被拒绝）。对局开始时服务端把当前所有 welcomed 会话组成 roster，每个会话的输入只作用于自己的飞机；开局后加入的会话只能观战，输入会被忽略。玩家对局中掉线时服务端只移除那一架飞机，其他玩家继续；全部离开才结束对局。对局开始后才切换到快照。房主解散房间时服务端先广播 `MatchEnd("房间已解散")` 再关闭监听/断开连接；客户端无论收到消息还是纯断线，都会进入独立的“无法连接服务器 / 房间已解散”失败页，而不是空对局或通用失败结算。端口被占用、握手协议版本不匹配、客户端断线、连接失败和重连失败都会返回错误并保持进程不崩溃。
 
 ### 局域网房间流程
 
 自定义协议的“局域网主机”选项卡按 `ENTER` 或点“部署”后**不会立即开局**，而是启动内嵌服务端（按设定端口绑定所有网卡）并进入房间页：
 
-- 房间页显示房间名、地址、已连接玩家/上限、房主/你标记、等待状态和台本摘要；
-- 房主按 `ENTER` 才开始对面的权威对局（本地直接调用 `GameServer::startMatch()`，不走 TCP `StartMatch`）；
+- 房间页显示房间名、地址、服务端会话槽位列表（P1–P4、房主/你/对局中标记）、已连接玩家/上限、等待状态和台本摘要；
+- 房主按 `ENTER` 才开始对面的权威对局（本地直接调用 `GameServer::startMatch()`，不走 TCP `StartMatch`），当前房间里所有已连接会话一起进入对局、各控制自己的飞机；
 - 房主按 `X` 解散房间：服务端关闭，所有加入者进入“房间已解散”失败页；房主回到主菜单；
-- 房主/加入者按 `ESC` 离开或返回；加入者不能开始或解散，只能等待房主；
-- “加入主机”连接到正在等待的房间时显示同一份房间数据；连接失败、服务器不存在或房主解散时显示带 `ENTER` 重试 / `ESC` 返回的专用失败页；
+- 房主/加入者按 `ESC` 离开或返回；加入者不能开始或解散，只能等待房主；对局中离开只移除自己的飞机，其他玩家继续；
+- “加入主机”连接到正在等待的房间时显示同一份房间数据；连接失败、服务器不存在或房主解散时显示带 `ENTER` 重试 / `ESC` 返回的专用失败页；开局后加入的会话进入观战；
 - “单机”选项卡仍是本地直连、立即开局；“标准协议”与单机内嵌服务端路径完全不变。
 
 ## 操作
@@ -357,14 +357,16 @@ mingw32-make -j12 test
 - 战备：标题页入口、发射器装备、玩家伤害/射速随发射器变化
 - 敌人等级：升级后血量/伤害提高，战斗界面不显示等级
 - 支援敌人：增伤光环、伤害分担、群体治疗、高速突进、概率复活、召唤进度
-- 快照：完整场景提取 → QDataStream 序列化 → 反序列化，逐字段相等；帧长度/协议版本不匹配被拒绝
+- 快照：完整场景提取 → QDataStream 序列化 → 反序列化，逐字段相等；玩家 id/颜色/localPlayerId 保留；帧长度/协议版本不匹配被拒绝
 - GameView：快照重建后的玩家/敌人/子弹/实体/HUD/强化卡/Boss 条正确，并能用现有 `Renderer` 画出完整一帧
 - 单机路径：`GameSimulation -> Snapshot -> GameView -> Renderer` 的视图与模拟状态一致
+- 多玩家飞机：两个 slot 生成不同 id/颜色/出生点的飞机，输入只移动发送者的飞机，未知/观战 id 被忽略；多玩家快照序列化后每个客户端按自己的 localPlayerId 选中本机；阵亡等待复活、全灭判负
+- TCP 多玩家会话：两个客户端开局前各自拿到 playerId、快照含两架飞机且本机飞机正确、输入隔离、开局后加入的会话观战且输入被忽略、对局中一个玩家掉线只移除其飞机且服务器继续运行
 - TCP 回环：真实 `QTcpServer/QTcpSocket` 握手、房间大厅、宿主本地 StartMatch、输入命令、权威模拟位移、快照重建、双客户端广播；TCP StartMatch 被拒绝
 - 房间生命周期：主机 ENTER 只进房间不开局、房间人数由服务端广播、加入者看到同一房间、房主 ENTER 本地 startMatch、双方进入对局、解散关闭服务端并让客户端进入失败页
 - 失败页：连接不存在的服务器显示“无法连接服务器”、房主解散显示“房间已解散”、`ENTER` 重试与 `ESC` 返回
 - 错误路径：端口占用、协议版本不匹配、客户端断线、连接失败/重连调度都不会崩溃
-- 内嵌单机：默认 `Menu` 网络路径启动 127.0.0.1 自动端口服务端并渲染一帧
+- 内嵌单机：默认 `Menu` 网络路径启动 127.0.0.1 自动端口服务端并渲染一帧；握手晚于 startMatch 时仍能接管并操作自己的飞机
 - 输出到当前目录的 `smoke.log`
 
 重新生成离屏截图：
@@ -413,4 +415,4 @@ $env:NEON_RENDER_THREADS=2
 - 鼠标指针是全局元素，属于 `Base` 的 `base::Pointer` 组件（`src/app/client/Base/Pointer/`）：窗口每帧通过 `BaseService.pointerDraw()` 把它叠在画面最上层，`base::Paint::reticle()` 是唯一画法，所有界面共用同一个指针和同一个时钟（局内暂停时外弧也照常旋转）；窗口内隐藏系统光标，指针移出窗口时恢复系统箭头。
 - 第三方运行库：Qt 6（LGPLv3）与 FFmpeg（LGPLv2.1+）。分发时请保留相应的许可证信息，见 [`THIRD_PARTY.txt`](THIRD_PARTY.txt)。
 
-更多画面：[标题](screenshots/title.png) · [星区地图](screenshots/map.png) · [战备](screenshots/armory.png) · [商店](screenshots/shop.png) · [设置](screenshots/settings.png) · [台本编辑器](screenshots/editor.png) · [局域网主机](screenshots/server_setup.png) · [加入主机](screenshots/server_join.png) · [房间（房主）](screenshots/room_host.png) · [房间（加入者）](screenshots/room_join.png) · [房间已解散](screenshots/room_failure.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)
+更多画面：[标题](screenshots/title.png) · [星区地图](screenshots/map.png) · [战备](screenshots/armory.png) · [商店](screenshots/shop.png) · [设置](screenshots/settings.png) · [台本编辑器](screenshots/editor.png) · [局域网主机](screenshots/server_setup.png) · [加入主机](screenshots/server_join.png) · [房间（房主）](screenshots/room_host.png) · [房间（加入者）](screenshots/room_join.png) · [房间已解散](screenshots/room_failure.png) · [多玩家](screenshots/multiplayer.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [胜利](screenshots/victory.png) · [真实窗口](screenshots/window.png)

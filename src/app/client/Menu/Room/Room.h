@@ -6,6 +6,8 @@
 #include <QRectF>
 #include <QString>
 
+#include <vector>
+
 class QPainter;
 
 namespace menu {
@@ -22,6 +24,15 @@ public:
         Back,
     };
 
+    // RoomList 里一个会话槽位的展示数据（人数与列表都来自服务端）。
+    struct PlayerSlot {
+        QString name;
+        QString detail;
+        bool host = false;
+        bool you = false;
+        bool inMatch = false;
+    };
+
     struct View {
         bool host = false;         // 本机是房主（本地内嵌 GameServer）
         bool youAreHost = false;   // 服务端房间的 hostSessionId 指向本会话
@@ -34,6 +45,8 @@ public:
         QString status;
         int players = 0;
         int maxPlayers = 4;
+        // 服务端 RoomList 的会话槽位，与 players 计数保持一致。
+        std::vector<PlayerSlot> playerSlots;
     };
 
     void update(float dt, const Math::Vec2 &mouse, bool mouseActive);

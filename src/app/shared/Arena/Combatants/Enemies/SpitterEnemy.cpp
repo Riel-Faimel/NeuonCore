@@ -31,7 +31,7 @@ SpitterEnemy::SpitterEnemy(const Math::Vec2 &position, int wave)
 void SpitterEnemy::updateSpecial(const Context &ctx, float dt)
 {
     (void)dt;
-    const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
+    const Math::Vec2 toPlayer = ctx.combatants.nearestLivingPlayer(pos).state.pos - pos;
     const float distance = std::max(1.0f, toPlayer.length());
     if (age > 0.9f && attackTimer <= 0.0f && distance < 540.0f) {
         attackTimer = RandomService.real(1.8f, 2.5f);
@@ -41,7 +41,7 @@ void SpitterEnemy::updateSpecial(const Context &ctx, float dt)
 
 void SpitterEnemy::shoot(const Context &ctx)
 {
-    const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
+    const Math::Vec2 toPlayer = ctx.combatants.nearestLivingPlayer(pos).state.pos - pos;
     const float base = std::atan2(toPlayer.y, toPlayer.x);
     const Math::Vec2 aim = Math::Vec2(std::cos(base), std::sin(base))
         .rotated(RandomService.real(-0.055f, 0.055f));

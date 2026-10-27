@@ -30,6 +30,11 @@ struct InputCommand {
     // -1 表示没有选择；0..2 对应三张强化卡。
     int upgradeChoice = -1;
 
+    // 目标玩家（1..4）。TCP 客户端必须留 0：服务端只按会话自己的 playerId
+    // 应用输入，客户端不能指定别的飞机。stdio 宿主用它选择控制哪一架；
+    // 0 表示服务端默认（会话自己 / 对局 leader）。
+    int playerId = 0;
+
     bool operator==(const InputCommand &) const = default;
 };
 

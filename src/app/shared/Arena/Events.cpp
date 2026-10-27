@@ -66,8 +66,7 @@ void Events::resolvePlayerBullets(const Context &ctx)
 
 void Events::resolveEnemyBullets(const Context &ctx)
 {
-    Player &player = ctx.combatants.player();
-    if (!player.isAlive()) {
+    if (ctx.combatants.livingPlayerCount() == 0) {
         ctx.bullets.cleanup();
         return;
     }
@@ -76,17 +75,24 @@ void Events::resolveEnemyBullets(const Context &ctx)
         if (!bullet.alive()) {
             continue;
         }
-        if (!Math::segmentCircle(bullet.prev(), bullet.position(),
-                                 player.position(),
-                                 player.state.radius + bullet.radius())) {
-            continue;
+        // 敌方子弹可以命中任何一架活着的玩家飞机（按 id 结算到被击中的那一架）。
+        for (Player &player : ctx.combatants.players()) {
+            if (!player.state.active || !player.isAlive()) {
+                continue;
+            }
+            if (!Math::segmentCircle(bullet.prev(), bullet.position(),
+                                     player.position(),
+                                     player.state.radius + bullet.radius())) {
+                continue;
+            }
+            if (player.state.invuln > 0.0f) {
+                ctx.entities.spawnBurst(ctx, bullet.position(), Base::Cyan, 5,
+                                        80.0f, 0.25f);
+            }
+            bullet.hit(ctx, player);
+            break;
         }
-        if (player.state.invuln > 0.0f) {
-            ctx.entities.spawnBurst(ctx, bullet.position(), Base::Cyan, 5, 80.0f,
-                                    0.25f);
-        }
-        bullet.hit(ctx, player);
-        if (ctx.state.playerDefeated()) {
+        if (ctx.combatants.livingPlayerCount() == 0) {
             break;
         }
     }
@@ -174,32 +180,34 @@ void Events::separateEnemies(const Context &ctx)
 
 void Events::contactDamage(const Context &ctx)
 {
-    Player &player = ctx.combatants.player();
-    if (!player.isAlive() || player.state.invuln > 0.0f) {
-        return;
-    }
-    for (const auto &enemy : ctx.combatants.enemies()) {
-        if (!enemy->isAlive()) {
+    for (Player &player : ctx.combatants.players()) {
+        if (!player.state.active || !player.isAlive()
+            || player.state.invuln > 0.0f) {
             continue;
         }
-        const Fighter &fighter = *enemy;
-        const Math::Vec2 delta = player.position() - fighter.position();
-        const float minimum = player.state.radius + fighter.collisionRadius();
-        if (delta.lengthSquared() <= minimum * minimum) {
-            player.takeDamage(ctx, Damage{fighter.contactDamage(), false,
-                                            DamageSource::Contact});
-            if (delta.lengthSquared() > 0.001f) {
-                const Math::Vec2 direction = delta.normalized();
-                player.state.pos += direction * 22.0f;
-                enemy->pos -= direction * 12.0f;
-                player.state.pos.x = Math::clamp(player.state.pos.x,
-                                                 GameConfig::FieldLeft + 2.0f,
-                                                 GameConfig::FieldRight - 2.0f);
-                player.state.pos.y = Math::clamp(player.state.pos.y,
-                                                 GameConfig::FieldTop + 2.0f,
-                                                 GameConfig::FieldBottom - 2.0f);
+        for (const auto &enemy : ctx.combatants.enemies()) {
+            if (!enemy->isAlive()) {
+                continue;
             }
-            break;
+            const Fighter &fighter = *enemy;
+            const Math::Vec2 delta = player.position() - fighter.position();
+            const float minimum = player.state.radius + fighter.collisionRadius();
+            if (delta.lengthSquared() <= minimum * minimum) {
+                player.takeDamage(ctx, Damage{fighter.contactDamage(), false,
+                                              DamageSource::Contact});
+                if (delta.lengthSquared() > 0.001f) {
+                    const Math::Vec2 direction = delta.normalized();
+                    player.state.pos += direction * 22.0f;
+                    enemy->pos -= direction * 12.0f;
+                    player.state.pos.x = Math::clamp(player.state.pos.x,
+                                                     GameConfig::FieldLeft + 2.0f,
+                                                     GameConfig::FieldRight - 2.0f);
+                    player.state.pos.y = Math::clamp(player.state.pos.y,
+                                                     GameConfig::FieldTop + 2.0f,
+                                                     GameConfig::FieldBottom - 2.0f);
+                }
+                break;
+            }
         }
     }
 }

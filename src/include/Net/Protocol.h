@@ -12,13 +12,19 @@ class QDataStream;
 //   [u32 length][u16 type][u16 version][payload]
 // length 是 payload 的字节数（不含 8 字节头），字节序固定小端。
 // 阶段 3 的 QTcpSocket 只负责收发这些完整帧；快照本身的读写见 Net/Snapshot.h。
+//
+// 协议版本 2：真实多玩家会话。Welcome 携带稳定 playerId/slot；快照携带
+// players[] 与每个客户端自己的 localPlayerId；RoomList 携带玩家槽位列表；
+// InputCommand 可携带 stdio 宿主的目标 playerId。
 namespace net {
 
-inline constexpr quint16 kProtocolVersion = 1;
-inline constexpr quint16 kSnapshotDataVersion = 1;
+inline constexpr quint16 kProtocolVersion = 2;
+inline constexpr quint16 kSnapshotDataVersion = 2;
 inline constexpr quint16 kDefaultPort = 7777;
 inline constexpr quint32 kFrameHeaderSize = 8;
 inline constexpr quint32 kMaxPayloadBytes = 4u * 1024u * 1024u;
+// 一局最多 4 架玩家飞机（房间容量与之一致）。
+inline constexpr int kMaxPlayersPerRoom = 4;
 // 防止损坏的长度字段/计数导致可信端一次性提交巨量分配。
 inline constexpr quint32 kMaxSnapshotItems = 100000u;
 

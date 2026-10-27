@@ -199,6 +199,8 @@ cpp/src/
 | `Events` | 碰撞、接触伤害、敌人分离、击杀 |
 | `State` | Boss 阶段、Boss 击败、玩家失败 |
 
+**多玩家（阶段 3.5）**：`Combatants` 持有 1–4 架 `arena::Player`，开局时由服务端调用 `configurePlayers(playerIds)` 生成。只有一架时沿用原来的中央出生点/Cyan 和“阵亡即失败”；2–4 架时按 playerId 分配固定出生点与识别色，敌人/敌方子弹/掉落/接触伤害都以“最近的存活玩家”为目标，玩家的瞄准和子弹只来自自己的 `InputState`。单架阵亡进入 3.2s 重新部署（满血回到出生点并短暂无敌），所有飞机同时倒下才判负；会话离开时 `removePlayer()` 只把对应飞机标记为非 active，快照不再包含它。`Arena::playerState()` 返回本机视角的飞机（客户端按 `Snapshot.localPlayerId`，服务端/单机回退第一架），`playerStateAt()` 供 HUD/强化遍历全部飞机；`Upgrades` 对全队生效。
+
 **封装**：私有继承让外部看不到任何组件接口（`arena.enemies()`、`arena.submit()`、`arena.player()` 都不可见），`Arena` 只暴露自己声明的模块接口（`beginWave / update / draw / placeMine / playerState / bossInfo / score / kills / clear* / celebrate* / takeFeedback` 等）。
 
 **组件之间**不再用 `friend`，也不通过 `Arena&`：`Arena` 调用组件时构造 `arena::Context`（`Host&` + 5 个组件引用），把兄弟组件的引用显式注入进去；组件只依赖 `Context`，头文件里连 `Arena` 的前置声明都不需要。`Context` 是模块内部的类型，外部拿不到。
@@ -264,22 +266,24 @@ public:
 
 | 角色 | 位置 | 职责 |
 | --- | --- | --- |
-| `net::Protocol` | `src/include/Net/Protocol.h` | 协议版本、消息 id、`[u32 length][u16 type][u16 version][payload]` 帧的打包/拆包、TCP 粘包缓冲 `FrameBuffer` |
-| `net::Input` | `src/include/Net/Input.h` | `InputCommand`：移动轴、鼠标、射击、冲刺、暂停、布雷、强化选择 |
-| `net::Messages` | `src/include/Net/Messages.h` | `Hello / Welcome / StartMatch / Input / Snapshot / Event / MatchEnd / RoomList / JoinRoom` 的 payload 与带帧头的编码/解码 |
-| `net::Snapshot` | `src/include/Net/Snapshot.h` | 玩家、敌人（dataKey + 绘制字段）、子弹、传送门/掉落/地雷/粒子/飘字/冲击波、波次 HUD、强化卡、状态/时间/分数/击杀/Boss |
+| `net::Protocol` | `src/include/Net/Protocol.h` | 协议版本（v2）、消息 id、`[u32 length][u16 type][u16 version][payload]` 帧的打包/拆包、TCP 粘包缓冲 `FrameBuffer` |
+| `net::Input` | `src/include/Net/Input.h` | `InputCommand`：移动轴、鼠标、射击、冲刺、暂停、布雷、强化选择；`playerId` 只用于 stdio 宿主选择目标，TCP 客户端必须为 0 |
+| `net::Messages` | `src/include/Net/Messages.h` | `Hello / Welcome（sessionId + playerId/slot）/ StartMatch / Input / Snapshot / Event / MatchEnd / RoomList（含会话槽位）/ JoinRoom` 的 payload 与带帧头的编码/解码 |
+| `net::Snapshot` | `src/include/Net/Snapshot.h` | `players[]`（每个玩家 id/颜色/生命/冲刺/瞄准/复活倒计时）、`localPlayerId`（每个接收者自己的飞机）、敌人（dataKey + 绘制字段）、子弹、传送门/掉落/地雷/粒子/飘字/冲击波、波次 HUD、强化卡、状态/时间/分数/击杀/Boss |
 | 提取 | `GameSimulation::snapshot()` | `Arena / Combatants / Bullets / Entities` 各自把只读数据写进快照，RTTI 在边界转 `Enemy::dataKeyFor()` |
-| `server::GameServer` | `src/app/server/Net/Server.*` | `QTcpServer`、会话、固定 60Hz tick、headless `GameSimulation`、`Snapshot/Event/MatchEnd/RoomList` 广播、权威输入应用 |
+| `server::GameServer` | `src/app/server/Net/Server.*` | `QTcpServer`、会话（稳定 playerId/slot）、固定 60Hz tick、headless `GameSimulation`、按会话填写 `localPlayerId` 的 Snapshot 广播、权威输入按 playerId 路由、Event/MatchEnd/RoomList 广播、玩家离开时移除飞机 |
 | `server::RoomManager` | `src/app/server/Room/Room.*` | 服务端权威房间：`open/reset` 生命周期、名字、玩家数上限、房主会话、等待/对局中 |
-| `client::GameClient` | `src/app/client/Net/Client.*` | `QTcpSocket`、Hello/Welcome、输入发送、快照接收、`client::GameView`、重连与错误状态 |
-| `client::GameView` | `src/app/client/Client/GameView.*` | 把快照应用回一个只读 `Arena` 镜像：按 dataKey 重建敌人/传送门，填充绘制字段；不推进模拟 |
-| `games::Renderer` | `src/app/client/Games/Renderer/*` | 只读 `GameView` 画世界层/HUD/强化卡/暂停；世界绘制仍走 `Arena::draw()`，没有第二套画法 |
+| `client::GameClient` | `src/app/client/Net/Client.*` | `QTcpSocket`、Hello/Welcome（记录 playerId）、输入发送、快照接收、`client::GameView`、重连与错误状态 |
+| `client::GameView` | `src/app/client/Client/GameView.*` | 把快照应用回一个只读 `Arena` 镜像：重建全部玩家/敌人/传送门，按 `localPlayerId` 选择本机飞机；不推进模拟 |
+| `games::Renderer` | `src/app/client/Games/Renderer/*` | 只读 `GameView` 画世界层/HUD/强化卡/暂停；HUD 的生命/冲刺/瞄准来自本机飞机，远程飞机有队伍生命列表 |
 
-服务端只拥有模拟，不链接/使用 Renderer、Menu 或 `BaseService` 的键鼠状态；`GameSimulation::Level` 里的台本由**本地宿主**通过 `GameServer::startMatch()` 或 `NeonCoreServer` 的 stdin 控制帧提交，TCP 客户端不能发 `StartMatch`。`GameServer` 的房间控制面也是本地宿主专用：`openRoom(name)` 建立等待房间，`startMatch(level)` 才创建并启动 `GameSimulation`，`dissolveRoom(reason)` 广播 `MatchEnd`、关闭监听并断开会话。服务端用 `QElapsedTimer` 累加固定 1/60s 步长，每个 tick 后 `writeSnapshot()` 并广播；没有对局时 `RoomManager` 广播 `RoomList`（人数来自服务端实际 welcomed 会话数），客户端进入房间/大厅而不是渲染对局；`ShopService.score().beginRun()` 在开局时重置本局统计，击杀仍由 `Arena::Events` 写回，因此比分/波次/胜负以服务端为准。表现事件（波次横幅、Boss 击破、震屏/闪屏、胜利/失败）通过 `Event` 消息发送，由客户端 `GameClient` 调用本地 `Renderer` 和音效；客户端不回传世界状态。
+服务端只拥有模拟，不链接/使用 Renderer、Menu 或 `BaseService` 的键鼠状态；`GameSimulation::Level` 里的台本由**本地宿主**通过 `GameServer::startMatch()` 或 `NeonCoreServer` 的 stdin 控制帧提交，TCP 客户端不能发 `StartMatch`。`GameServer` 的房间控制面也是本地宿主专用：`openRoom(name)` 建立等待房间，`startMatch(level)` 才创建并启动 `GameSimulation`，`dissolveRoom(reason)` 广播 `MatchEnd`、关闭监听并断开会话。服务端用 `QElapsedTimer` 累加固定 1/60s 步长，每个 tick 后 `writeSnapshot()` 并广播；没有对局时 `RoomManager` 广播 `RoomList`（人数来自服务端实际 welcomed 会话数，`members` 给出每个会话的 playerId/slot 与房主标记），客户端进入房间/大厅而不是渲染对局；`ShopService.score().beginRun()` 在开局时重置本局统计，击杀仍由 `Arena::Events` 写回，因此比分/波次/胜负以服务端为准。表现事件（波次横幅、Boss 击破、震屏/闪屏、胜利/失败）通过 `Event` 消息发送，由客户端 `GameClient` 调用本地 `Renderer` 和音效；客户端不回传世界状态。
 
-`menu::Match` 默认是 `Mode::Network`：host 为空时在 127.0.0.1 上 `listen(0)` 启动内嵌 `GameServer` 并立即 `startMatch()`（单机/标准路径），`--connect host:port` 则连接远端并进入房间、等待房主开始。`Mode::Host` 是自定义“局域网主机”：在 `0.0.0.0:<port>` 上开房、只创建 `GameClient` 回环连接，不调用 `startMatch()`；房主在 `Room` 按 `ENTER` 时 `Match::startRoomMatch()` 直接调用本地 `GameServer::startMatch()`，按 `X` 时 `Match::dissolveRoom()` 关闭服务端并通知客户端。`Mode::Local` 保留本地直连 `Games` 路径，供 `SelfTest`、`--local` 回退和自定义单机直接开局。`--server --port N` 在 `QCoreApplication` 里只启动 `GameServer`，没有窗口/字体/音频。
+**会话与玩家（阶段 3.5）**：Hello 时服务端给每个 welcomed 会话分配稳定的 `playerId`/slot（1–4，房间满时拒绝第 5 个连接），Welcome 把它回给客户端。`startMatch()` 把当时所有 welcomed 会话的 playerId 组成这一局的 roster，调用 `GameSimulation::setPlayers()` 生成同样数量的玩家飞机（1 架时保持原单机行为，2–4 架时按 slot 使用不同出生点/颜色）。每个 TCP 会话的 `Input` 只应用到自己的飞机：`handleInput()` 先校验 `session.playerId`、`inMatch` 和 `simulation->hasPlayer()`，观战者/未知会话直接忽略；`InputCommand.playerId` 只供 stdio 宿主选择目标，TCP 客户端传什么都不会改变目标飞机。暂停/选强化是整局共享动作，只接受 leader（最小 active playerId）。`broadcastSnapshot()` 每帧只提取一次世界，编码前按会话把 `Snapshot.localPlayerId` 覆盖成各自的 playerId（观战者为 0），避免每个客户端复制整份世界。会话在对局中掉线时 `onDisconnected()` 调用 `GameSimulation::removePlayer()`，只把那一架飞机标记为非 active 并从后续快照移除，其他玩家继续；全部玩家都离开时模拟判负并结束对局。开局后才加入的会话保持自己的 playerId，但这一局没有飞机，是观战者；单机内嵌路径在握手完成前就 startMatch（roster 回退为 {1}），因此握手完成后允许尚未被占用的 slot 接管对应飞机。
 
-`net::Snapshot` 的全部结构默认生成 `operator==`，roundtrip 测试逐字段比较；`serializeSnapshot / encodeSnapshotMessage` 用 `QDataStream`（小端、Qt 6 版本），长度字段和版本字段都由 `Protocol.h` 的辅助函数校验。TCP 集成测试覆盖 Hello/Welcome、宿主本地 StartMatch、输入命令、权威位移、快照重建、双客户端广播、端口占用、协议版本不匹配、断线与重连调度；TCP StartMatch 被拒绝。房间测试另外覆盖：主机 `ENTER` 只进房不开局、服务端权威人数、加入者显示同一房间、房主 `ENTER` 本地开局、双方进入对局、解散关闭服务端并让加入者进入带重试/返回的失败页，以及连接不存在的服务器时显示“无法连接服务器”。
+`menu::Match` 默认是 `Mode::Network`：host 为空时在 127.0.0.1 上 `listen(0)` 启动内嵌 `GameServer` 并立即 `startMatch()`（单机/标准路径），`--connect host:port` 则连接远端并进入房间、等待房主开始；同一房间的 2–4 个会话各自控制自己的飞机（颜色/出生点不同），开局后加入的会话是观战者。`Mode::Host` 是自定义“局域网主机”：在 `0.0.0.0:<port>` 上开房、只创建 `GameClient` 回环连接，不调用 `startMatch()`；房主在 `Room` 按 `ENTER` 时 `Match::startRoomMatch()` 直接调用本地 `GameServer::startMatch()`（把当前所有 welcomed 会话组成 roster），按 `X` 时 `Match::dissolveRoom()` 关闭服务端并通知客户端。`Mode::Local` 保留本地直连 `Games` 路径，供 `SelfTest`、`--local` 回退和自定义单机直接开局。`--server --port N` 在 `QCoreApplication` 里只启动 `GameServer`，没有窗口/字体/音频。
+
+`net::Snapshot` 的全部结构默认生成 `operator==`，roundtrip 测试逐字段比较；`serializeSnapshot / encodeSnapshotMessage` 用 `QDataStream`（小端、Qt 6 版本），长度字段和版本字段都由 `Protocol.h` 的辅助函数校验。TCP 集成测试覆盖 Hello/Welcome、宿主本地 StartMatch、输入命令、权威位移、快照重建、双客户端广播、端口占用、协议版本不匹配、断线与重连调度；TCP StartMatch 被拒绝。多玩家测试覆盖：两个会话在开局前各自拿到不同 playerId/slot，开局后快照同时包含两架飞机且每个客户端的 `localPlayerId`/`GameView::playerState()` 指向自己的飞机；只有发送者的飞机移动，另一方不动；开局后加入的会话 `localPlayerId==0`，其输入被忽略；一个玩家对局中掉线只移除那一架飞机、其余玩家继续，服务器不崩溃；直接调用 `GameSimulation` 的测试覆盖不同出生点/颜色、未知 playerId 忽略、序列化后的多玩家快照、阵亡等待复活、全灭判负和单机路径不变。房间测试另外覆盖：主机 `ENTER` 只进房不开局、服务端权威人数与成员槽位、加入者显示同一房间、房主 `ENTER` 本地开局、双方进入对局、解散关闭服务端并让加入者进入带重试/返回的失败页，以及连接不存在的服务器时显示“无法连接服务器”。
 
 ### lib / include / tests
 
@@ -639,11 +643,11 @@ GPU 加速没有采用：当前是 `QImage` + `QPainter` 光栅管线，走 GPU 
 - 一局一个 `Games`：`Base`（输入/音频/字体）、`Random`、`Shop` 都是进程级单例，否则切局会重复初始化音频/随机源/钱包。
 - 一局的安排只经构造参数进入 `GameSimulation`；`Games` 不提供任何读回安排的接口，`Menu` 只保留展示用的关卡表。
 - 模拟阶段 3：`Games` 仍保留为单机适配器（测试/`--local` 回退）；`menu::Match` 默认用 `GameClient` + 内嵌 `GameServer`，远端用 `--connect`。单机内嵌服务端与客户端在同一主线程的 Qt 事件循环里跑，真实 TCP 回环但不额外起线程。
-- `net::Snapshot` 只含数据：敌人/传送门类型用注册表的 `dataKey` 字符串，`std::type_index` 不出现在协议里；帧格式是 `[u32 length][u16 type][u16 version][payload]`，序列化用 `QDataStream`。
+- `net::Snapshot` 只含数据：玩家列表（playerId/颜色/复活倒计时）与每个接收者自己的 `localPlayerId`、敌人/传送门类型用注册表的 `dataKey` 字符串，`std::type_index` 不出现在协议里；帧格式是 `[u32 length][u16 type][u16 version][payload]`，序列化用 `QDataStream`。协议版本与快照数据版本都是 2（players[]/localPlayerId/Welcome.playerId/RoomList.members）。
 - 服务端固定 60Hz tick 广播完整快照（目前不压缩、不插值）；单机回环会引入一个 tick/一帧左右的延迟，远端高延迟下的插值/预测留到阶段 4。
-- `Player` 只读 `InputState`（`moveAxis / mouseActive / mousePosition / shooting / dashRequested`）；客户端把同样的字段封成 `net::InputCommand`，服务端校验后写回 `GameSimulation::setInput()`，冲刺/暂停/布雷/强化选择都是服务端权威动作。
-- 阶段 3 的多个客户端共享同一局：控制面 StartMatch 只来自本地宿主（内嵌 Match 或 stdio）；网络侧只有第一个连接拥有输入权（含暂停/选强化），其他会话只收快照（观战）；真正的多玩家/输入隔离留到阶段 5。
-- 房间目前是单房间模型（`RoomManager` 的 `rooms()` 最多一项），没有准备/踢人/名字列表；人数统计所有 welcomed 会话（主机自己的回环客户端也算 1 人）。`RoomManager` 在服务端记录房主会话，但 `RoomList` 不传玩家名；客户端的主人标记来自 `Match::Mode::Host`，独立 `NeonCoreServer` 的 TCP 客户端都是加入者，控制权在 stdio 宿主。房主解散后 `Match` 直接销毁内嵌服务端，加入者靠 `MatchEnd("房间已解散")` 或断线兜底进入 `Failure`。
+- `Player` 只读 `InputState`（`moveAxis / mouseActive / mousePosition / shooting / dashRequested`）；客户端把同样的字段封成 `net::InputCommand`，服务端校验后按会话的 playerId 写回 `GameSimulation::setInput(playerId, ...)`，冲刺/暂停/布雷/强化选择都是服务端权威动作。TCP 客户端不能指定 playerId；stdio 宿主可以用 `InputCommand.playerId` 选择飞机。
+- 多玩家目前是 1–4 人的合作对局：积分/击杀仍是全局 `ShopService`（不按玩家拆分），强化是全队共享，暂停/选强化只由 leader（最小 active playerId）决定；阵亡后 3.2s 重新部署（阵亡期间不切换成自由观战），全灭才判负。开局后加入的会话只能观战；重连会得到新的 session/playerId，不会自动接管原来的飞机（没有可恢复令牌）。
+- 房间目前是单房间模型（`RoomManager` 的 `rooms()` 最多一项），没有准备/踢人/玩家昵称；`RoomList.members` 只是会话槽位（sessionId、playerId、是否房主、是否已进入对局）。人数统计所有 welcomed 会话（主机自己的回环客户端也算 1 人），第 5 个连接会被拒绝；对局开始后加入的会话仍计入房间人数，但没有飞机。`RoomManager` 在服务端记录房主会话，房主离开时会把 host 交给下一个 welcomed 会话。房主解散后 `Match` 直接销毁内嵌服务端，加入者靠 `MatchEnd("房间已解散")` 或断线兜底进入 `Failure`。
 - `menu::Match` 的加入远端路径使用手动重试（失败页 `ENTER`），不在后台自动重连；`GameClient` 本身仍保留可配置的 `setAutoReconnect()`，供独立测试/后续观战重连使用。
 - 钱包/库存仍是阶段 3 的过渡状态：击杀和本局比分由服务端模拟写 `ShopService`（单机同进程所以立即可见）；远端客户端的本地钱包/地雷库存没有同步，服务端只接受布雷意图，阶段 4 再改成服务端权威并回执。
 - `Arena` 的玩家状态对 `games::Upgrades` 开放写权限（`Arena::playerState()`），不再需要模块间 friend。

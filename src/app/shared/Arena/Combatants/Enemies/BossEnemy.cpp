@@ -38,7 +38,7 @@ BossEnemy::BossEnemy(const Math::Vec2 &position, int wave)
 Math::Vec2 BossEnemy::desiredVelocity(const Context &ctx, float dt)
 {
     (void)dt;
-    const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
+    const Math::Vec2 toPlayer = ctx.combatants.nearestLivingPlayer(pos).state.pos - pos;
     const float distance = std::max(1.0f, toPlayer.length());
     const Math::Vec2 direction = toPlayer / distance;
     const Math::Vec2 perpendicular(-direction.y, direction.x);
@@ -88,7 +88,7 @@ void BossEnemy::shoot(const Context &ctx)
 
 void BossEnemy::fireAimed(const Context &ctx, int count, float spread)
 {
-    const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
+    const Math::Vec2 toPlayer = ctx.combatants.nearestLivingPlayer(pos).state.pos - pos;
     const float base = std::atan2(toPlayer.y, toPlayer.x);
     for (int i = 0; i < count; ++i) {
         const float offset = (float(i) - (count - 1) / 2.0f) * spread;

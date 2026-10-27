@@ -3,6 +3,7 @@
 #include "Arena/Combatants/Enemy.h"
 #include "Base/Base.h"
 #include "Data/GameData.h"
+#include "Net/Client.h"
 
 #include <QPainter>
 #include <Qt>
@@ -132,6 +133,35 @@ menu::Room::View Menu::roomView() const
     view.endpoint = match_.roomEndpoint();
     view.players = match_.roomPlayers();
     view.maxPlayers = match_.roomMaxPlayers();
+    if (const client::GameClient *gameClient = match_.gameClient()) {
+        const auto &rooms = gameClient->rooms();
+        if (!rooms.empty()) {
+            for (const net::RoomPlayerInfo &member : rooms.front().members) {
+                menu::Room::PlayerSlot slot;
+                slot.host = member.host;
+                slot.you = member.sessionId == gameClient->sessionId();
+                slot.inMatch = member.inMatch;
+                slot.name = QStringLiteral("P%1 / %2")
+                                .arg(member.playerId)
+                                .arg(member.host ? QStringLiteral("房主 HOST")
+                                                 : QStringLiteral("玩家 PLAYER"));
+                if (slot.you) {
+                    slot.detail = member.inMatch
+                                      ? QStringLiteral("本机 · 正在对局")
+                                      : QStringLiteral("本机 · 等待房主开始");
+                } else if (member.inMatch) {
+                    slot.detail = QStringLiteral("对局中");
+                } else {
+                    slot.detail = QStringLiteral("等待房主开始对局");
+                }
+                view.playerSlots.push_back(std::move(slot));
+            }
+            // 人数以服务端成员列表为准（与 RoomList 的 players 字段一致）。
+            if (int(view.playerSlots.size()) != view.players) {
+                view.players = int(view.playerSlots.size());
+            }
+        }
+    }
     if (!view.connected) {
         view.status = QStringLiteral("正在连接主机，等待房间状态…");
     } else if (view.playing) {

@@ -241,7 +241,7 @@ void Enemy::update(const Context &ctx, float dt)
 Math::Vec2 Enemy::desiredVelocity(const Context &ctx, float dt)
 {
     (void)dt;
-    const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
+    const Math::Vec2 toPlayer = ctx.combatants.nearestLivingPlayer(pos).state.pos - pos;
     const float distance = std::max(1.0f, toPlayer.length());
     return toPlayer / distance * speed;
 }
@@ -335,7 +335,7 @@ void Enemy::draw(QPainter &world, QPainter &glow, const Context &ctx) const
     if (!alive) {
         return;
     }
-    const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
+    const Math::Vec2 toPlayer = ctx.combatants.nearestLivingPlayer(pos).state.pos - pos;
     const float facing = std::atan2(toPlayer.y, toPlayer.x);
     drawBody(world, glow, facing);
 

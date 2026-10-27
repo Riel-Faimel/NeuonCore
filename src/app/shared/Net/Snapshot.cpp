@@ -70,6 +70,7 @@ bool readList(QDataStream &stream, Container *items, Reader reader, QString *err
 
 void writePlayer(QDataStream &stream, const PlayerSnapshot &player)
 {
+    stream << qint32(player.playerId) << player.color;
     writeVec(stream, player.pos);
     writeVec(stream, player.vel);
     writeVec(stream, player.dashDir);
@@ -79,11 +80,14 @@ void writePlayer(QDataStream &stream, const PlayerSnapshot &player)
            << player.multishot << player.pierce << player.critChance << player.shockLevel
            << player.dashCdMax << player.dashCd << player.dashTime << player.dashBuffer
            << player.invuln << player.fireFlash << player.aim << player.alive
-           << player.spawnPulse;
+           << player.active << player.spawnPulse << player.respawnTimer;
 }
 
 bool readPlayer(QDataStream &stream, PlayerSnapshot *player)
 {
+    qint32 playerId = 1;
+    stream >> playerId >> player->color;
+    player->playerId = int(playerId);
     readVec(stream, &player->pos);
     readVec(stream, &player->vel);
     readVec(stream, &player->dashDir);
@@ -93,7 +97,8 @@ bool readPlayer(QDataStream &stream, PlayerSnapshot *player)
            >> player->bulletSpeed >> player->multishot >> player->pierce
            >> player->critChance >> player->shockLevel >> player->dashCdMax
            >> player->dashCd >> player->dashTime >> player->dashBuffer >> player->invuln
-           >> player->fireFlash >> player->aim >> player->alive >> player->spawnPulse;
+           >> player->fireFlash >> player->aim >> player->alive >> player->active
+           >> player->spawnPulse >> player->respawnTimer;
     return stream.status() == QDataStream::Ok;
 }
 
@@ -295,8 +300,9 @@ void Snapshot::clear()
     runTime = 0.0f;
     score = 0;
     kills = 0;
+    localPlayerId = 0;
     boss = BossSnapshot{};
-    player = PlayerSnapshot{};
+    players.clear();
     enemies.clear();
     bullets.clear();
     portals.clear();
@@ -313,9 +319,9 @@ void writeSnapshot(QDataStream &stream, const Snapshot &snapshot)
 {
     stream << kSnapshotDataVersion;
     stream << quint8(snapshot.state) << snapshot.runTime << snapshot.score
-           << snapshot.kills;
+           << snapshot.kills << qint32(snapshot.localPlayerId);
     writeBoss(stream, snapshot.boss);
-    writePlayer(stream, snapshot.player);
+    writeList(stream, snapshot.players, writePlayer);
     writeList(stream, snapshot.enemies, writeEnemy);
     writeList(stream, snapshot.bullets, writeBullet);
     writeList(stream, snapshot.portals, writePortal);
@@ -348,11 +354,14 @@ bool readSnapshot(QDataStream &stream, Snapshot *snapshot, QString *error)
 
     snapshot->clear();
     quint8 state = 0;
-    stream >> state >> snapshot->runTime >> snapshot->score >> snapshot->kills;
+    qint32 localPlayerId = 0;
+    stream >> state >> snapshot->runTime >> snapshot->score >> snapshot->kills
+        >> localPlayerId;
+    snapshot->localPlayerId = int(localPlayerId);
     snapshot->state = state <= quint8(RunState::Defeat) ? RunState(state)
                                                         : RunState::Playing;
     if (!readBoss(stream, &snapshot->boss)
-        || !readPlayer(stream, &snapshot->player)
+        || !readList(stream, &snapshot->players, readPlayer, error)
         || !readList(stream, &snapshot->enemies, readEnemy, error)
         || !readList(stream, &snapshot->bullets, readBullet, error)
         || !readList(stream, &snapshot->portals, readPortal, error)

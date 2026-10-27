@@ -22,9 +22,40 @@
 
 namespace arena {
 
+QColor playerColor(int playerId)
+{
+    switch (((playerId - 1) % 4 + 4) % 4) {
+    case 1:
+        return Base::Amber;
+    case 2:
+        return Base::Violet;
+    case 3:
+        return Base::Green;
+    default:
+        return Base::Cyan;
+    }
+}
+
+Math::Vec2 playerSpawnPosition(int playerId)
+{
+    // slot 位置固定、彼此拉开；单机（id=1 且只有一架飞机）不走这里。
+    switch (((playerId - 1) % 4 + 4) % 4) {
+    case 1:
+        return {860.0f, 470.0f};
+    case 2:
+        return {480.0f, 600.0f};
+    case 3:
+        return {800.0f, 600.0f};
+    default:
+        return {420.0f, 470.0f};
+    }
+}
+
 void Player::reset()
 {
     state = PlayerState{};
+    state.playerId = 1;
+    state.color = Base::Cyan;
     state.hp = data::kPlayer.hp;
     state.maxHp = data::kPlayer.hp;
     state.hpDisplay = data::kPlayer.hp;
@@ -37,6 +68,41 @@ void Player::reset()
                  GameConfig::ScreenHeight / 2.0f + 32.0f};
     state.muzzlePos = state.pos;
     state.aim = -Math::Pi / 2.0f;
+    spawnPos = state.pos;
+    respawnEnabled = false;
+}
+
+void Player::configure(int playerId, const QColor &colorValue,
+                       const Math::Vec2 &spawn, bool respawn)
+{
+    reset();
+    state.playerId = playerId;
+    state.color = colorValue.isValid() ? colorValue : playerColor(playerId);
+    state.pos = spawn;
+    state.muzzlePos = spawn;
+    spawnPos = spawn;
+    respawnEnabled = respawn;
+}
+
+void Player::respawn(const Context &ctx)
+{
+    state.alive = true;
+    state.active = true;
+    state.hp = state.maxHp;
+    state.hpDisplay = state.maxHp;
+    state.pos = spawnPos;
+    state.muzzlePos = spawnPos;
+    state.vel = Math::Vec2{};
+    state.dashTime = 0.0f;
+    state.dashBuffer = 0.0f;
+    state.dashCd = 0.0f;
+    state.invuln = std::max(state.invuln, 1.25f);
+    state.spawnPulse = 0.9f;
+    state.respawnTimer = 0.0f;
+    input = InputState{};
+    ctx.entities.spawnBurst(ctx, state.pos, state.color, 22, 170.0f, 0.55f);
+    ctx.entities.addShockwave(state.pos, 96.0f, state.color, 0.42f, 2);
+    ctx.host.addFeedback(state.color, 0, 4.0f);
 }
 
 void Player::beginWave()
@@ -193,39 +259,42 @@ void Player::die(const Context &ctx)
     }
     state.hp = 0.0f;
     state.alive = false;
-    ctx.state.markPlayerDefeated();
-    ctx.entities.spawnBurst(ctx, state.pos, Base::Cyan, 55, 280.0f, 1.0f);
+    // 单机：由 Arena 在没剩下任何活着的飞机时标记失败，保持原来的“阵亡即失败”。
+    // 多玩家：这一架进入重新部署倒计时；如果所有飞机同时倒下，Arena 仍会判负。
+    state.respawnTimer = respawnEnabled ? 3.2f : 0.0f;
+    ctx.entities.spawnBurst(ctx, state.pos, state.color, 55, 280.0f, 1.0f);
     ctx.entities.spawnBurst(ctx, state.pos, Base::Coral, 35, 210.0f, 0.85f);
     ctx.entities.addShockwave(state.pos, 190.0f, Base::Red, 0.9f, 3);
 }
 
 void Player::draw(QPainter &world, QPainter &glow, const Context &ctx) const
 {
-    Q_UNUSED(ctx);
-    if (!state.alive) {
+    if (!state.alive || !state.active) {
         return;
     }
+    const bool local = ctx.combatants.isLocalPlayer(state.playerId);
+    const QColor accent = state.color.isValid() ? state.color : Base::Cyan;
     const Math::Vec2 forward(std::cos(state.aim), std::sin(state.aim));
     const Math::Vec2 side(-forward.y, forward.x);
     const bool flicker = state.invuln > 0.0f && int(state.invuln * 26.0f) % 2 == 0;
-    const QColor bodyColor = flicker ? QColor(110, 155, 170) : Base::Cyan;
-    Base::glow(glow, state.pos, 20.0f, Base::Cyan, 0.7f);
+    const QColor bodyColor = flicker ? Base::shade(accent, 0.55f) : accent;
+    Base::glow(glow, state.pos, 20.0f, accent, local ? 0.7f : 0.45f);
 
     if (state.spawnPulse > 0.0f) {
         const float pulseT = Math::clamp(state.spawnPulse / 0.9f, 0.0f, 1.0f);
         const float ringRadius = 26.0f + (1.0f - pulseT) * 68.0f;
         Base::strokeCircle(world, state.pos, ringRadius,
-                           Base::withAlpha(Base::Cyan, int(150.0f * pulseT)), 2.0f);
-        Base::glow(glow, state.pos, ringRadius, Base::Cyan, 0.35f * pulseT);
+                           Base::withAlpha(accent, int(150.0f * pulseT)), 2.0f);
+        Base::glow(glow, state.pos, ringRadius, accent, 0.35f * pulseT);
     }
     if (state.invuln > 0.0f) {
         Base::strokeCircle(world, state.pos,
                            state.radius + 9.0f + std::sin(state.invuln * 30.0f) * 3.0f,
-                           Base::withAlpha(Base::Cyan, 70), 1.0f);
+                           Base::withAlpha(accent, 70), 1.0f);
     }
     if (state.dashTime > 0.0f) {
         Base::strokeCircle(world, state.pos, 26.0f,
-                           Base::withAlpha(Base::Cyan, 60), 2.0f);
+                           Base::withAlpha(accent, 60), 2.0f);
     }
 
     const Math::Vec2 tip = state.pos + forward * 21.0f;
@@ -239,17 +308,28 @@ void Player::draw(QPainter &world, QPainter &glow, const Context &ctx) const
     Base::polygon(world, ship, QColor(13, 39, 54), bodyColor, 2.0f);
     Base::strokeLine(world, left, right, Base::shade(bodyColor, 0.62f), 1.0f);
     Base::fillCircle(world, state.pos, 4.0f, QColor(222, 253, 255));
-    Base::strokeCircle(world, state.pos, 7.0f, Base::Cyan, 1.0f);
-    Base::strokeLine(world, state.pos + forward * 24.0f,
-                     state.pos + forward * 66.0f,
-                     Base::withAlpha(Base::Cyan, 42), 1.0f);
+    Base::strokeCircle(world, state.pos, 7.0f, accent, 1.0f);
+
+    if (local) {
+        // 只有本机飞机画瞄准辅助线；远程飞机只显示机身和朝向。
+        Base::strokeLine(world, state.pos + forward * 24.0f,
+                         state.pos + forward * 66.0f,
+                         Base::withAlpha(accent, 42), 1.0f);
+    } else {
+        // 远程飞机：额外的识别环 + 更短的朝向标记。
+        Base::strokeCircle(world, state.pos, state.radius + 5.0f,
+                           Base::withAlpha(accent, 95), 1.2f);
+        Base::strokeLine(world, state.pos + forward * (state.radius - 2.0f),
+                         state.pos + forward * (state.radius + 10.0f),
+                         Base::withAlpha(accent, 150), 1.5f);
+    }
 
     if (state.fireFlash > 0.0f) {
         const int strength = int(160.0f * (state.fireFlash / 0.07f));
         Base::fillCircle(world, state.muzzlePos,
                          6.0f + 3.0f * (state.fireFlash / 0.07f),
                          Base::withAlpha(QColor(205, 252, 255), strength));
-        Base::glow(glow, state.muzzlePos, 14.0f, Base::Cyan, 0.9f);
+        Base::glow(glow, state.muzzlePos, 14.0f, accent, 0.9f);
     }
 }
 

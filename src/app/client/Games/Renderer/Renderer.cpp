@@ -430,6 +430,53 @@ void Renderer::drawHUD(QPainter &painter, const client::GameView &view)
                 QStringLiteral("击破  %1").arg(view.kills(), 3, 10, QChar('0')),
                 Base::Muted, {GameConfig::ScreenWidth - 30.0f, 75},
                 QStringLiteral("topright"), 205);
+
+    // 多玩家：左侧列出其他玩家的生命，自己的生命仍在上面的主 HUD。
+    if (view.playerCount() > 1) {
+        Base::text(painter, Base::techTinyFont(), QStringLiteral("队伍 / SQUAD"),
+                    Base::Muted, {30.0f, 116.0f}, QStringLiteral("topleft"), 190);
+        float y = 132.0f;
+        for (int i = 0; i < view.playerCount(); ++i) {
+            const arena::PlayerState &mate = view.playerStateAt(i);
+            if (mate.playerId == player.playerId) {
+                continue;
+            }
+            const QColor tint = mate.color.isValid() ? mate.color : Base::Cyan;
+            Base::text(painter, Base::techTinyFont(),
+                        QStringLiteral("P%1").arg(mate.playerId), tint,
+                        {30.0f, y}, QStringLiteral("topleft"), 220);
+            const float ratio = Math::clamp(mate.hp / std::max(1.0f, mate.maxHp),
+                                            0.0f, 1.0f);
+            Base::bar(painter, QRectF(58.0f, y + 1.0f, 104.0f, 5.0f), ratio,
+                       mate.alive ? tint : Base::Red, -1.0f, QColor(18, 30, 45));
+            Base::text(painter, Base::techTinyFont(),
+                        mate.alive ? QStringLiteral("%1").arg(int(std::ceil(mate.hp)))
+                                   : QStringLiteral("DOWN"),
+                        Base::Muted, {172.0f, y}, QStringLiteral("midleft"), 200);
+            y += 17.0f;
+        }
+    }
+
+    // 观战者没有自己的飞机：明确提示输入不会生效，同时仍能看到整局。
+    if (view.spectating()) {
+        Base::text(painter, Base::techSmallFont(),
+                    QStringLiteral("观战模式  //  SPECTATOR"),
+                    Base::Amber, {GameConfig::ScreenWidth / 2.0f, 116.0f},
+                    QStringLiteral("center"), 220);
+    }
+
+    // 多玩家阵亡后等待重新部署；单机阵亡会直接进入失败结算。
+    if (!player.alive && player.respawnTimer > 0.0f) {
+        Base::text(painter, Base::mediumFont(),
+                    QStringLiteral("重新部署  %1")
+                        .arg(std::max(0, int(std::ceil(player.respawnTimer)))),
+                    Base::Red, {GameConfig::ScreenWidth / 2.0f, 300.0f},
+                    QStringLiteral("center"), 235);
+        Base::text(painter, Base::tinyFont(),
+                    QStringLiteral("机体重构中 · 队友仍在战斗"),
+                    Base::Muted, {GameConfig::ScreenWidth / 2.0f, 328.0f},
+                    QStringLiteral("center"), 210);
+    }
 }
 
 void Renderer::drawBossBar(QPainter &painter, const client::GameView &view)

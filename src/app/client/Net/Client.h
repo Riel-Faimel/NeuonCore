@@ -71,6 +71,14 @@ public:
     QAbstractSocket::SocketState socketState() const { return socket_.state(); }
     quint16 serverTickRate() const { return tickRate_; }
     quint32 sessionId() const { return sessionId_; }
+    // 服务端在 Welcome 里分配的稳定玩家 id/slot（1..4）；0=无。
+    int playerId() const { return playerId_; }
+    // 最新快照里服务端为本客户端指定的飞机（0=观战）。
+    int localPlayerId() const { return lastSnapshot_.localPlayerId; }
+    bool spectating() const
+    {
+        return welcomed_ && snapshotCount_ > 0 && lastSnapshot_.localPlayerId <= 0;
+    }
 
     net::RunState state() const { return view_.state(); }
     const GameView &view() const { return view_; }
@@ -116,6 +124,7 @@ private:
     quint16 port_ = 0;
     QString lastError_;
     quint32 sessionId_ = 0;
+    int playerId_ = 0;
     quint16 tickRate_ = 60;
     int snapshotCount_ = 0;
     int reconnectAttempts_ = 0;

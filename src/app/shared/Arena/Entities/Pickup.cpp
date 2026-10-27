@@ -25,7 +25,12 @@ void Pickup::update(const Context &ctx, float dt)
         alive = false;
         return;
     }
-    const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
+    if (ctx.combatants.livingPlayerCount() == 0) {
+        return;
+    }
+    Player &target = ctx.combatants.playerById(
+        ctx.combatants.nearestLivingPlayer(pos).state.playerId);
+    const Math::Vec2 toPlayer = target.state.pos - pos;
     const float distance = toPlayer.length();
     if (distance < 155.0f && distance > 0.1f) {
         const Math::Vec2 direction = toPlayer / distance;
@@ -35,14 +40,13 @@ void Pickup::update(const Context &ctx, float dt)
     vel = vel * std::exp(-2.4f * dt);
     pos += vel * dt;
     if (distance < 22.0f) {
-        const float before = ctx.combatants.player().state.hp;
-        ctx.combatants.player().state.hp =
-            std::min(ctx.combatants.player().state.maxHp,
-                     ctx.combatants.player().state.hp + float(amount));
-        const int gained = int(ctx.combatants.player().state.hp - before);
+        const float before = target.state.hp;
+        target.state.hp =
+            std::min(target.state.maxHp, target.state.hp + float(amount));
+        const int gained = int(target.state.hp - before);
         if (gained > 0) {
             ctx.entities.floatingTexts().push_back(FloatingText{
-                ctx.combatants.player().state.pos + Math::Vec2(0.0f, -28.0f),
+                target.state.pos + Math::Vec2(0.0f, -28.0f),
                 QStringLiteral("+%1").arg(gained), Base::Green,
                 0.9f, 0.9f, 16, false});
         }

@@ -33,6 +33,10 @@ enum class BulletSide : quint8 {
 };
 
 struct PlayerSnapshot {
+    // 稳定玩家 id/slot（1..4）；同一会话在一局内保持不变。
+    int playerId = 1;
+    // 每架飞机的识别色，服务端在开局时分配，客户端只负责绘制。
+    QColor color;
     Math::Vec2 pos;
     Math::Vec2 vel;
     Math::Vec2 dashDir{0.0f, -1.0f};
@@ -58,7 +62,10 @@ struct PlayerSnapshot {
     float fireFlash = 0.0f;
     float aim = -Math::Pi / 2.0f;
     bool alive = true;
+    bool active = true;
     float spawnPulse = 0.7f;
+    // >0 表示正在等待重新部署（多玩家时才有）。
+    float respawnTimer = 0.0f;
 
     bool operator==(const PlayerSnapshot &) const = default;
 };
@@ -236,8 +243,12 @@ struct Snapshot {
     float runTime = 0.0f;
     int score = 0;
     int kills = 0;
+    // 本快照的接收者坐在哪一架飞机上（0 表示观战/没有飞机）。
+    // 服务端对每个会话单独填写后再编码，客户端据此区分本地/远程飞机。
+    int localPlayerId = 0;
     BossSnapshot boss;
-    PlayerSnapshot player;
+    // 一局内的所有玩家飞机；顺序按 playerId 升序，单机时只有一架。
+    std::vector<PlayerSnapshot> players;
     std::vector<EnemySnapshot> enemies;
     std::vector<BulletSnapshot> bullets;
     std::vector<PortalSnapshot> portals;

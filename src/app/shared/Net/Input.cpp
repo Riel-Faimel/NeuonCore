@@ -26,7 +26,7 @@ QByteArray serializeInputCommand(const InputCommand &command)
            << command.mouseX << command.mouseY << command.shooting
            << command.dashRequested << command.pauseToggle
            << command.mineRequested << command.mineX << command.mineY
-           << command.upgradeChoice;
+           << command.upgradeChoice << qint32(command.playerId);
     return stream.status() == QDataStream::Ok ? payload : QByteArray();
 }
 
@@ -40,11 +40,13 @@ bool deserializeInputCommand(const QByteArray &payload, InputCommand *command,
     QDataStream stream(payload);
     stream.setVersion(QDataStream::Qt_6_0);
     stream.setByteOrder(QDataStream::LittleEndian);
+    qint32 playerId = 0;
     stream >> command->moveX >> command->moveY >> command->mouseActive
         >> command->mouseX >> command->mouseY >> command->shooting
         >> command->dashRequested >> command->pauseToggle
         >> command->mineRequested >> command->mineX >> command->mineY
-        >> command->upgradeChoice;
+        >> command->upgradeChoice >> playerId;
+    command->playerId = int(playerId);
     if (stream.status() != QDataStream::Ok || !stream.atEnd()) {
         setError(error, QStringLiteral("input payload malformed"));
         return false;

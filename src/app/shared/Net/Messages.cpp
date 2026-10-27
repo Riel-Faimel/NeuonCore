@@ -102,8 +102,8 @@ bool deserializeHello(const QByteArray &payload, HelloMessage *message, QString 
 QByteArray serializeWelcome(const WelcomeMessage &message)
 {
     return serialize([&](QDataStream &stream) {
-        stream << message.sessionId << message.tickRate << message.accepted
-               << message.reason;
+        stream << message.sessionId << qint32(message.playerId) << message.tickRate
+               << message.accepted << message.reason;
     });
 }
 
@@ -116,8 +116,11 @@ bool deserializeWelcome(const QByteArray &payload, WelcomeMessage *message,
     }
     return deserialize(payload,
                        [&](QDataStream &stream) {
-                           stream >> message->sessionId >> message->tickRate
-                               >> message->accepted >> message->reason;
+                           qint32 playerId = 0;
+                           stream >> message->sessionId >> playerId
+                               >> message->tickRate >> message->accepted
+                               >> message->reason;
+                           message->playerId = int(playerId);
                            return stream.status() == QDataStream::Ok;
                        },
                        error);
@@ -236,6 +239,11 @@ QByteArray serializeRoomList(const RoomListMessage &message)
         for (const RoomInfo &room : message.rooms) {
             stream << room.id << room.name << qint32(room.players)
                    << qint32(room.maxPlayers) << room.playing;
+            stream << quint32(room.members.size());
+            for (const RoomPlayerInfo &member : room.members) {
+                stream << member.sessionId << qint32(member.playerId)
+                       << member.host << member.inMatch;
+            }
         }
     });
 }
@@ -267,6 +275,20 @@ bool deserializeRoomList(const QByteArray &payload, RoomListMessage *message,
                 }
                 room.players = int(players);
                 room.maxPlayers = int(maxPlayers);
+                quint32 memberCount = 0;
+                if (!readCount(stream, &memberCount, kMaxSnapshotItems, error)) {
+                    return false;
+                }
+                room.members.resize(size_t(memberCount));
+                for (RoomPlayerInfo &member : room.members) {
+                    qint32 playerId = 0;
+                    stream >> member.sessionId >> playerId >> member.host
+                        >> member.inMatch;
+                    member.playerId = int(playerId);
+                    if (stream.status() != QDataStream::Ok) {
+                        return false;
+                    }
+                }
                 message->rooms.push_back(std::move(room));
             }
             return true;

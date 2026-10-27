@@ -97,7 +97,7 @@ const Enemy *densestAlly(const Context &ctx, const Enemy &self,
 Math::Vec2 OffensiveEnemy::desiredVelocity(const Context &ctx, float dt)
 {
     (void)dt;
-    const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
+    const Math::Vec2 toPlayer = ctx.combatants.nearestLivingPlayer(pos).state.pos - pos;
     const float distance = std::max(1.0f, toPlayer.length());
     const Math::Vec2 direction = toPlayer / distance;
     return direction.rotated(weave()) * speed;
@@ -106,7 +106,7 @@ Math::Vec2 OffensiveEnemy::desiredVelocity(const Context &ctx, float dt)
 Math::Vec2 RangedEnemy::desiredVelocity(const Context &ctx, float dt)
 {
     (void)dt;
-    const Math::Vec2 player = ctx.combatants.player().state.pos;
+    const Math::Vec2 player = ctx.combatants.nearestLivingPlayer(pos).state.pos;
     const Math::Vec2 toPlayer = player - pos;
     const float distance = std::max(1.0f, toPlayer.length());
     const Math::Vec2 direction = toPlayer / distance;
@@ -136,7 +136,7 @@ Math::Vec2 RangedEnemy::desiredVelocity(const Context &ctx, float dt)
 Math::Vec2 DefensiveEnemy::desiredVelocity(const Context &ctx, float dt)
 {
     (void)dt;
-    const Math::Vec2 player = ctx.combatants.player().state.pos;
+    const Math::Vec2 player = ctx.combatants.nearestLivingPlayer(pos).state.pos;
 
     // 站在“远程/辅助后排”和玩家之间。
     Math::Vec2 centroid;
@@ -169,7 +169,7 @@ Math::Vec2 DefensiveEnemy::desiredVelocity(const Context &ctx, float dt)
 Math::Vec2 SupportEnemy::desiredVelocity(const Context &ctx, float dt)
 {
     (void)dt;
-    const Math::Vec2 player = ctx.combatants.player().state.pos;
+    const Math::Vec2 player = ctx.combatants.nearestLivingPlayer(pos).state.pos;
     const Math::Vec2 toPlayer = player - pos;
     const float distance = std::max(1.0f, toPlayer.length());
     const Math::Vec2 direction = toPlayer / distance;
@@ -246,7 +246,7 @@ void SupportEnemy::healAllies(const Context &ctx, float dt)
 Math::Vec2 SelfDestructEnemy::desiredVelocity(const Context &ctx, float dt)
 {
     (void)dt;
-    const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
+    const Math::Vec2 toPlayer = ctx.combatants.nearestLivingPlayer(pos).state.pos - pos;
     const float distance = std::max(1.0f, toPlayer.length());
     return toPlayer / distance * speed;
 }

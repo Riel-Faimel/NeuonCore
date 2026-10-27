@@ -44,12 +44,134 @@ void Arena::reset()
     feedback_ = Feedback{};
 }
 
+void Arena::configurePlayers(const std::vector<int> &playerIds)
+{
+    Bullets::clear();
+    Combatants::configurePlayers(playerIds);
+    Entities::reset();
+    State::reset();
+    feedback_ = Feedback{};
+}
+
 void Arena::setInput(const arena::InputState &input)
 {
+    // 单机路径：输入写给第一架飞机。
+    for (Player &player : players()) {
+        if (!player.state.active) {
+            continue;
+        }
+        const bool dash = player.input.dashRequested;
+        player.input = input;
+        player.input.dashRequested = input.dashRequested || dash;
+        return;
+    }
+}
+
+void Arena::setInput(int playerId, const arena::InputState &input)
+{
+    if (playerId <= 0 || !hasPlayer(playerId)) {
+        return;
+    }
+    Player &player = playerById(playerId);
     // 冲刺请求可能在两次输入快照之间由 requestDash() 单独置位，不能被覆盖掉。
-    const bool dash = player().input.dashRequested;
-    player().input = input;
-    player().input.dashRequested = input.dashRequested || dash;
+    const bool dash = player.input.dashRequested;
+    player.input = input;
+    player.input.dashRequested = input.dashRequested || dash;
+}
+
+const Arena::PlayerState &Arena::playerState() const
+{
+    return localPlayer().state;
+}
+
+Arena::PlayerState &Arena::playerState()
+{
+    return const_cast<PlayerState &>(localPlayer().state);
+}
+
+const Arena::PlayerState &Arena::playerStateAt(int index) const
+{
+    return playerAt(index).state;
+}
+
+Arena::PlayerState &Arena::playerStateAt(int index)
+{
+    return playerAt(index).state;
+}
+
+int Arena::playerIdAt(int index) const
+{
+    return playerAt(index).state.playerId;
+}
+
+int Arena::playerCount() const
+{
+    return Combatants::playerCount();
+}
+
+int Arena::livingPlayerCount() const
+{
+    return Combatants::livingPlayerCount();
+}
+
+bool Arena::hasPlayer(int playerId) const
+{
+    return Combatants::hasPlayer(playerId);
+}
+
+int Arena::localPlayerId() const
+{
+    return Combatants::localPlayerId();
+}
+
+void Arena::setLocalPlayerId(int playerId)
+{
+    Combatants::setLocalPlayerId(playerId);
+}
+
+bool Arena::removePlayer(int playerId)
+{
+    return Combatants::removePlayer(playerId);
+}
+
+const Arena::Player &Arena::localPlayer() const
+{
+    const int id = Combatants::localPlayerId();
+    if (id > 0) {
+        for (const Player &player : players()) {
+            if (player.state.active && player.state.playerId == id) {
+                return player;
+            }
+        }
+    }
+    for (const Player &player : players()) {
+        if (player.state.active) {
+            return player;
+        }
+    }
+    return player();
+}
+
+bool Arena::allPlayersDefeated() const
+{
+    return Combatants::livingPlayerCount() == 0;
+}
+
+void Arena::updateRespawns(const arena::Context &ctx, float dt)
+{
+    if (Combatants::livingPlayerCount() == 0) {
+        return;   // 全灭由 update() 判负，不再复活。
+    }
+    for (Player &player : players()) {
+        if (!player.state.active || player.state.alive || !player.respawnEnabled
+            || player.state.respawnTimer <= 0.0f) {
+            continue;
+        }
+        player.state.respawnTimer -= dt;
+        if (player.state.respawnTimer <= 0.0f) {
+            player.respawn(ctx);
+        }
+    }
 }
 
 void Arena::beginWave()
@@ -59,19 +181,30 @@ void Arena::beginWave()
     Entities::clearMines();
     Combatants::beginWave();
     State::beginWave();
-    Entities::spawnBurst(ctx, player().state.pos, Base::Cyan, 14, 90.0f, 0.5f);
+    for (const Player &player : players()) {
+        if (!player.state.active || !player.state.alive) {
+            continue;
+        }
+        Entities::spawnBurst(ctx, player.state.pos,
+                             player.state.color.isValid() ? player.state.color
+                                                          : Base::Cyan,
+                             14, 90.0f, 0.5f);
+    }
 }
 
 void Arena::update(float dt)
 {
     const arena::Context ctx = context();
-    if (!player().isAlive()) {
+    if (allPlayersDefeated()) {
+        State::markPlayerDefeated();
         Entities::updateEffects(ctx, dt);
         return;
     }
 
-    Combatants::updatePlayer(ctx, dt);
-    if (State::playerDefeated()) {
+    updateRespawns(ctx, dt);
+    Combatants::updatePlayers(ctx, dt);
+    if (allPlayersDefeated()) {
+        State::markPlayerDefeated();
         Entities::updateEffects(ctx, dt);
         return;
     }
@@ -79,13 +212,15 @@ void Arena::update(float dt)
     Entities::updatePortals(ctx, dt);
     Bullets::update(dt);
     Events::resolvePlayerBullets(ctx);
-    if (State::playerDefeated()) {
+    if (allPlayersDefeated()) {
+        State::markPlayerDefeated();
         Entities::updateEffects(ctx, dt);
         return;
     }
 
     Events::resolveEnemyBullets(ctx);
-    if (State::playerDefeated()) {
+    if (allPlayersDefeated()) {
+        State::markPlayerDefeated();
         Entities::updateEffects(ctx, dt);
         return;
     }
@@ -93,7 +228,8 @@ void Arena::update(float dt)
     Combatants::updateEnemies(ctx, dt);
     Events::separateEnemies(ctx);
     Events::contactDamage(ctx);
-    if (State::playerDefeated()) {
+    if (allPlayersDefeated()) {
+        State::markPlayerDefeated();
         Entities::updateEffects(ctx, dt);
         return;
     }
@@ -153,25 +289,48 @@ void Arena::clearForVictory()
     Combatants::clearForVictory(context());
 }
 
-void Arena::requestDash()
+void Arena::requestDash(int playerId)
 {
-    player().input.dashRequested = true;
+    if (playerId > 0) {
+        if (hasPlayer(playerId)) {
+            playerById(playerId).input.dashRequested = true;
+        }
+        return;
+    }
+    for (Player &player : players()) {
+        if (player.state.active) {
+            player.input.dashRequested = true;
+            return;
+        }
+    }
 }
 
 void Arena::celebrateUpgrade()
 {
     const arena::Context ctx = context();
-    const Math::Vec2 pos = player().state.pos;
-    Entities::spawnBurst(ctx, pos, Base::Cyan, 26, 190.0f, 0.6f);
-    Entities::addShockwave(pos, 110.0f, Base::Cyan, 0.55f, 2);
+    for (const Player &player : players()) {
+        if (!player.state.active || !player.state.alive) {
+            continue;
+        }
+        const Math::Vec2 pos = player.state.pos;
+        const QColor color = player.state.color.isValid() ? player.state.color
+                                                          : Base::Cyan;
+        Entities::spawnBurst(ctx, pos, color, 26, 190.0f, 0.6f);
+        Entities::addShockwave(pos, 110.0f, color, 0.55f, 2);
+    }
 }
 
 void Arena::celebrateVictory()
 {
-    const Math::Vec2 pos = player().state.pos;
-    Entities::addShockwave(pos, 150.0f, Base::Cyan, 0.7f, 2);
-    Entities::addShockwave(pos, 250.0f, Base::Cyan, 0.9f, 2);
-    Entities::addShockwave(pos, 380.0f, Base::Cyan, 1.1f, 2);
+    for (const Player &player : players()) {
+        if (!player.state.active) {
+            continue;
+        }
+        const Math::Vec2 pos = player.state.pos;
+        Entities::addShockwave(pos, 150.0f, Base::Cyan, 0.7f, 2);
+        Entities::addShockwave(pos, 250.0f, Base::Cyan, 0.9f, 2);
+        Entities::addShockwave(pos, 380.0f, Base::Cyan, 1.1f, 2);
+    }
 }
 
 Arena::Feedback Arena::takeFeedback()

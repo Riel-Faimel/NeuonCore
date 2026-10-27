@@ -49,9 +49,13 @@ void Entities::updatePickups(const Context &ctx, float dt)
 void Entities::updateEffects(const Context &ctx, float dt)
 {
     effectsTimer_ = std::max(0.0f, effectsTimer_ - dt);
-    Player &player = ctx.combatants.player();
-    player.state.hpDisplay +=
-        (player.state.hp - player.state.hpDisplay) * std::min(1.0f, dt * 3.0f);
+    for (Player &player : ctx.combatants.players()) {
+        if (!player.state.active) {
+            continue;
+        }
+        player.state.hpDisplay +=
+            (player.state.hp - player.state.hpDisplay) * std::min(1.0f, dt * 3.0f);
+    }
 
     for (Particle &particle : particles_) {
         particle.update(dt);
@@ -406,7 +410,7 @@ void Entities::applySnapshot(const net::Snapshot &snapshot)
 
 Math::Vec2 Entities::randomSpawnPosition(const Context &ctx) const
 {
-    const Math::Vec2 playerPos = ctx.combatants.player().position();
+    // 敌人从离所有存活玩家都足够远的边缘进场；单机与旧逻辑一致。
     Math::Vec2 candidate(60.0f, 60.0f);
     for (int attempt = 0; attempt < 20; ++attempt) {
         const int edge = RandomService.integer(0, 3);
@@ -427,7 +431,17 @@ Math::Vec2 Entities::randomSpawnPosition(const Context &ctx) const
                          RandomService.real(GameConfig::FieldTop + 40.0f,
                                             GameConfig::FieldBottom - 30.0f)};
         }
-        if (candidate.distanceTo(playerPos) > 235.0f) {
+        bool clear = true;
+        for (const Player &player : ctx.combatants.players()) {
+            if (!player.state.active || !player.state.alive) {
+                continue;
+            }
+            if (candidate.distanceTo(player.state.pos) <= 235.0f) {
+                clear = false;
+                break;
+            }
+        }
+        if (clear) {
             break;
         }
     }

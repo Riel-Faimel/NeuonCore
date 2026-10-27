@@ -187,9 +187,12 @@ bool Upgrades::apply(int index)
     const Offer offer = offers_.at(size_t(index));
     applyEffect(offer);
     counts_[offer.key] += 1;
-    if (arena_.playerState().hp < arena_.playerState().maxHp) {
-        arena_.playerState().hp = std::min(
-            arena_.playerState().maxHp, arena_.playerState().hp + 10.0f);
+    // 强化是队伍共享的：多玩家时所有存活飞机一起获得数值，单机行为不变。
+    for (int i = 0; i < arena_.playerCount(); ++i) {
+        Arena::PlayerState &player = arena_.playerStateAt(i);
+        if (player.hp < player.maxHp) {
+            player.hp = std::min(player.maxHp, player.hp + 10.0f);
+        }
     }
     arena_.celebrateUpgrade();
     BaseService.playSound(QStringLiteral("upgrade"));
@@ -200,29 +203,32 @@ bool Upgrades::apply(int index)
 
 void Upgrades::applyEffect(const Offer &offer)
 {
-    Arena::PlayerState &player = arena_.playerState();
     const QString &key = offer.key;
-    if (key == QStringLiteral("damage")) {
-        player.damage *= 1.0f + offer.value;
-    } else if (key == QStringLiteral("rate")) {
-        player.fireCd = std::max(0.056f, player.fireCd * (1.0f - offer.value));
-    } else if (key == QStringLiteral("multi")) {
-        player.multishot = std::min(5, player.multishot + 1);
-    } else if (key == QStringLiteral("pierce")) {
-        player.pierce = std::min(5, player.pierce + 1);
-    } else if (key == QStringLiteral("speed")) {
-        player.speed *= 1.0f + offer.value;
-        player.dashCdMax = std::max(0.72f, player.dashCdMax * (1.0f - offer.value * 0.85f));
-    } else if (key == QStringLiteral("maxhp")) {
-        player.maxHp += offer.value;
-        player.hp = std::min(player.maxHp, player.hp + offer.value);
-        player.hpDisplay = std::min(player.hpDisplay, player.hp);
-    } else if (key == QStringLiteral("heal")) {
-        player.hp = std::min(player.maxHp, player.hp + player.maxHp * offer.value);
-    } else if (key == QStringLiteral("shock")) {
-        player.shockLevel += 1;
-    } else if (key == QStringLiteral("crit")) {
-        player.critChance = std::min(0.60f, player.critChance + offer.value);
+    for (int i = 0; i < arena_.playerCount(); ++i) {
+        Arena::PlayerState &player = arena_.playerStateAt(i);
+        if (key == QStringLiteral("damage")) {
+            player.damage *= 1.0f + offer.value;
+        } else if (key == QStringLiteral("rate")) {
+            player.fireCd = std::max(0.056f, player.fireCd * (1.0f - offer.value));
+        } else if (key == QStringLiteral("multi")) {
+            player.multishot = std::min(5, player.multishot + 1);
+        } else if (key == QStringLiteral("pierce")) {
+            player.pierce = std::min(5, player.pierce + 1);
+        } else if (key == QStringLiteral("speed")) {
+            player.speed *= 1.0f + offer.value;
+            player.dashCdMax = std::max(0.72f,
+                                        player.dashCdMax * (1.0f - offer.value * 0.85f));
+        } else if (key == QStringLiteral("maxhp")) {
+            player.maxHp += offer.value;
+            player.hp = std::min(player.maxHp, player.hp + offer.value);
+            player.hpDisplay = std::min(player.hpDisplay, player.hp);
+        } else if (key == QStringLiteral("heal")) {
+            player.hp = std::min(player.maxHp, player.hp + player.maxHp * offer.value);
+        } else if (key == QStringLiteral("shock")) {
+            player.shockLevel += 1;
+        } else if (key == QStringLiteral("crit")) {
+            player.critChance = std::min(0.60f, player.critChance + offer.value);
+        }
     }
 }
 

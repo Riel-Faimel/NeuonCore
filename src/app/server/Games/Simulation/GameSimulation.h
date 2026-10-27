@@ -9,6 +9,8 @@
 #include <QColor>
 #include <QString>
 
+#include <vector>
+
 class SelfTest;
 
 namespace games {
@@ -48,15 +50,27 @@ public:
     // 从 Level.startWave 开始第一波；由适配器在自身构造完成后调用一次。
     void start();
 
+    // 服务端在开局前提交这一局的玩家 id 列表（1..4，单机是 {1}）。
+    // 每个 id 对应一架飞机；颜色/出生点由 Arena 按 slot 分配。
+    void setPlayers(const std::vector<int> &playerIds);
+    int playerCount() const;
+    bool hasPlayer(int playerId) const;
+    // 对局 leader（最小 active playerId）：暂停/选强化的全局动作只接受它。
+    int leaderPlayerId() const;
+    // 会话离开：只移除这一架飞机；全部离开时判负结束对局。
+    bool removePlayer(int playerId);
+
     // 推进模拟。只改模拟状态，不渲染。
     void update(float dt);
 
     // 输入从这里进入模拟：Player 只读这份状态，不再直接读 BaseService。
+    // 单机用 setInput(input)（第一架飞机）；网络按 playerId 定向，未知/观战 id 被忽略。
     void setInput(const arena::InputState &input);
+    void setInput(int playerId, const arena::InputState &input);
     const arena::InputState &input() const { return input_; }
 
     // 请求冲刺；本地按键和测试都走这里（等价于输入里的 dashRequested）。
-    void requestDash();
+    void requestDash(int playerId = 0);
 
     // 网络服务端/适配器使用的权威动作入口；校验由模拟层负责。
     void placeMine(const Math::Vec2 &position);

@@ -4,7 +4,7 @@
 
 这篇文档先定边界和迁移顺序，不直接改运行代码。当前 `local` 单机路径保持可玩，迁移按阶段进行，每阶段都能构建、能跑 smoke。
 
-> 状态：阶段 0–3 已完成，并补上了房间/大厅生命周期。阶段 3 的实现是 `src/app/server/Net/Server.*`（`server::GameServer`，headless `GameSimulation` + 60Hz tick + `QTcpServer`）和 `src/app/client/Net/Client.*`（`client::GameClient`，`QTcpSocket` + 握手/输入/快照/`GameView`/`Renderer`），协议/快照在 `src/app/shared/Net/`，消息在 `include/Net/Input.h`、`Messages.h`、`Snapshot.h`。`menu::Match` 默认走网络：单机在 127.0.0.1 上启动自动端口的内嵌服务端并立即开局，`--connect host:port` 连远端并进入 `Room`。自定义协议的“局域网主机”启动内嵌服务端后只开房，房主在 `Room` 按 ENTER 才本地 `startMatch()`；按 X 解散会关闭服务端并让加入者看到专用失败页。与本文原计划的差异：内嵌服务端与客户端在同一 Qt 事件循环（真实 TCP 回环，不额外起线程）；本地 `Games` 路径保留为 `--local`/自动化测试回退，等阶段 4 再删除。
+> 状态：阶段 0–3 已完成，并补上了房间/大厅生命周期与真实多玩家会话（协议 v2）。阶段 3 的实现是 `src/app/server/Net/Server.*`（`server::GameServer`，headless `GameSimulation` + 60Hz tick + `QTcpServer`）和 `src/app/client/Net/Client.*`（`client::GameClient`，`QTcpSocket` + 握手/输入/快照/`GameView`/`Renderer`），协议/快照在 `src/app/shared/Net/`，消息在 `include/Net/Input.h`、`Messages.h`、`Snapshot.h`。`menu::Match` 默认走网络：单机在 127.0.0.1 上启动自动端口的内嵌服务端并立即开局，`--connect host:port` 连远端并进入 `Room`。自定义协议的“局域网主机”启动内嵌服务端后只开房，房主在 `Room` 按 ENTER 才本地 `startMatch()`；按 X 解散会关闭服务端并让加入者看到专用失败页。多玩家：Hello 分配稳定 playerId/slot（1–4），startMatch 把当前 welcomed 会话组成 roster，生成 1–4 架玩家飞机；每个会话输入只作用于自己的飞机，快照携带 `players[]` 和每个客户端的 `localPlayerId`，中途加入为观战、掉线只移除该飞机。与本文原计划的差异：内嵌服务端与客户端在同一 Qt 事件循环（真实 TCP 回环，不额外起线程）；本地 `Games` 路径保留为 `--local`/自动化测试回退，等阶段 4 再删除。
 
 ## 1. 当前耦合点
 
@@ -118,7 +118,7 @@ TCP，默认端口 `7777`。消息统一：
 
 ### 阶段 5：多人
 
-- 多会话、玩家 id、准备/开始、队伍；
+- 多会话、玩家 id、准备/开始、队伍（**已完成基础版**：稳定 playerId/slot、1–4 人 roster、每会话一架飞机、输入按 playerId 隔离、快照 players[]/localPlayerId、离开移除飞机、全灭判负；准备/队伍/昵称仍未实现）；
 - 输入缓冲、服务器 tick 与客户端 tick 对齐；
 - 反作弊边界（服务器只接受输入命令）。
 
@@ -137,7 +137,8 @@ TCP，默认端口 `7777`。消息统一：
 - `GameSimulation` 无渲染运行 8 波，结果与当前 `autoplay` 一致；
 - 快照重建后的 `GameView` 能画出玩家/敌人/子弹/实体；
 - 本地回环一局完整跑通（开始、暂停、强化、胜负、重试）；
-- 两个客户端连接同一服务端，输入互不串线；
+- 两个客户端连接同一服务端，输入互不串线（已覆盖：两个开局前会话各自移动自己的飞机；中途加入为观战）；
+- 快照多玩家 roundtrip / 每客户端 localPlayerId / 掉线只移除对应飞机（已覆盖）；
 - 断线重连、服务端关闭、客户端退出不崩溃；
 - 端口占用、握手版本不匹配的错误路径。
 

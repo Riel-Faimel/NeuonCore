@@ -29,7 +29,7 @@ RusherEnemy::RusherEnemy(const Math::Vec2 &position, int wave)
 
 Math::Vec2 RusherEnemy::desiredVelocity(const Context &ctx, float dt)
 {
-    const Math::Vec2 toPlayer = ctx.combatants.player().state.pos - pos;
+    const Math::Vec2 toPlayer = ctx.combatants.nearestLivingPlayer(pos).state.pos - pos;
     const float distance = std::max(1.0f, toPlayer.length());
     const Math::Vec2 direction = toPlayer / distance;
     lungeTimer -= dt;

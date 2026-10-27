@@ -137,7 +137,7 @@ void Room::render(QPainter &painter, const View &view) const
     Base::text(painter, Base::smallFont(), view.status, Base::Muted,
                {GameConfig::ScreenWidth / 2.0f, 162.0f}, QStringLiteral("center"), 220);
 
-    const QRectF card(250.0f, 202.0f, 780.0f, 306.0f);
+    const QRectF card(250.0f, 202.0f, 780.0f, 340.0f);
     QLinearGradient cardFill(0.0f, float(card.top()), 0.0f, float(card.bottom()));
     cardFill.setColorAt(0.0, QColor(12, 26, 41, 245));
     cardFill.setColorAt(1.0, QColor(5, 12, 22, 245));
@@ -168,13 +168,21 @@ void Room::render(QPainter &painter, const View &view) const
                      Base::withAlpha(accent, 70), 1.0f);
 
     const auto drawPlayer = [&](float y, const QString &role, const QString &detail,
-                                const QString &badge, const QColor &tint) {
-        Base::fillCircle(painter, {302.0f, y}, 11.0f, Base::withAlpha(tint, 30));
-        Base::strokeCircle(painter, {302.0f, y}, 11.0f, Base::withAlpha(tint, 190), 1.2f);
-        Base::fillCircle(painter, {302.0f, y}, 3.4f, tint);
-        Base::text(painter, Base::techSmallFont(), role, Base::White,
+                                const QString &badge, const QColor &tint,
+                                bool occupied) {
+        Base::fillCircle(painter, {302.0f, y}, 11.0f,
+                         occupied ? Base::withAlpha(tint, 30) : QColor(24, 38, 52));
+        Base::strokeCircle(painter, {302.0f, y}, 11.0f,
+                           occupied ? Base::withAlpha(tint, 190) : QColor(52, 78, 96),
+                           1.2f);
+        if (occupied) {
+            Base::fillCircle(painter, {302.0f, y}, 3.4f, tint);
+        }
+        Base::text(painter, Base::techSmallFont(), role,
+                   occupied ? Base::White : Base::Dim,
                    {326.0f, y - 8.0f}, QStringLiteral("midleft"), 235);
-        Base::text(painter, Base::tinyFont(), detail, Base::Muted,
+        Base::text(painter, Base::tinyFont(), detail,
+                   occupied ? Base::Muted : Base::Dim,
                    {326.0f, y + 10.0f}, QStringLiteral("midleft"), 200);
         if (!badge.isEmpty()) {
             const QRectF badgeRect(886.0f, y - 12.0f, 88.0f, 24.0f);
@@ -186,42 +194,45 @@ void Room::render(QPainter &painter, const View &view) const
         }
     };
 
-    const bool hostIsYou = view.host || view.youAreHost;
-    drawPlayer(316.0f, QStringLiteral("房主 / HOST"),
-               hostIsYou ? QStringLiteral("本机正在主持这个房间")
-                         : QStringLiteral("由主机玩家控制开局与解散"),
-               hostIsYou ? QStringLiteral("YOU") : QStringLiteral("HOST"),
-               hostIsYou ? Base::Cyan : Base::Amber);
-
-    if (view.players > 1) {
-        drawPlayer(370.0f,
-                   view.host ? QStringLiteral("已连接客户端")
-                             : QStringLiteral("玩家 / CLIENT"),
-                   view.host ? QStringLiteral("等待你按 ENTER 开始对局")
-                             : QStringLiteral("你已加入，等待房主开始对局"),
-                   view.host ? QStringLiteral("LINKED") : QStringLiteral("YOU"),
-                   Base::Green);
-    } else {
-        Base::fillCircle(painter, {302.0f, 370.0f}, 11.0f, QColor(24, 38, 52));
-        Base::strokeCircle(painter, {302.0f, 370.0f}, 11.0f, QColor(52, 78, 96), 1.2f);
-        Base::text(painter, Base::techSmallFont(), QStringLiteral("等待其他玩家加入…"),
-                   Base::Dim, {326.0f, 370.0f}, QStringLiteral("midleft"), 220);
+    // 服务端 RoomList 的会话槽位：列表与人数始终对应，连接/断开会同步更新；
+    // 空槽显示等待提示。
+    const int slotCount = std::max(2, std::min(view.maxPlayers, 4));
+    for (int i = 0; i < slotCount; ++i) {
+        const float y = 306.0f + float(i) * 38.0f;
+        if (i < int(view.playerSlots.size())) {
+            const PlayerSlot &slot = view.playerSlots[size_t(i)];
+            const QColor tint = slot.host ? (slot.you ? Base::Cyan : Base::Amber)
+                                          : (slot.you ? Base::Green : Base::Cyan);
+            QString badge;
+            if (slot.you) {
+                badge = QStringLiteral("YOU");
+            } else if (slot.host) {
+                badge = QStringLiteral("HOST");
+            } else if (slot.inMatch) {
+                badge = QStringLiteral("LIVE");
+            }
+            drawPlayer(y, slot.name, slot.detail, badge, tint, true);
+        } else {
+            drawPlayer(y, QStringLiteral("空槽位 / OPEN"),
+                       QStringLiteral("等待其他玩家加入…"), QString(), Base::Cyan,
+                       false);
+        }
     }
 
-    Base::strokeLine(painter, {286.0f, 412.0f}, {974.0f, 412.0f},
+    Base::strokeLine(painter, {286.0f, 470.0f}, {974.0f, 470.0f},
                      Base::withAlpha(accent, 55), 1.0f);
 
     Base::text(painter, Base::techTinyFont(), QStringLiteral("PLAYERS  玩家"),
-               Base::Muted, {286.0f, 438.0f}, QStringLiteral("midleft"), 190);
+               Base::Muted, {286.0f, 492.0f}, QStringLiteral("midleft"), 190);
     Base::text(painter, Base::techFont(),
                QStringLiteral("%1 / %2").arg(view.players).arg(view.maxPlayers),
-               Base::withAlpha(accent, 240), {974.0f, 438.0f},
+               Base::withAlpha(accent, 240), {974.0f, 492.0f},
                QStringLiteral("midright"), 235);
     Base::text(painter, Base::tinyFont(), view.scriptSummary, Base::Text,
-               {286.0f, 466.0f}, QStringLiteral("midleft"), 220);
+               {286.0f, 516.0f}, QStringLiteral("midleft"), 220);
     Base::text(painter, Base::techTinyFont(),
                QStringLiteral("SERVER-AUTHORITATIVE  //  房间状态以主机为准"),
-               Base::Muted, {974.0f, 466.0f}, QStringLiteral("midright"), 180);
+               Base::Muted, {974.0f, 516.0f}, QStringLiteral("midright"), 180);
 
     if (view.host) {
         drawButton(painter, startRect(), QStringLiteral("ENTER"),

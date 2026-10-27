@@ -40,15 +40,57 @@ void GameSimulation::start()
     startWave(std::clamp(level_.startWave, 1, std::max(1, waves_.totalWaves())));
 }
 
+void GameSimulation::setPlayers(const std::vector<int> &playerIds)
+{
+    arena_.configurePlayers(playerIds);
+}
+
+int GameSimulation::playerCount() const
+{
+    return arena_.playerCount();
+}
+
+bool GameSimulation::hasPlayer(int playerId) const
+{
+    return arena_.hasPlayer(playerId);
+}
+
+int GameSimulation::leaderPlayerId() const
+{
+    for (int i = 0; i < arena_.playerCount(); ++i) {
+        return arena_.playerIdAt(i);
+    }
+    return 0;
+}
+
+bool GameSimulation::removePlayer(int playerId)
+{
+    const bool removed = arena_.removePlayer(playerId);
+    if (removed && arena_.playerCount() == 0) {
+        // 所有玩家都离开：没有观战价值，直接结束这一局（服务端会广播 MatchEnd）。
+        triggerDefeat();
+    }
+    return removed;
+}
+
 void GameSimulation::setInput(const arena::InputState &input)
 {
     input_ = input;
     arena_.setInput(input_);
 }
 
-void GameSimulation::requestDash()
+void GameSimulation::setInput(int playerId, const arena::InputState &input)
 {
-    arena_.requestDash();
+    if (!arena_.hasPlayer(playerId)) {
+        return;   // 未知/观战会话：没有对应飞机，输入直接丢弃。
+    }
+    input_ = input;
+    arena_.setInput(playerId, input_);
+}
+
+void GameSimulation::requestDash(int playerId)
+{
+    arena_.requestDash(playerId);
 }
 
 void GameSimulation::placeMine(const Math::Vec2 &position)
@@ -225,6 +267,9 @@ void GameSimulation::writeSnapshot(net::Snapshot &out) const
     out.kills = arena_.kills();
 
     arena_.writeSnapshot(out);
+    // 权威模拟没有“本地客户端”概念；单机/回环视图默认第一架飞机是本机。
+    // 服务端广播前会按会话覆盖成各自的 playerId。
+    out.localPlayerId = out.players.empty() ? 0 : out.players.front().playerId;
 
     out.waves.currentWave = waves_.currentWave();
     out.waves.totalWaves = waves_.totalWaves();

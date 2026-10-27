@@ -25,6 +25,8 @@ struct HelloMessage {
 
 struct WelcomeMessage {
     quint32 sessionId = 0;
+    // 服务端分配给这个会话的稳定玩家 id/slot（1..4）；0 表示没有槽位。
+    int playerId = 0;
     quint16 tickRate = 60;
     bool accepted = false;
     QString reason;
@@ -93,12 +95,23 @@ struct MatchEndMessage {
     bool operator==(const MatchEndMessage &) const = default;
 };
 
+struct RoomPlayerInfo {
+    quint32 sessionId = 0;
+    int playerId = 0;
+    bool host = false;
+    bool inMatch = false;
+
+    bool operator==(const RoomPlayerInfo &) const = default;
+};
+
 struct RoomInfo {
     quint32 id = 0;
     QString name;
     int players = 0;
     int maxPlayers = 4;
     bool playing = false;
+    // 服务端实际 welcomed 的会话列表（列表=计数，连接/断开会同步更新）。
+    std::vector<RoomPlayerInfo> members;
 
     bool operator==(const RoomInfo &) const = default;
 };

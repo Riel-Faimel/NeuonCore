@@ -8,6 +8,9 @@ GameView::~GameView() = default;
 void GameView::apply(const net::Snapshot &snapshot)
 {
     world_.applySnapshot(snapshot);
+    // 0 表示服务端没有给这个会话分配飞机（观战）；视图仍把第一架当作
+    // 绘制/HUD 的参考机，Arena::isLocalPlayer() 会对 0 做这个回退。
+    localPlayerId_ = snapshot.localPlayerId;
 
     boss_.active = snapshot.boss.active;
     boss_.hp = snapshot.boss.hp;

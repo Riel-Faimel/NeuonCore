@@ -98,6 +98,7 @@ public:
     // 测试 / 调试用；正常流程不需要直接拿 Games / GameClient。
     Games *game() { return games_.get(); }
     client::GameClient *gameClient() { return client_.get(); }
+    const client::GameClient *gameClient() const { return client_.get(); }
     server::GameServer *localServer() { return server_.get(); }
 
 private:

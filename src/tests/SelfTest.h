@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <functional>
 #include <memory>
+#include <utility>
 
 #ifdef DEBUG
 
@@ -908,6 +909,11 @@ public:
                                    && original.runTime == game->runTime()
                                    && original.score == 2840 && original.kills == 31,
                                QStringLiteral("snapshot carries match state, time and score"));
+            success &= require(original.players.size() == 1
+                                   && original.players.front().playerId == 1
+                                   && original.localPlayerId == 1
+                                   && original.players.front().color == Base::Cyan,
+                               QStringLiteral("snapshot carries player id and local player"));
             success &= require(original.enemies.size() == 3
                                    && original.enemies.front().dataKey
                                           == QStringLiteral("drone")
@@ -966,6 +972,15 @@ public:
             room.players = 2;
             room.maxPlayers = 4;
             room.playing = false;
+            net::RoomPlayerInfo roomMemberA;
+            roomMemberA.sessionId = 11;
+            roomMemberA.playerId = 1;
+            roomMemberA.host = true;
+            net::RoomPlayerInfo roomMemberB;
+            roomMemberB.sessionId = 12;
+            roomMemberB.playerId = 2;
+            room.members.push_back(roomMemberA);
+            room.members.push_back(roomMemberB);
             roomList.rooms.push_back(room);
             net::RoomListMessage decodedRooms;
             success &= require(net::decodeRoomList(net::encodeRoomList(roomList),
@@ -983,8 +998,10 @@ public:
                                    && view.score() == original.score
                                    && view.kills() == original.kills,
                                QStringLiteral("view restores match state and score"));
-            success &= require(view.playerState().hp == original.player.hp
-                                   && view.playerState().pos == original.player.pos
+            success &= require(view.playerState().hp == original.players.front().hp
+                                   && view.playerState().pos == original.players.front().pos
+                                   && view.localPlayerId() == original.localPlayerId
+                                   && view.playerState().playerId == 1
                                    && view.world().aliveEnemyCount()
                                           == int(original.enemies.size()),
                                QStringLiteral("view restores player and enemies from snapshot"));
@@ -1023,6 +1040,150 @@ public:
             ShopService.score().total_ = savedWallet;
             ShopService.score().kills_ = savedKills;
             menu.returnToMenu();
+        }
+
+        log(QStringLiteral("Multiplayer aircraft and input ownership"));
+        {
+            games::GameSimulation::Level mpLevel;
+            mpLevel.name = QStringLiteral("多人模拟");
+            mpLevel.startWave = 1;
+            mpLevel.enemyLevel = 1;
+            mpLevel.script.push_back(games::Wave{{games::EnemySpawn{
+                arena::EnemyType(typeid(arena::DroneEnemy)), 1}}});
+            games::GameSimulation mp(mpLevel);
+            mp.setPlayers({2, 3});
+            mp.start();
+            Arena &mpArena = mp.arena_;
+            success &= require(mp.playerCount() == 2 && mpArena.playerCount() == 2
+                                   && mp.hasPlayer(2) && mp.hasPlayer(3)
+                                   && !mp.hasPlayer(1) && mp.leaderPlayerId() == 2,
+                               QStringLiteral("two slots become two player aircraft"));
+            success &= require(mpArena.playerStateAt(0).playerId == 2
+                                   && mpArena.playerStateAt(1).playerId == 3
+                                   && mpArena.playerStateAt(0).color
+                                          != mpArena.playerStateAt(1).color
+                                   && mpArena.playerStateAt(0).pos
+                                          != mpArena.playerStateAt(1).pos,
+                               QStringLiteral("player aircraft get distinct ids, colors and spawns"));
+
+            const Math::Vec2 p2Before = mpArena.playerStateAt(0).pos;
+            const Math::Vec2 p3Before = mpArena.playerStateAt(1).pos;
+            arena::InputState moveRight;
+            moveRight.moveAxis = {1.0f, 0.0f};
+            moveRight.mouseActive = true;
+            moveRight.mousePosition = {p2Before.x + 200.0f, p2Before.y};
+            mp.setInput(2, moveRight);
+            for (int i = 0; i < 40; ++i) {
+                mp.update(1.0f / 60.0f);
+            }
+            success &= require(mpArena.playerStateAt(0).pos.x > p2Before.x + 5.0f
+                                   && mpArena.playerStateAt(1).pos.distanceTo(p3Before)
+                                          < 0.5f,
+                               QStringLiteral("input moves only the sender's aircraft"));
+
+            // 让第一架停稳，再用一个不存在的 playerId 发输入：必须完全忽略。
+            arena::InputState stop;
+            stop.mouseActive = true;
+            stop.mousePosition = {mpArena.playerStateAt(0).pos.x + 1.0f,
+                                  mpArena.playerStateAt(0).pos.y};
+            mp.setInput(2, stop);
+            for (int i = 0; i < 60; ++i) {
+                mp.update(1.0f / 60.0f);
+            }
+            const Math::Vec2 p2Idle = mpArena.playerStateAt(0).pos;
+            const Math::Vec2 p3Idle = mpArena.playerStateAt(1).pos;
+            arena::InputState bogus = moveRight;
+            bogus.mousePosition = {p2Idle.x + 300.0f, p2Idle.y};
+            mp.setInput(99, bogus);   // 未知/观战 id：没有飞机
+            for (int i = 0; i < 40; ++i) {
+                mp.update(1.0f / 60.0f);
+            }
+            success &= require(mpArena.playerStateAt(0).pos.distanceTo(p2Idle) < 1.0f
+                                   && mpArena.playerStateAt(1).pos.distanceTo(p3Idle) < 1.0f,
+                               QStringLiteral("unknown/spectator player id is ignored"));
+
+            const net::Snapshot twoPlayer = mp.snapshot();
+            success &= require(twoPlayer.players.size() == 2
+                                   && twoPlayer.players[0].playerId == 2
+                                   && twoPlayer.players[1].playerId == 3
+                                   && twoPlayer.localPlayerId == 2
+                                   && twoPlayer.players[0].color
+                                          != twoPlayer.players[1].color,
+                               QStringLiteral("snapshot carries both aircraft and localPlayerId"));
+            net::Snapshot decodedTwo;
+            const QByteArray twoPayload = net::serializeSnapshot(twoPlayer);
+            success &= require(net::deserializeSnapshot(twoPayload, &decodedTwo)
+                                   && decodedTwo == twoPlayer,
+                               QStringLiteral("multi-player snapshot roundtrips with ids/local player"));
+
+            client::GameView localView;
+            localView.apply(twoPlayer);
+            success &= require(localView.playerCount() == 2
+                                   && localView.localPlayerId() == 2
+                                   && localView.playerState().playerId == 2
+                                   && localView.playerIdAt(1) == 3,
+                               QStringLiteral("view selects the local aircraft from the snapshot"));
+            // 同一个世界换一个 localPlayerId：客户端 3 的 HUD 必须切到 3 号机。
+            net::Snapshot otherViewSnapshot = twoPlayer;
+            otherViewSnapshot.localPlayerId = 3;
+            net::Snapshot decodedOther;
+            success &= require(net::deserializeSnapshot(
+                                   net::serializeSnapshot(otherViewSnapshot), &decodedOther),
+                               QStringLiteral("per-client localPlayerId survives serialization"));
+            localView.apply(decodedOther);
+            success &= require(localView.localPlayerId() == 3
+                                   && localView.playerState().playerId == 3
+                                   && localView.world().playerState().playerId == 3,
+                               QStringLiteral("each client's view/HUD selects its own aircraft"));
+
+            // 会话离开：只移除那一架，剩余玩家继续，不崩溃。
+            mpArena.playerStateAt(0).invuln = 999.0f;
+            success &= require(mp.removePlayer(2) && mp.playerCount() == 1
+                                   && mp.hasPlayer(3) && !mp.hasPlayer(2),
+                               QStringLiteral("leaving player removes only its aircraft"));
+            for (int i = 0; i < 60; ++i) {
+                mp.update(1.0f / 60.0f);
+            }
+            const net::Snapshot afterLeave = mp.snapshot();
+            success &= require(mp.state() != games::GameSimulation::State::Defeat
+                                   && afterLeave.players.size() == 1
+                                   && afterLeave.players.front().playerId == 3
+                                   && afterLeave.localPlayerId == 3,
+                               QStringLiteral("match continues after a player disconnects"));
+
+            // 多玩家阵亡 → 重新部署；全灭 → 失败。
+            games::GameSimulation respawnSim(mpLevel);
+            respawnSim.setPlayers({1, 2});
+            respawnSim.start();
+            Arena &respawnArena = respawnSim.arena_;
+            arena::Context respawnCtx = respawnArena.context();
+            respawnArena.playerStateAt(1).invuln = 999.0f;
+            respawnArena.playerStateAt(0).invuln = 0.0f;
+            respawnArena.playerById(1).takeDamage(
+                respawnCtx, arena::Damage{9999.0f, false, arena::DamageSource::Bullet});
+            success &= require(!respawnArena.playerById(1).state.alive
+                                   && respawnArena.playerById(1).state.respawnTimer > 0.0f
+                                   && respawnSim.state() == games::GameSimulation::State::Playing,
+                               QStringLiteral("a downed aircraft waits to respawn while allies live"));
+            for (int i = 0; i < 220; ++i) {
+                respawnArena.playerStateAt(1).invuln = 999.0f;
+                respawnSim.update(1.0f / 60.0f);
+            }
+            success &= require(respawnArena.playerById(1).state.alive
+                                   && respawnArena.playerById(1).state.respawnTimer <= 0.0f,
+                               QStringLiteral("downed aircraft respawns after the timer"));
+            respawnArena.playerStateAt(0).invuln = 0.0f;
+            respawnArena.playerStateAt(1).invuln = 0.0f;
+            respawnArena.playerStateAt(0).hp = 1.0f;
+            respawnArena.playerStateAt(1).hp = 1.0f;
+            respawnArena.playerById(1).takeDamage(
+                respawnCtx, arena::Damage{50.0f, false, arena::DamageSource::Bullet});
+            respawnArena.playerById(2).takeDamage(
+                respawnCtx, arena::Damage{50.0f, false, arena::DamageSource::Bullet});
+            respawnSim.update(1.0f / 60.0f);
+            success &= require(respawnSim.state() == games::GameSimulation::State::Defeat
+                                   && respawnArena.playerDefeated() && respawnSim.playerCount() == 2,
+                               QStringLiteral("all players down triggers defeat without removing them"));
         }
 
         log(QStringLiteral("TCP loopback"));
@@ -1073,7 +1234,9 @@ public:
                                QStringLiteral("server owns the authoritative match"));
             success &= require(tcpClient.lastSnapshot().waves.totalWaves == 1
                                    && tcpClient.view().playerState().pos
-                                          == tcpClient.lastSnapshot().player.pos
+                                          == tcpClient.lastSnapshot().players.front().pos
+                                   && tcpClient.lastSnapshot().localPlayerId
+                                          == tcpClient.playerId()
                                    && tcpClient.view().waves().currentWave
                                           == tcpClient.lastSnapshot().waves.currentWave,
                                QStringLiteral("TCP snapshot rebuilds the client GameView"));
@@ -1090,7 +1253,7 @@ public:
                                    return tcpClient.view().playerState().pos.x > beforeX + 5.0f;
                                }, 3000),
                                QStringLiteral("server applies the input command and broadcasts the result"));
-            success &= require(tcpServer.snapshot().player.pos.x > beforeX + 5.0f,
+            success &= require(tcpServer.snapshot().players.front().pos.x > beforeX + 5.0f,
                                QStringLiteral("authoritative simulation moved the player"));
 
             client::GameClient watcher;
@@ -1126,7 +1289,7 @@ public:
                                    net::encodeInputMessage(stdioInput), &stdioError),
                                QStringLiteral("stdio Input applies to the simulation"));
             success &= require(pumpUntil([&] {
-                                   return stdioServer.snapshot().player.pos.x > 1.0f;
+                                   return stdioServer.snapshot().players.front().pos.x > 1.0f;
                                }, 3000),
                                QStringLiteral("stdio input moves the player"));
             stdioServer.close();
@@ -1204,6 +1367,166 @@ public:
                                QStringLiteral("connection failure carries an error message"));
         }
 
+        log(QStringLiteral("Multiplayer sessions over TCP"));
+        {
+            server::GameServer multiServer;
+            QString multiError;
+            const bool multiListening = multiServer.listen(0, true, &multiError);
+            success &= require(multiListening,
+                               QStringLiteral("multiplayer test server listens (%1)")
+                                   .arg(multiError));
+            if (multiListening) {
+                Games::Level multiLevel;
+                multiLevel.name = QStringLiteral("多人 TCP");
+                multiLevel.startWave = 1;
+                multiLevel.enemyLevel = 1;
+                multiLevel.script.push_back(games::Wave{{games::EnemySpawn{
+                    arena::EnemyType(typeid(arena::DroneEnemy)), 1}}});
+
+                client::GameClient alpha;
+                client::GameClient beta;
+                success &= require(alpha.connectToHost(QStringLiteral("127.0.0.1"),
+                                                       multiServer.port())
+                                       && beta.connectToHost(QStringLiteral("127.0.0.1"),
+                                                             multiServer.port()),
+                                   QStringLiteral("two clients connect before the match"));
+                success &= require(pumpUntil([&] {
+                                       return alpha.welcomed() && beta.welcomed()
+                                              && alpha.inLobby() && beta.inLobby();
+                                   }, 3000),
+                                   QStringLiteral("both clients complete Hello/Welcome"));
+                success &= require(alpha.playerId() > 0 && beta.playerId() > 0
+                                       && alpha.playerId() != beta.playerId()
+                                       && multiServer.roomPlayers() == 2,
+                                   QStringLiteral("server assigns each session a stable slot"));
+                success &= require(multiServer.startMatch(multiLevel),
+                                   QStringLiteral("host starts a match with two sessions"));
+                success &= require(pumpUntil([&] {
+                                       return alpha.snapshotCount() > 0
+                                              && beta.snapshotCount() > 0;
+                                   }, 3000),
+                                   QStringLiteral("both sessions receive snapshots"));
+                const net::Snapshot &alphaSnap = alpha.lastSnapshot();
+                const net::Snapshot &betaSnap = beta.lastSnapshot();
+                success &= require(alphaSnap.players.size() == 2
+                                       && betaSnap.players.size() == 2
+                                       && alphaSnap.localPlayerId == alpha.playerId()
+                                       && betaSnap.localPlayerId == beta.playerId()
+                                       && alpha.view().playerState().playerId
+                                              == alpha.playerId()
+                                       && beta.view().playerState().playerId == beta.playerId(),
+                                   QStringLiteral("each client gets both aircraft and its own local id"));
+                success &= require(alphaSnap.players[0].playerId
+                                          != alphaSnap.players[1].playerId
+                                       && alphaSnap.players[0].pos
+                                              != alphaSnap.players[1].pos
+                                       && alphaSnap.players[0].color
+                                              != alphaSnap.players[1].color,
+                                   QStringLiteral("two sessions get distinct aircraft"));
+
+                auto playerPos = [](const net::Snapshot &snapshot, int playerId) {
+                    for (const net::PlayerSnapshot &player : snapshot.players) {
+                        if (player.playerId == playerId) {
+                            return player.pos;
+                        }
+                    }
+                    return Math::Vec2{};
+                };
+                const Math::Vec2 alphaBefore = playerPos(alphaSnap, alpha.playerId());
+                const Math::Vec2 betaBefore = playerPos(betaSnap, beta.playerId());
+                net::InputCommand moveRight;
+                moveRight.moveX = 1.0f;
+                moveRight.mouseActive = true;
+                moveRight.mouseX = alphaBefore.x + 220.0f;
+                moveRight.mouseY = alphaBefore.y;
+                success &= require(alpha.sendInput(moveRight),
+                                   QStringLiteral("first player's input reaches the server"));
+                success &= require(pumpUntil([&] {
+                                       return playerPos(alpha.lastSnapshot(),
+                                                        alpha.playerId()).x
+                                              > alphaBefore.x + 4.0f;
+                                   }, 3000),
+                                   QStringLiteral("only the sender's authoritative aircraft moves"));
+                const Math::Vec2 betaAfterMove = playerPos(beta.lastSnapshot(), beta.playerId());
+                success &= require(betaAfterMove.distanceTo(betaBefore) < 1.5f,
+                                   QStringLiteral("the other session's aircraft stays put"));
+
+                // 停住自己的输入，再让开局后加入的第三会话发输入：观战者不能控制任何飞机。
+                net::InputCommand stopMoving;
+                stopMoving.mouseActive = true;
+                stopMoving.mouseX = 0.0f;
+                stopMoving.mouseY = 0.0f;
+                alpha.sendInput(stopMoving);
+                QElapsedTimer settleWait;
+                settleWait.start();
+                while (settleWait.elapsed() < 420) {
+                    QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+                    QThread::msleep(1);
+                }
+
+                client::GameClient spectator;
+                success &= require(spectator.connectToHost(QStringLiteral("127.0.0.1"),
+                                                           multiServer.port()),
+                                   QStringLiteral("a late client connects while the match runs"));
+                success &= require(pumpUntil([&] {
+                                       return spectator.welcomed()
+                                              && spectator.snapshotCount() > 0;
+                                   }, 3000),
+                                   QStringLiteral("late client receives snapshot updates"));
+                success &= require(spectator.localPlayerId() == 0
+                                       && spectator.spectating()
+                                       && spectator.lastSnapshot().players.size() == 2,
+                                   QStringLiteral("a late session is a spectator without an aircraft"));
+                const Math::Vec2 alphaIdle = playerPos(alpha.lastSnapshot(), alpha.playerId());
+                net::InputCommand spectatorMove;
+                spectatorMove.moveX = -1.0f;
+                spectatorMove.mouseActive = true;
+                spectatorMove.mouseX = alphaIdle.x - 300.0f;
+                spectatorMove.mouseY = alphaIdle.y;
+                spectator.sendInput(spectatorMove);
+                QElapsedTimer spectatorWait;
+                spectatorWait.start();
+                while (spectatorWait.elapsed() < 260) {
+                    QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+                    QThread::msleep(1);
+                }
+                const Math::Vec2 alphaAfterSpectator =
+                    playerPos(alpha.lastSnapshot(), alpha.playerId());
+                success &= require(alphaAfterSpectator.distanceTo(alphaIdle) < 3.0f,
+                                   QStringLiteral("spectator input is ignored by the server"));
+
+                // 玩家中途离开：服务器移除那一架飞机，另一个玩家继续接收快照。
+                beta.close();
+                success &= require(pumpUntil([&] {
+                                       return multiServer.clientCount() == 2;
+                                   }, 3000),
+                                   QStringLiteral("server drops a mid-match session on disconnect"));
+                success &= require(pumpUntil([&] {
+                                       return alpha.lastSnapshot().players.size() == 1
+                                              && alpha.lastSnapshot().localPlayerId
+                                                     == alpha.playerId()
+                                              && alpha.lastSnapshot().players.front().playerId
+                                                     == alpha.playerId();
+                                   }, 3000),
+                                   QStringLiteral("disconnect removes only that aircraft; the match continues"));
+                for (int i = 0; i < 30; ++i) {
+                    QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+                    QThread::msleep(1);
+                }
+                success &= require(alpha.snapshotCount() > 0 && !alpha.failed()
+                                       && multiServer.roomPlayers() == 2,
+                                   QStringLiteral("remaining player and spectator stay connected"));
+
+                alpha.close();
+                spectator.close();
+                success &= require(pumpUntil([&] {
+                                       return multiServer.clientCount() == 0;
+                                   }, 3000),
+                                   QStringLiteral("multiplayer server tears down cleanly"));
+                multiServer.close();
+            }
+        }
+
         log(QStringLiteral("Reconnect path"));
         {
             server::GameServer reconnectServer;
@@ -1249,6 +1572,19 @@ public:
                                    == QSize(GameConfig::ScreenWidth,
                                             GameConfig::ScreenHeight),
                                QStringLiteral("embedded network match renders a frame"));
+            const float embeddedBefore = netClient->view().playerState().pos.x;
+            networkMenu.keyPress(Qt::Key_D);
+            QElapsedTimer embeddedTimer;
+            embeddedTimer.start();
+            while (embeddedTimer.elapsed() < 700) {
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+                networkMenu.update(1.0f / 60.0f);
+                QThread::msleep(1);
+            }
+            networkMenu.keyRelease(Qt::Key_D);
+            success &= require(netClient->view().playerState().pos.x
+                                   > embeddedBefore + 3.0f,
+                               QStringLiteral("embedded single-player still controls its own aircraft"));
         }
         networkMenu.returnToMenu();
 
@@ -1330,6 +1666,24 @@ public:
                                && joinMenu.match_.roomMaxPlayers() == 4
                                && !joinMenu.match_.roomYouAreHost(),
                            QStringLiteral("both sides share the same room name and host marker"));
+        {
+            // 房间槽位必须和服务端会话一致：主人永远是 P1/HOST，加入者是 P2。
+            const menu::Room::View hostSlots = hostMenu.roomView();
+            const menu::Room::View joinSlots = joinMenu.roomView();
+            const auto hostSlot = std::find_if(
+                hostSlots.playerSlots.begin(), hostSlots.playerSlots.end(),
+                [](const menu::Room::PlayerSlot &slot) { return slot.you; });
+            const auto joinSlot = std::find_if(
+                joinSlots.playerSlots.begin(), joinSlots.playerSlots.end(),
+                [](const menu::Room::PlayerSlot &slot) { return slot.you; });
+            success &= require(hostSlot != hostSlots.playerSlots.end()
+                                   && hostSlot->host
+                                   && joinSlot != joinSlots.playerSlots.end()
+                                   && !joinSlot->host
+                                   && hostSlots.playerSlots.size() == 2
+                                   && joinSlots.playerSlots.size() == 2,
+                               QStringLiteral("room slot list marks host and joiner correctly"));
+        }
         joinMenu.keyPress(Qt::Key_Return);
         success &= require(joinMenu.match_.inRoom()
                                && !hostMenu.match_.localServer()->running(),
@@ -1653,6 +2007,59 @@ public:
         game->arena_.placeMine(Math::Vec2(520, 430));
         save(QStringLiteral("gameplay.png"));
 
+        // 多玩家画面：同一份快照里有两架飞机，本机 HUD 只显示自己的生命/冲刺，
+        // 远程飞机用不同颜色和识别环绘制。
+        {
+            games::GameSimulation::Level mpLevel;
+            mpLevel.name = QStringLiteral("双机演示");
+            mpLevel.startWave = 1;
+            mpLevel.enemyLevel = 1;
+            mpLevel.script.push_back(games::Wave{{games::EnemySpawn{
+                arena::EnemyType(typeid(arena::DroneEnemy)), 3}}});
+            games::GameSimulation mp(mpLevel);
+            mp.setPlayers({1, 2});
+            mp.start();
+            Arena &mpArena = mp.arena_;
+            const arena::Context mpCtx = mpArena.context();
+            mpArena.playerStateAt(0).pos = {520, 470};
+            mpArena.playerStateAt(0).hp = 74;
+            mpArena.playerStateAt(0).hpDisplay = 84;
+            mpArena.playerStateAt(0).aim = -0.42f;
+            mpArena.playerStateAt(0).invuln = 0.0f;
+            mpArena.playerStateAt(1).pos = {780, 520};
+            mpArena.playerStateAt(1).hp = 91;
+            mpArena.playerStateAt(1).hpDisplay = 100;
+            mpArena.playerStateAt(1).aim = 2.2f;
+            for (const auto &[kind, pos] : std::array<std::pair<const char *, Math::Vec2>, 6>{{
+                     {"drone", {940, 270}}, {"drone", {1080, 560}},
+                     {"spitter", {880, 380}}, {"tank", {700, 620}},
+                     {"amplifier", {1030, 330}}, {"mender", {620, 250}}}}) {
+                mpArena.spawnEnemy(mpCtx, QString::fromLatin1(kind), pos, 1);
+            }
+            for (const auto &enemy : mpArena.enemies()) {
+                enemy->age = 1.4f;
+            }
+            mpArena.spawnStandard({560, 430}, {880, -160}, 12.5f, Base::Cyan,
+                                  Bullet::Standpoint::Player, 3.0f);
+            mpArena.spawnStandard({820, 470}, {-620, -200}, 12.5f, Base::Amber,
+                                  Bullet::Standpoint::Player, 3.0f);
+            mpArena.spawnStandard({980, 360}, {-540, 120}, 11.0f, Base::Magenta,
+                                  Bullet::Standpoint::Enemy, 4.0f);
+            mpArena.spawnBurst(mpCtx, {900, 300}, Base::Coral, 12, 130.0f, 0.6f);
+            net::Snapshot mpSnapshot = mp.snapshot();
+            client::GameView mpView;
+            mpView.apply(mpSnapshot);
+            games::Renderer mpRenderer;
+            mpRenderer.initialize();
+            mpRenderer.render(mpView);
+            const QString path = dir.filePath(QStringLiteral("multiplayer.png"));
+            if (!mpRenderer.frame().save(path)) {
+                std::fprintf(stderr, "Failed to save %s\n", path.toUtf8().constData());
+            } else {
+                std::printf("%s\n", path.toUtf8().constData());
+            }
+        }
+
         game->arena_.enemies().clear();
         game->arena_.portals().clear();
         game->arena_.pickups().clear();
@@ -1762,13 +2169,6 @@ public:
             hostRoom.editor_.setPort(captureRoomPort);
             hostRoom.keyPress(Qt::Key_Return);
 
-            Menu joinRoom(false, false);
-            joinRoom.keyPress(Qt::Key_2);
-            joinRoom.keyPress(Qt::Key_F3);
-            joinRoom.editor_.setHost(QStringLiteral("127.0.0.1"));
-            joinRoom.editor_.setPort(captureRoomPort);
-            joinRoom.keyPress(Qt::Key_Return);
-
             auto spinRoom = [&](Menu &screenMenu, const std::function<bool()> &done,
                                 int timeoutMs) {
                 QElapsedTimer timer;
@@ -1779,10 +2179,20 @@ public:
                     QThread::msleep(1);
                 }
             };
+            // 先把主人的回环客户端接入房间（拿到 P1/房主），再创建加入者，
+            // 这样截图和真实操作顺序一致，slot 不会因事件顺序互换。
             spinRoom(hostRoom, [&] {
                 return hostRoom.match_.roomConnected()
                        && hostRoom.match_.roomPlayers() == 1;
             }, 4000);
+
+            Menu joinRoom(false, false);
+            joinRoom.keyPress(Qt::Key_2);
+            joinRoom.keyPress(Qt::Key_F3);
+            joinRoom.editor_.setHost(QStringLiteral("127.0.0.1"));
+            joinRoom.editor_.setPort(captureRoomPort);
+            joinRoom.keyPress(Qt::Key_Return);
+
             spinRoom(joinRoom, [&] {
                 return joinRoom.match_.roomConnected()
                        && joinRoom.match_.roomPlayers() == 2;

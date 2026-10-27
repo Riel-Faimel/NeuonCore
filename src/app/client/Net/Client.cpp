@@ -54,6 +54,7 @@ bool GameClient::connectToHost(const QString &host, quint16 port)
     port_ = port;
     lastError_.clear();
     sessionId_ = 0;
+    playerId_ = 0;
     snapshotCount_ = 0;
     reconnectAttempts_ = 0;
     welcomed_ = false;
@@ -345,6 +346,7 @@ void GameClient::handleWelcome(const QByteArray &frame)
         return;
     }
     sessionId_ = welcome.sessionId;
+    playerId_ = welcome.playerId;
     tickRate_ = welcome.tickRate;
     welcomed_ = true;
     hadSession_ = true;

@@ -177,6 +177,7 @@ void GameServer::dissolveRoom(const QString &reason)
     tickTimer_.stop();
     simulation_.reset();
     snapshot_.clear();
+    matchPlayers_.clear();
     matchEndSent_ = true;
     accumulator_ = 0.0;
     rooms_.reset();
@@ -232,6 +233,56 @@ int GameServer::welcomedCount() const
     return count;
 }
 
+int GameServer::playerIdForSession(quint32 sessionId) const
+{
+    for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+        if (it->id == sessionId) {
+            return it->playerId;
+        }
+    }
+    return 0;
+}
+
+int GameServer::allocatePlayerId() const
+{
+    bool used[net::kMaxPlayersPerRoom + 1] = {};
+    for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+        if (!it->welcomed) {
+            continue;
+        }
+        if (it->playerId >= 1 && it->playerId <= net::kMaxPlayersPerRoom) {
+            used[it->playerId] = true;
+        }
+    }
+    for (int id = 1; id <= net::kMaxPlayersPerRoom; ++id) {
+        if (!used[id]) {
+            return id;
+        }
+    }
+    return 0;
+}
+
+std::vector<int> GameServer::rosterForMatch() const
+{
+    std::vector<int> ids;
+    for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+        if (it->welcomed && it->playerId >= 1
+            && it->playerId <= net::kMaxPlayersPerRoom) {
+            ids.push_back(it->playerId);
+        }
+    }
+    std::sort(ids.begin(), ids.end());
+    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+    if (ids.size() > size_t(net::kMaxPlayersPerRoom)) {
+        ids.resize(size_t(net::kMaxPlayersPerRoom));
+    }
+    if (ids.empty()) {
+        // 独立 NeonCoreServer 还没有 TCP 客户端时，stdio 宿主仍然能开一局单机模拟。
+        ids.push_back(1);
+    }
+    return ids;
+}
+
 void GameServer::close()
 {
     tickTimer_.stop();
@@ -249,6 +300,7 @@ void GameServer::close()
     rooms_.reset();
     simulation_.reset();
     snapshot_.clear();
+    matchPlayers_.clear();
     matchEndSent_ = false;
     accumulator_ = 0.0;
     tcpServer_.close();
@@ -302,11 +354,39 @@ void GameServer::onReadyRead(QTcpSocket *socket)
 
 void GameServer::onDisconnected(QTcpSocket *socket)
 {
+    auto it = sessions_.find(socket);
+    if (it == sessions_.end()) {
+        socket->deleteLater();
+        return;
+    }
+    const int playerId = it->playerId;
+    const quint32 sessionId = it->id;
+    const bool wasInMatch = it->inMatch;
     if (controllerSocket_ == socket) {
         controllerSocket_ = nullptr;
     }
     sessions_.remove(socket);
     socket->deleteLater();
+
+    // 房主离开房间：把房主交给下一个 welcomed 会话，房间继续。
+    if (rooms_.isOpen() && rooms_.defaultRoom().hostSessionId == sessionId) {
+        quint32 nextHost = 0;
+        for (auto other = sessions_.begin(); other != sessions_.end(); ++other) {
+            if (other->welcomed) {
+                nextHost = other->id;
+                break;
+            }
+        }
+        rooms_.setHostSession(nextHost);
+    }
+
+    // 对局中的玩家离开：移除对应飞机（不是整局结束），其他玩家继续。
+    if (wasInMatch && playerId > 0) {
+        std::erase(matchPlayers_, playerId);
+        if (simulation_ != nullptr) {
+            simulation_->removePlayer(playerId);
+        }
+    }
     broadcastRoomList();
 }
 
@@ -371,10 +451,41 @@ void GameServer::handleHello(QTcpSocket *socket, const QByteArray &frame)
     if (it == sessions_.end()) {
         return;
     }
+    if (it->welcomed) {
+        // 重复 Hello 不重新分配槽位，保持 playerId 稳定。
+        sendWelcome(socket, true, QString());
+        return;
+    }
+    if (welcomedCount() >= net::kMaxPlayersPerRoom) {
+        reject(socket, QStringLiteral("房间已满"));
+        return;
+    }
     it->hello = true;
     it->welcomed = true;
+    it->playerId = allocatePlayerId();
+    it->inMatch = false;
+
+    // 单机内嵌路径会在 TCP 握手完成前就 startMatch()（roster 回退成 {1}）。
+    // 如果这一局里存在这个 slot 的飞机、而且还没有别的会话控制它，就让刚
+    // welcomed 的会话接管它——否则单机会变成“有飞机但不能操作”的观战者。
+    if (simulation_ != nullptr && simulation_->hasPlayer(it->playerId)
+        && std::find(matchPlayers_.begin(), matchPlayers_.end(), it->playerId)
+               != matchPlayers_.end()) {
+        bool taken = false;
+        for (auto other = sessions_.begin(); other != sessions_.end(); ++other) {
+            if (other.key() != socket && other->welcomed && other->inMatch
+                && other->playerId == it->playerId) {
+                taken = true;
+                break;
+            }
+        }
+        if (!taken) {
+            it->inMatch = true;
+        }
+    }
+
     if (controllerSocket_ == nullptr) {
-        // 第一个连接到本地内嵌服务端的客户端是主控玩家；后续客户端只读。
+        // 第一个连接到本地内嵌服务端的客户端是主控玩家；后续客户端各有自己的飞机。
         controllerSocket_ = socket;
     }
     if (localHostRoom_ && rooms_.isOpen()
@@ -429,7 +540,19 @@ bool GameServer::startMatch(const games::GameSimulation::Level &level, QString *
         rooms_.open(QStringLiteral("NEON CORE 房间"),
                     controllerSocket_ != nullptr ? sessions_.value(controllerSocket_).id : 0);
     }
+
+    // 这一局拿到飞机的会话：开局时已 welcomed 的会话，按 playerId 升序。
+    // 开局后才加入的会话 playerId 仍然稳定，但这一局只是观战者。
+    const std::vector<int> roster = rosterForMatch();
+    matchPlayers_ = roster;
+    for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+        it->inMatch = it->welcomed && it->playerId > 0
+                      && std::find(roster.begin(), roster.end(), it->playerId)
+                             != roster.end();
+    }
+
     auto simulation = std::make_unique<ServerSimulation>(level);
+    simulation->setPlayers(roster);
     simulation->onEvent = [this](const net::EventMessage &event) {
         broadcastEvent(event);
     };
@@ -529,7 +652,12 @@ bool GameServer::handleControlFrame(const QByteArray &frame, QString *error)
             }
             return false;
         }
-        applyInput(command);
+        const int target = command.playerId > 0
+                               ? command.playerId
+                               : (simulation_ != nullptr
+                                      ? simulation_->leaderPlayerId()
+                                      : 0);
+        applyInput(target, command);
         return true;
     }
     default:
@@ -542,8 +670,15 @@ bool GameServer::handleControlFrame(const QByteArray &frame, QString *error)
 
 void GameServer::handleInput(QTcpSocket *socket, const QByteArray &frame)
 {
-    if (simulation_ == nullptr || socket != controllerSocket_) {
+    if (simulation_ == nullptr) {
         return;
+    }
+    auto it = sessions_.find(socket);
+    if (it == sessions_.end() || !it->welcomed || it->playerId <= 0) {
+        return;   // 未知/无槽位会话
+    }
+    if (!it->inMatch || !simulation_->hasPlayer(it->playerId)) {
+        return;   // 观战者/中途加入：没有自己的飞机，输入忽略
     }
     net::InputCommand command;
     QString error;
@@ -551,12 +686,14 @@ void GameServer::handleInput(QTcpSocket *socket, const QByteArray &frame)
         // 单条坏输入不踢掉整个会话；忽略并保留连接。
         return;
     }
-    applyInput(command);
+    // TCP 客户端不能选择飞机：永远只控制服务端分配给这个会话的 playerId。
+    applyInput(it->playerId, command);
 }
 
-void GameServer::applyInput(const net::InputCommand &command)
+void GameServer::applyInput(int playerId, const net::InputCommand &command)
 {
-    if (simulation_ == nullptr) {
+    if (simulation_ == nullptr || playerId <= 0
+        || !simulation_->hasPlayer(playerId)) {
         return;
     }
     arena::InputState input;
@@ -566,16 +703,19 @@ void GameServer::applyInput(const net::InputCommand &command)
     input.mousePosition = {command.mouseX, command.mouseY};
     input.shooting = command.shooting;
     input.dashRequested = command.dashRequested;
-    simulation_->setInput(input);
+    simulation_->setInput(playerId, input);
 
     if (command.mineRequested) {
         simulation_->placeMine({command.mineX, command.mineY});
     }
-    if (command.pauseToggle) {
+    // 暂停/强化选择是整局共享动作：只接受对局 leader（最小 playerId），
+    // 避免观战或第二个玩家打断所有人的对局。
+    const bool leader = playerId == simulation_->leaderPlayerId();
+    if (command.pauseToggle && leader) {
         simulation_->setPaused(simulation_->state()
                                != games::GameSimulation::State::Paused);
     }
-    if (command.upgradeChoice >= 0) {
+    if (command.upgradeChoice >= 0 && leader) {
         simulation_->chooseUpgrade(command.upgradeChoice);
     }
 }
@@ -633,6 +773,7 @@ void GameServer::sendRoomList(QTcpSocket *socket)
     rooms_.setPlayers(welcomedCount());
     net::RoomListMessage message;
     message.rooms.reserve(rooms_.rooms().size());
+    const quint32 hostSessionId = roomHostSessionId();
     for (const Room &room : rooms_.rooms()) {
         net::RoomInfo info;
         info.id = room.id;
@@ -640,6 +781,18 @@ void GameServer::sendRoomList(QTcpSocket *socket)
         info.players = room.players;
         info.maxPlayers = room.maxPlayers;
         info.playing = room.playing;
+        for (auto member = sessions_.begin(); member != sessions_.end(); ++member) {
+            if (!member->welcomed) {
+                continue;
+            }
+            net::RoomPlayerInfo player;
+            player.sessionId = member->id;
+            player.playerId = member->playerId;
+            player.host = member->id == hostSessionId;
+            player.inMatch = member->inMatch;
+            info.members.push_back(player);
+        }
+        info.players = int(info.members.size());
         message.rooms.push_back(std::move(info));
     }
     const QByteArray frame = net::encodeRoomList(message);
@@ -669,6 +822,7 @@ void GameServer::sendWelcome(QTcpSocket *socket, bool accepted, const QString &r
     }
     net::WelcomeMessage welcome;
     welcome.sessionId = it->id;
+    welcome.playerId = it->playerId;
     welcome.tickRate = kTickRate;
     welcome.accepted = accepted;
     welcome.reason = reason;
@@ -705,6 +859,11 @@ void GameServer::sendMatchEnd(QTcpSocket *socket, const QString &reason)
         broadcastToWelcomed(frame);
     }
     rooms_.setPlaying(false);
+    // 对局结束后会话回到房间/观战状态；下一局重新分配飞机。
+    for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+        it->inMatch = false;
+    }
+    matchPlayers_.clear();
     broadcastRoomList();
 }
 
@@ -741,10 +900,24 @@ void GameServer::reject(QTcpSocket *socket, const QString &reason)
 
 void GameServer::broadcastSnapshot()
 {
-    const QByteArray frame = net::encodeSnapshotMessage(snapshot_);
-    if (!frame.isEmpty()) {
-        broadcastToWelcomed(frame);
+    if (snapshot_.players.empty() && simulation_ == nullptr) {
+        return;
     }
+    // 快照内容每帧只提取一次；localPlayerId 是每个客户端自己的视角，
+    // 编码前按会话覆盖，编完恢复，避免为每个会话复制整份世界。
+    const int baseLocalPlayerId = snapshot_.localPlayerId;
+    for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+        QTcpSocket *socket = it.key();
+        if (socket == nullptr || !it->welcomed) {
+            continue;
+        }
+        snapshot_.localPlayerId = (it->inMatch && it->playerId > 0) ? it->playerId : 0;
+        const QByteArray frame = net::encodeSnapshotMessage(snapshot_);
+        if (!frame.isEmpty()) {
+            socket->write(frame);
+        }
+    }
+    snapshot_.localPlayerId = baseLocalPlayerId;
 }
 
 void GameServer::broadcastEvent(const net::EventMessage &event)

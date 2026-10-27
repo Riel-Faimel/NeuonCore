@@ -7,28 +7,69 @@
 #include "Net/Snapshot.h"
 #include "Random.h"
 #include "Base/Base.h"
+#include "GameConfig.h"
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <utility>
 
 namespace arena {
 
 void Combatants::reset()
 {
-    player_.reset();
+    players_.clear();
+    players_.emplace_back();
+    players_.back().reset();
+    localPlayerId_ = 0;
+    enemies_.clear();
+    boss_ = nullptr;
+}
+
+void Combatants::configurePlayers(const std::vector<int> &playerIds)
+{
+    players_.clear();
+    const bool multiplayer = playerIds.size() > 1;
+    for (const int id : playerIds) {
+        Player player;
+        if (multiplayer) {
+            player.configure(id, playerColor(id), playerSpawnPosition(id), true);
+        } else {
+            // 单机/只有一名玩家：保持原来的出生点和 Cyan 配色。
+            player.configure(id, Base::Cyan, playerSpawnPosition(1), false);
+            player.state.pos = {GameConfig::ScreenWidth / 2.0f,
+                                GameConfig::ScreenHeight / 2.0f + 32.0f};
+            player.state.muzzlePos = player.state.pos;
+            player.spawnPos = player.state.pos;
+        }
+        players_.push_back(std::move(player));
+    }
+    if (players_.empty()) {
+        players_.emplace_back();
+        players_.back().reset();
+    }
+    localPlayerId_ = 0;
     enemies_.clear();
     boss_ = nullptr;
 }
 
 void Combatants::beginWave()
 {
-    player_.beginWave();
+    for (Player &player : players_) {
+        if (player.state.active && player.state.alive) {
+            player.beginWave();
+        }
+    }
     boss_ = nullptr;
 }
 
-void Combatants::updatePlayer(const Context &ctx, float dt)
+void Combatants::updatePlayers(const Context &ctx, float dt)
 {
-    player_.update(ctx, dt);
+    for (Player &player : players_) {
+        if (player.state.active && player.state.alive) {
+            player.update(ctx, dt);
+        }
+    }
 }
 
 void Combatants::updateEnemies(const Context &ctx, float dt)
@@ -74,7 +115,21 @@ void Combatants::draw(QPainter &world, QPainter &glow, const Context &ctx) const
     for (const Fighter *fighter : drawOrder) {
         fighter->draw(world, glow, ctx);
     }
-    player_.draw(world, glow, ctx);
+    // 远程飞机先画，本机飞机最后画（保证自己的机身在最上层）。
+    const Player *local = nullptr;
+    for (const Player &player : players_) {
+        if (!player.state.active) {
+            continue;
+        }
+        if (isLocalPlayer(player.state.playerId)) {
+            local = &player;
+        } else {
+            player.draw(world, glow, ctx);
+        }
+    }
+    if (local != nullptr && local->state.alive) {
+        local->draw(world, glow, ctx);
+    }
 }
 
 void Combatants::spawnEnemy(const Context &ctx, EnemyType type,
@@ -135,7 +190,11 @@ void Combatants::clearForVictory(const Context &ctx)
         return !enemy->boss;
     });
     boss_ = nullptr;
-    player_.state.invuln = 3.0f;
+    for (Player &player : players_) {
+        if (player.state.active) {
+            player.state.invuln = 3.0f;
+        }
+    }
 }
 
 void Combatants::damageEnemiesInRadius(const Context &ctx, const Math::Vec2 &center,
@@ -184,36 +243,166 @@ BossInfo Combatants::bossInfo() const
     return info;
 }
 
+int Combatants::playerCount() const
+{
+    int count = 0;
+    for (const Player &player : players_) {
+        if (player.state.active) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+int Combatants::livingPlayerCount() const
+{
+    int count = 0;
+    for (const Player &player : players_) {
+        if (player.state.active && player.state.alive) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool Combatants::hasPlayer(int playerId) const
+{
+    for (const Player &player : players_) {
+        if (player.state.active && player.state.playerId == playerId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+Player &Combatants::playerById(int playerId)
+{
+    for (Player &player : players_) {
+        if (player.state.active && player.state.playerId == playerId) {
+            return player;
+        }
+    }
+    return players_.front();
+}
+
+const Player &Combatants::playerById(int playerId) const
+{
+    for (const Player &player : players_) {
+        if (player.state.active && player.state.playerId == playerId) {
+            return player;
+        }
+    }
+    return players_.front();
+}
+
+Player &Combatants::playerAt(int index)
+{
+    const int clamped = std::clamp(index, 0, int(players_.size()) - 1);
+    return players_[size_t(clamped)];
+}
+
+const Player &Combatants::playerAt(int index) const
+{
+    const int clamped = std::clamp(index, 0, int(players_.size()) - 1);
+    return players_[size_t(clamped)];
+}
+
+const Player &Combatants::nearestLivingPlayer(const Math::Vec2 &from) const
+{
+    const Player *best = nullptr;
+    float bestDistance = std::numeric_limits<float>::max();
+    for (const Player &player : players_) {
+        if (!player.state.active || !player.state.alive) {
+            continue;
+        }
+        const float distance = from.distanceSquaredTo(player.state.pos);
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            best = &player;
+        }
+    }
+    if (best != nullptr) {
+        return *best;
+    }
+    // 没有存活玩家：退回第一架 active 飞机（快照/绘制仍需要目标/引用）。
+    for (const Player &player : players_) {
+        if (player.state.active) {
+            return player;
+        }
+    }
+    return players_.front();
+}
+
+bool Combatants::isLocalPlayer(int playerId) const
+{
+    if (localPlayerId_ > 0) {
+        return localPlayerId_ == playerId;
+    }
+    // 0/负数：没有明确的本地视角（单机/服务端）→ 第一架飞机算本地。
+    for (const Player &player : players_) {
+        if (player.state.active) {
+            return player.state.playerId == playerId;
+        }
+    }
+    return false;
+}
+
+bool Combatants::removePlayer(int playerId)
+{
+    for (Player &player : players_) {
+        if (!player.state.active || player.state.playerId != playerId) {
+            continue;
+        }
+        player.state.active = false;
+        player.state.alive = false;
+        player.input = InputState{};
+        return true;
+    }
+    return false;
+}
+
 void Combatants::writeSnapshot(net::Snapshot &out) const
 {
-    const PlayerState &state = player_.state;
-    net::PlayerSnapshot &player = out.player;
-    player.pos = state.pos;
-    player.vel = state.vel;
-    player.dashDir = state.dashDir;
-    player.muzzlePos = state.muzzlePos;
-    player.radius = state.radius;
-    player.speed = state.speed;
-    player.maxHp = state.maxHp;
-    player.hp = state.hp;
-    player.hpDisplay = state.hpDisplay;
-    player.damage = state.damage;
-    player.fireCd = state.fireCd;
-    player.shotTimer = state.shotTimer;
-    player.bulletSpeed = state.bulletSpeed;
-    player.multishot = state.multishot;
-    player.pierce = state.pierce;
-    player.critChance = state.critChance;
-    player.shockLevel = state.shockLevel;
-    player.dashCdMax = state.dashCdMax;
-    player.dashCd = state.dashCd;
-    player.dashTime = state.dashTime;
-    player.dashBuffer = state.dashBuffer;
-    player.invuln = state.invuln;
-    player.fireFlash = state.fireFlash;
-    player.aim = state.aim;
-    player.alive = state.alive;
-    player.spawnPulse = state.spawnPulse;
+    out.players.clear();
+    out.players.reserve(players_.size());
+    for (const Player &player : players_) {
+        if (!player.state.active) {
+            continue;
+        }
+        const PlayerState &state = player.state;
+        net::PlayerSnapshot data;
+        data.playerId = state.playerId;
+        data.color = state.color;
+        data.pos = state.pos;
+        data.vel = state.vel;
+        data.dashDir = state.dashDir;
+        data.muzzlePos = state.muzzlePos;
+        data.radius = state.radius;
+        data.speed = state.speed;
+        data.maxHp = state.maxHp;
+        data.hp = state.hp;
+        data.hpDisplay = state.hpDisplay;
+        data.damage = state.damage;
+        data.fireCd = state.fireCd;
+        data.shotTimer = state.shotTimer;
+        data.bulletSpeed = state.bulletSpeed;
+        data.multishot = state.multishot;
+        data.pierce = state.pierce;
+        data.critChance = state.critChance;
+        data.shockLevel = state.shockLevel;
+        data.dashCdMax = state.dashCdMax;
+        data.dashCd = state.dashCd;
+        data.dashTime = state.dashTime;
+        data.dashBuffer = state.dashBuffer;
+        data.invuln = state.invuln;
+        data.fireFlash = state.fireFlash;
+        data.aim = state.aim;
+        data.alive = state.alive;
+        data.active = state.active;
+        data.spawnPulse = state.spawnPulse;
+        data.respawnTimer = state.respawnTimer;
+        out.players.push_back(std::move(data));
+    }
 
     out.enemies.clear();
     out.enemies.reserve(enemies_.size());
@@ -271,35 +460,48 @@ void Combatants::writeSnapshot(net::Snapshot &out) const
 
 void Combatants::applySnapshot(const net::Snapshot &snapshot)
 {
-    const net::PlayerSnapshot &player = snapshot.player;
-    PlayerState &state = player_.state;
-    state.pos = player.pos;
-    state.vel = player.vel;
-    state.dashDir = player.dashDir;
-    state.muzzlePos = player.muzzlePos;
-    state.radius = player.radius;
-    state.speed = player.speed;
-    state.maxHp = player.maxHp;
-    state.hp = player.hp;
-    state.hpDisplay = player.hpDisplay;
-    state.damage = player.damage;
-    state.fireCd = player.fireCd;
-    state.shotTimer = player.shotTimer;
-    state.bulletSpeed = player.bulletSpeed;
-    state.multishot = player.multishot;
-    state.pierce = player.pierce;
-    state.critChance = player.critChance;
-    state.shockLevel = player.shockLevel;
-    state.dashCdMax = player.dashCdMax;
-    state.dashCd = player.dashCd;
-    state.dashTime = player.dashTime;
-    state.dashBuffer = player.dashBuffer;
-    state.invuln = player.invuln;
-    state.fireFlash = player.fireFlash;
-    state.aim = player.aim;
-    state.alive = player.alive;
-    state.spawnPulse = player.spawnPulse;
-    player_.input = InputState{};
+    localPlayerId_ = snapshot.localPlayerId;
+    if (!snapshot.players.empty()) {
+        players_.clear();
+        players_.reserve(snapshot.players.size());
+        for (const net::PlayerSnapshot &data : snapshot.players) {
+            Player player;
+            PlayerState &state = player.state;
+            state.playerId = data.playerId;
+            state.color = data.color;
+            state.pos = data.pos;
+            state.vel = data.vel;
+            state.dashDir = data.dashDir;
+            state.muzzlePos = data.muzzlePos;
+            state.radius = data.radius;
+            state.speed = data.speed;
+            state.maxHp = data.maxHp;
+            state.hp = data.hp;
+            state.hpDisplay = data.hpDisplay;
+            state.damage = data.damage;
+            state.fireCd = data.fireCd;
+            state.shotTimer = data.shotTimer;
+            state.bulletSpeed = data.bulletSpeed;
+            state.multishot = data.multishot;
+            state.pierce = data.pierce;
+            state.critChance = data.critChance;
+            state.shockLevel = data.shockLevel;
+            state.dashCdMax = data.dashCdMax;
+            state.dashCd = data.dashCd;
+            state.dashTime = data.dashTime;
+            state.dashBuffer = data.dashBuffer;
+            state.invuln = data.invuln;
+            state.fireFlash = data.fireFlash;
+            state.aim = data.aim;
+            state.alive = data.alive;
+            state.active = data.active;
+            state.spawnPulse = data.spawnPulse;
+            state.respawnTimer = data.respawnTimer;
+            player.input = InputState{};
+            player.spawnPos = data.pos;
+            players_.push_back(std::move(player));
+        }
+    }
 
     enemies_.clear();
     enemies_.reserve(snapshot.enemies.size());
