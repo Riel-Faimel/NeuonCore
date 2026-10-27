@@ -275,7 +275,7 @@ public:
 
 **会话与玩家（阶段 3.5）**：Hello 时服务端给每个 welcomed 会话分配稳定的 `playerId`/slot（1–4，房间满时拒绝第 5 个连接），Welcome 把它回给客户端。`startMatch()` 把当时所有 welcomed 会话的 playerId 组成这一局的 roster，调用 `GameSimulation::setPlayers()` 生成同样数量的玩家飞机（1 架时保持原单机行为，2–4 架时按 slot 使用不同出生点/颜色）。每个 TCP 会话的 `Input` 只应用到自己的飞机：`handleInput()` 先校验 `session.playerId`、`inMatch` 和 `simulation->hasPlayer()`，观战者/未知会话直接忽略；`InputCommand.playerId` 只供 stdio 宿主选择目标，TCP 客户端传什么都不会改变目标飞机。暂停/选强化是整局共享动作，只接受 leader（最小 active playerId）。`broadcastSnapshot()` 每帧只提取一次世界，编码前按会话把 `Snapshot.localPlayerId` 覆盖成各自的 playerId（观战者为 0），避免每个客户端复制整份世界。会话在对局中掉线时 `onDisconnected()` 调用 `GameSimulation::removePlayer()`，只把那一架飞机标记为非 active 并从后续快照移除，其他玩家继续；全部玩家都离开时模拟判负并结束对局。开局后才加入的会话保持自己的 playerId，但这一局没有飞机，是观战者；单机内嵌路径在握手完成前就 startMatch（roster 回退为 {1}），因此握手完成后允许尚未被占用的 slot 接管对应飞机。
 
-`menu::Match` 默认是 `Mode::Network`：host 为空时在 127.0.0.1 上 `listen(0)` 启动内嵌 `GameServer` 并立即 `startMatch()`（单机/标准路径），`--connect host:port` 则连接远端并进入房间、等待房主开始；同一房间的 2–4 个会话各自控制自己的飞机（颜色/出生点不同），开局后加入的会话是观战者。`Mode::Host` 是自定义“局域网主机”：在 `0.0.0.0:<port>` 上开房、只创建 `GameClient` 回环连接，不调用 `startMatch()`；房主在 `Room` 按 `ENTER` 时 `Match::startRoomMatch()` 直接调用本地 `GameServer::startMatch()`（把当前所有 welcomed 会话组成 roster），按 `X` 时 `Match::dissolveRoom()` 关闭服务端并通知客户端。`Mode::Local` 保留本地直连 `Games` 路径，供 `SelfTest`、`--local` 回退和自定义单机直接开局。`--server --port N` 在 `QCoreApplication` 里只启动 `GameServer`，没有窗口/字体/音频。
+`menu::Match` 默认是 `Mode::Network`：host 为空时在 127.0.0.1 上 `listen(0)` 启动内嵌 `GameServer` 并立即 `startMatch()`（单机/标准路径），`--connect host:port` 则连接远端并进入房间、等待房主开始；同一房间的 2–4 个会话各自控制自己的飞机（颜色/出生点不同），开局后加入的会话是观战者。`Mode::Host` 是自定义“局域网主机”：在 `0.0.0.0:<port>` 上开房、只创建 `GameClient` 回环连接，不调用 `startMatch()`；房主在 `Room` 按 `ENTER` 时 `Match::startRoomMatch()` 直接调用本地 `GameServer::startMatch()`（把当前所有 welcomed 会话组成 roster），按 `X` 时 `Match::dissolveRoom()` 关闭服务端并通知客户端。`Mode::Local` 保留本地直连 `Games` 路径，供 `SelfTest`、`--local` 回退和自定义单机直接开局。`NeonCoreServer --port N`（独立源树入口）在 `QCoreApplication` 里只启动 `GameServer`，没有窗口/字体/音频。
 
 `net::Snapshot` 的全部结构默认生成 `operator==`，roundtrip 测试逐字段比较；`serializeSnapshot / encodeSnapshotMessage` 用 `QDataStream`（小端、Qt 6 版本），长度字段和版本字段都由 `Protocol.h` 的辅助函数校验。TCP 集成测试覆盖 Hello/Welcome、宿主本地 StartMatch、输入命令、权威位移、快照重建、双客户端广播、端口占用、协议版本不匹配、断线与重连调度；TCP StartMatch 被拒绝。多玩家测试覆盖：两个会话在开局前各自拿到不同 playerId/slot，开局后快照同时包含两架飞机且每个客户端的 `localPlayerId`/`GameView::playerState()` 指向自己的飞机；只有发送者的飞机移动，另一方不动；开局后加入的会话 `localPlayerId==0`，其输入被忽略；一个玩家对局中掉线只移除那一架飞机、其余玩家继续，服务器不崩溃；直接调用 `GameSimulation` 的测试覆盖不同出生点/颜色、未知 playerId 忽略、序列化后的多玩家快照、阵亡等待复活、全灭判负和单机路径不变。房间测试另外覆盖：主机 `ENTER` 只进房不开局、服务端权威人数与成员槽位、加入者显示同一房间、房主 `ENTER` 本地开局、双方进入对局、解散关闭服务端并让加入者进入带重试/返回的失败页，以及连接不存在的服务器时显示“无法连接服务器”。
 
@@ -430,7 +430,7 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
                ├─ menu::Depot ────────► ShopService（buyMine）+ 只读钱包/库存
                └─ menu::Settings ─────► BaseService 音量接口 + 配置存储
 
---server 模式:
+NeonCoreServer 模式:
 QCoreApplication ──► server::GameServer ──► games::GameSimulation ──► Arena / Waves / Upgrades
                                            ├─ net::Snapshot / Event / MatchEnd
                                            └─ ShopService.score()（本局统计）
@@ -472,7 +472,7 @@ GameWindow::tick()
 │  │          └─ Playing/Upgrade/Paused/Victory/Defeat 同前
 │  └─ Result: menu::Match 继续 update 退场表现
 │
-│  server::GameServer（主线程 QTimer 或独立 --server 进程）
+│  server::GameServer（主线程 QTimer 或独立 NeonCoreServer 进程）
 │  └─ 固定 60Hz：GameSimulation::update(1/60) → Snapshot/Event 广播 → MatchEnd
 ├─ BaseService.pointerUpdate(dt)   ← 指针独立时钟，暂停时也推进
 ├─ Menu::render()

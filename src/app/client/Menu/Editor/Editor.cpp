@@ -797,7 +797,9 @@ void Editor::render(QPainter &painter, bool muted) const
     const QString footer =
         mode_ == Mode::Join
             ? QStringLiteral("点击字段输入  ·  BACKSPACE 删除  ·  ENTER 连接  ·  ESC 返回")
-            : QStringLiteral("F1 / F2 / F3 切换选项卡  ·  TAB 循环  ·  1–9 / 0 添加敌人  ·  ENTER 按当前选项卡开始  ·  ESC 返回");
+            : (mode_ == Mode::Host
+                   ? QStringLiteral("F1 / F2 / F3 切换选项卡  ·  TAB 循环  ·  1–9 / 0 添加敌人  ·  ENTER 进入房间  ·  ESC 返回")
+                   : QStringLiteral("F1 / F2 / F3 切换选项卡  ·  TAB 循环  ·  1–9 / 0 添加敌人  ·  ENTER 开始  ·  ESC 返回"));
     Base::text(painter, Base::tinyFont(), footer, QColor(105, 138, 158),
                {GameConfig::ScreenWidth / 2.0f, GameConfig::ScreenHeight - 24.0f},
                QStringLiteral("center"), 170);
@@ -952,7 +954,7 @@ void Editor::drawModeHint(QPainter &painter) const
         hint = QStringLiteral("单机：编辑台本并直接开始，不开放端口");
         break;
     case Mode::Host:
-        hint = QStringLiteral("局域网主机：编辑台本，服务器端口在波次下方设置");
+        hint = QStringLiteral("局域网主机：编辑台本、设置端口，ENTER 创建房间");
         break;
     case Mode::Join:
         hint = QStringLiteral("加入主机：填写主机地址与端口，连接后由主机推进台本");
@@ -1015,7 +1017,10 @@ void Editor::drawActions(QPainter &painter) const
                    QStringLiteral("删除末波"), tint, false, waveCount() > 1);
     }
     drawButton(painter, deployRect(), QStringLiteral("ENTER"),
-               mode_ == Mode::Join ? QStringLiteral("连接") : QStringLiteral("部署"),
+               mode_ == Mode::Join
+                   ? QStringLiteral("连接")
+                   : (mode_ == Mode::Host ? QStringLiteral("进入房间")
+                                          : QStringLiteral("开始")),
                tint, true, startValid());
     drawButton(painter, backRect(), QStringLiteral("ESC"), QStringLiteral("返回"),
                tint, false, true);
@@ -1392,7 +1397,7 @@ void Editor::drawInspector(QPainter &painter) const
     }
 
     Base::text(painter, Base::tinyFont(),
-               QStringLiteral("↑↓ 选择波次  ·  ←→ 选择列  ·  ENTER 部署"),
+               QStringLiteral("↑↓ 选择波次  ·  ←→ 选择列  ·  ENTER 开始 / 进入房间"),
                Base::Muted, {Left + 24.0f, float(rect.bottom()) - 17.0f},
                QStringLiteral("midleft"), 180);
 
