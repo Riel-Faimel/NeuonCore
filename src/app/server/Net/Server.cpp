@@ -153,7 +153,7 @@ void GameServer::close()
         }
     }
     sessions_.clear();
-    controlSocket_ = nullptr;
+    controllerSocket_ = nullptr;
     simulation_.reset();
     snapshot_.clear();
     matchEndSent_ = false;
@@ -209,8 +209,8 @@ void GameServer::onReadyRead(QTcpSocket *socket)
 
 void GameServer::onDisconnected(QTcpSocket *socket)
 {
-    if (controlSocket_ == socket) {
-        controlSocket_ = nullptr;
+    if (controllerSocket_ == socket) {
+        controllerSocket_ = nullptr;
     }
     sessions_.remove(socket);
     socket->deleteLater();
@@ -246,7 +246,8 @@ void GameServer::handleFrame(QTcpSocket *socket, const QByteArray &frame)
         handleHello(socket, frame);
         break;
     case net::MessageType::StartMatch:
-        handleStartMatch(socket, frame);
+        // 控制面禁用网络：只有本地宿主（内嵌 Match / stdio）能开局。
+        reject(socket, QStringLiteral("StartMatch is local-only; use the server host"));
         break;
     case net::MessageType::Input:
         handleInput(socket, frame);
@@ -274,34 +275,43 @@ void GameServer::handleHello(QTcpSocket *socket, const QByteArray &frame)
     }
     it->hello = true;
     it->welcomed = true;
+    if (controllerSocket_ == nullptr) {
+        // 第一个连接到本地内嵌服务端的客户端是主控玩家；后续客户端只读。
+        controllerSocket_ = socket;
+    }
     sendWelcome(socket, true, QString());
 }
 
-void GameServer::handleStartMatch(QTcpSocket *socket, const QByteArray &frame)
+bool GameServer::startMatch(const games::GameSimulation::Level &level, QString *error)
 {
-    net::StartMatchMessage request;
-    QString error;
-    if (!net::decodeStartMatch(frame, &request, &error)) {
-        reject(socket, error);
-        return;
+    if (level.script.empty()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("start match carries no waves");
+        }
+        return false;
     }
 
-    // 已经有一局在跑时，后来的 StartMatch 只当作“加入观战”，不重置比赛。
-    if (simulation_ != nullptr
-        && simulation_->state() != games::GameSimulation::State::Victory
-        && simulation_->state() != games::GameSimulation::State::Defeat) {
-        return;
-    }
-    startMatch(socket, request);
+    auto simulation = std::make_unique<ServerSimulation>(level);
+    simulation->onEvent = [this](const net::EventMessage &event) {
+        broadcastEvent(event);
+    };
+    simulation_ = std::move(simulation);
+    matchEndSent_ = false;
+
+    // 服务端是比分/波次的权威：每局开始时重置本局统计，击杀由 Arena 写回 ShopService。
+    ShopService.score().beginRun();
+
+    tickClock_.start();
+    accumulator_ = 0.0;
+    simulation_->start();
+    simulation_->writeSnapshot(snapshot_);
+    broadcastSnapshot();
+    tickTimer_.start();
+    return true;
 }
 
-void GameServer::startMatch(QTcpSocket *socket, const net::StartMatchMessage &request)
+bool GameServer::startMatchMessage(const net::StartMatchMessage &request, QString *error)
 {
-    if (request.waves.empty()) {
-        sendMatchEnd(socket, QStringLiteral("start match carries no waves"));
-        return;
-    }
-
     games::GameSimulation::Level level;
     level.name = request.levelName.isEmpty() ? QStringLiteral("网络对局")
                                              : request.levelName;
@@ -327,32 +337,72 @@ void GameServer::startMatch(QTcpSocket *socket, const net::StartMatchMessage &re
         }
     }
     if (level.script.empty()) {
-        sendMatchEnd(socket, QStringLiteral("start match has no valid enemy spawns"));
-        return;
+        if (error != nullptr) {
+            *error = QStringLiteral("start match has no valid enemy spawns");
+        }
+        return false;
     }
+    return startMatch(level, error);
+}
 
-    auto simulation = std::make_unique<ServerSimulation>(level);
-    simulation->onEvent = [this](const net::EventMessage &event) {
-        broadcastEvent(event);
-    };
-    simulation_ = std::move(simulation);
-    controlSocket_ = socket;
-    matchEndSent_ = false;
-
-    // 服务端是比分/波次的权威：每局开始时重置本局统计，击杀由 Arena 写回 ShopService。
-    ShopService.score().beginRun();
-
-    tickClock_.start();
-    accumulator_ = 0.0;
-    simulation_->start();
-    simulation_->writeSnapshot(snapshot_);
-    broadcastSnapshot();
-    tickTimer_.start();
+bool GameServer::handleControlFrame(const QByteArray &frame, QString *error)
+{
+    net::MessageHeader header;
+    QByteArray payload;
+    QString decodeError;
+    if (!net::decodeFrame(frame, &header, &payload, &decodeError)) {
+        if (error != nullptr) {
+            *error = decodeError;
+        }
+        return false;
+    }
+    if (header.version != net::kProtocolVersion) {
+        if (error != nullptr) {
+            *error = QStringLiteral("protocol version mismatch");
+        }
+        return false;
+    }
+    switch (header.type) {
+    case net::MessageType::StartMatch: {
+        net::StartMatchMessage request;
+        if (!net::decodeStartMatch(frame, &request, &decodeError)) {
+            if (error != nullptr) {
+                *error = decodeError;
+            }
+            return false;
+        }
+        if (simulation_ != nullptr
+            && simulation_->state() != games::GameSimulation::State::Victory
+            && simulation_->state() != games::GameSimulation::State::Defeat) {
+            if (error != nullptr) {
+                *error = QStringLiteral("match already running");
+            }
+            return false;
+        }
+        return startMatchMessage(request, error);
+    }
+    case net::MessageType::Input: {
+        net::InputCommand command;
+        if (!net::decodeInputMessage(frame, &command, &decodeError)) {
+            if (error != nullptr) {
+                *error = decodeError;
+            }
+            return false;
+        }
+        applyInput(command);
+        return true;
+    }
+    default:
+        if (error != nullptr) {
+            *error = QStringLiteral("unsupported stdio control message");
+        }
+        return false;
+    }
 }
 
 void GameServer::handleInput(QTcpSocket *socket, const QByteArray &frame)
 {
-    if (simulation_ == nullptr || socket != controlSocket_) {
+    if (simulation_ == nullptr || socket != controllerSocket_) {
         return;
     }
     net::InputCommand command;
@@ -361,7 +411,14 @@ void GameServer::handleInput(QTcpSocket *socket, const QByteArray &frame)
         // 单条坏输入不踢掉整个会话；忽略并保留连接。
         return;
     }
+    applyInput(command);
+}
 
+void GameServer::applyInput(const net::InputCommand &command)
+{
+    if (simulation_ == nullptr) {
+        return;
+    }
     arena::InputState input;
     input.moveAxis = {std::clamp(command.moveX, -1.0f, 1.0f),
                       std::clamp(command.moveY, -1.0f, 1.0f)};

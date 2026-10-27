@@ -3,7 +3,6 @@
 #include "Data/GameData.h"
 #include "Loadout/Loadout.h"
 #include "Net/Protocol.h"
-#include "Net/Server.h"
 #include "Shop/Shop.h"
 
 #include <QApplication>
@@ -308,7 +307,7 @@ int main(int argc, char *argv[])
     auto usage = [] {
         std::fprintf(stderr,
                      "usage: NeonCore [--local] [--connect host:port]\n"
-                     "       NeonCore --server [--port 7777]\n"
+                     "       NeonCoreServer --port 7777   (stdio control)\n"
                      "       NeonCoreConsole --smoke-test | --capture DIR | --bench\n");
     };
     if (showHelp) {
@@ -329,21 +328,12 @@ int main(int argc, char *argv[])
         return 2;
     }
 
-    // 独立服务端：不需要 GUI / 字体 / 音频，只跑 QCoreApplication + 60Hz 模拟。
+    // 服务端是独立进程，控制面走 stdio；GUI 客户端不再内嵌 server 模式。
     if (serverMode) {
-        QCoreApplication app(argc, argv);
-        QCoreApplication::setApplicationName(QStringLiteral("NeonCore"));
-        QCoreApplication::setOrganizationName(QStringLiteral("NeonCore"));
-        server::GameServer gameServer;
-        QString error;
-        if (!gameServer.listen(serverPort, false, &error)) {
-            std::fprintf(stderr, "SERVER ERROR: %s\n", error.toUtf8().constData());
-            return 1;
-        }
-        std::printf("NEON CORE server listening on port %u (tick %d Hz)\n",
-                    unsigned(gameServer.port()), gameServer.tickRate());
-        std::fflush(stdout);
-        return app.exec();
+        std::fprintf(stderr,
+                     "SERVER MODE MOVED: use NeonCoreServer.exe --port %u\n",
+                     unsigned(serverPort));
+        return 2;
     }
 
 #ifdef DEBUG

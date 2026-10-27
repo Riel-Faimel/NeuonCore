@@ -3,6 +3,7 @@
 #include "Net/Messages.h"
 #include "Net/Protocol.h"
 #include "Net/Snapshot.h"
+#include "Games/Simulation/GameSimulation.h"
 
 #include <QByteArray>
 #include <QElapsedTimer>
@@ -54,6 +55,11 @@ public:
     bool running() const { return simulation_ != nullptr; }
     const net::Snapshot &snapshot() const { return snapshot_; }
 
+    // 控制面：只允许本地宿主（内嵌 Match / 独立服务端 stdio）调用。
+    // TCP 客户端只能收快照，不能 StartMatch、暂停、选强化或控制服务器。
+    bool startMatch(const games::GameSimulation::Level &level, QString *error = nullptr);
+    bool handleControlFrame(const QByteArray &frame, QString *error = nullptr);
+
 private:
     static constexpr int kTickRate = 60;
 
@@ -72,10 +78,10 @@ private:
 
     void handleFrame(QTcpSocket *socket, const QByteArray &frame);
     void handleHello(QTcpSocket *socket, const QByteArray &frame);
-    void handleStartMatch(QTcpSocket *socket, const QByteArray &frame);
     void handleInput(QTcpSocket *socket, const QByteArray &frame);
-
-    void startMatch(QTcpSocket *socket, const net::StartMatchMessage &request);
+    void applyInput(const net::InputCommand &command);
+    bool startMatchMessage(const net::StartMatchMessage &request, QString *error);
+    void startMatchSocket(QTcpSocket *socket, const net::StartMatchMessage &request);
     void sendWelcome(QTcpSocket *socket, bool accepted, const QString &reason);
     void sendMatchEnd(QTcpSocket *socket, const QString &reason);
     void reject(QTcpSocket *socket, const QString &reason);
@@ -90,7 +96,7 @@ private:
     QHash<QTcpSocket *, Session> sessions_;
     std::unique_ptr<games::GameSimulation> simulation_;
     net::Snapshot snapshot_;
-    QTcpSocket *controlSocket_ = nullptr;
+    QTcpSocket *controllerSocket_ = nullptr;
     quint32 nextSessionId_ = 1;
     int rejectedClients_ = 0;
     bool matchEndSent_ = false;

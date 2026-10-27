@@ -38,8 +38,6 @@ public:
     bool connectToHost(const QString &host, quint16 port);
     void close();
     void setAutoReconnect(bool enabled);
-    // 连接/握手完成后发送 StartMatch；在 Welcome 之前调用会先记下来。
-    void startMatch(const games::GameSimulation::Level &level);
 
     void update(float dt);
     void render();
@@ -57,7 +55,7 @@ public:
     bool sendInput(const net::InputCommand &command);
 
     bool welcomed() const { return welcomed_; }
-    bool matchActive() const { return matchRequested_ && snapshotCount_ > 0; }
+    bool matchActive() const { return snapshotCount_ > 0; }
     bool failed() const { return failed_; }
     bool matchEnded() const { return matchEnded_; }
     bool autoReconnect() const { return autoReconnect_; }
@@ -91,8 +89,6 @@ private:
     void handleMatchEnd(const QByteArray &frame);
 
     void sendHello();
-    void sendStartMatch();
-    QByteArray buildStartMatch() const;
     arena::InputState localInput() const;
     void applyEvent(const net::EventMessage &event);
     void scheduleReconnect();
@@ -107,7 +103,6 @@ private:
     games::Renderer renderer_;
     net::Snapshot lastSnapshot_;
     net::MatchEndMessage matchEnd_;
-    games::GameSimulation::Level pendingLevel_;
 
     QString host_;
     quint16 port_ = 0;
@@ -117,9 +112,7 @@ private:
     int snapshotCount_ = 0;
     int reconnectAttempts_ = 0;
 
-    bool hasPendingStart_ = false;
-    bool matchRequested_ = false;
-    bool welcomed_ = false;
+    bool matchRequested_ = false;    bool welcomed_ = false;
     bool failed_ = false;
     bool matchEnded_ = false;
     bool autoReconnect_ = false;

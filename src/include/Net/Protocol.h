@@ -25,8 +25,8 @@ inline constexpr quint32 kMaxSnapshotItems = 100000u;
 enum class MessageType : quint16 {
     Hello = 1,        // C→S：协议版本、客户端版本
     Welcome = 2,      // S→C：会话 id、tick rate、是否接受加入
-    StartMatch = 3,   // C→S：关卡 id / 自定义台本（类型用数据 key）
-    Input = 4,        // C→S：按键、鼠标、冲刺、布雷
+    StartMatch = 3,   // 宿主→S（stdio/本地）：关卡 id / 自定义台本（类型用数据 key）
+    Input = 4,        // C→S（仅主控会话）/ stdio：按键、鼠标、冲刺、布雷
     Snapshot = 5,     // S→C：世界快照
     Event = 6,        // S→C：音效、横幅、震屏/闪屏等表现事件
     MatchEnd = 7,     // S→C：胜负、统计、可重试

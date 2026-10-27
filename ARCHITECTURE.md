@@ -271,11 +271,11 @@ public:
 | `client::GameView` | `src/app/client/Client/GameView.*` | 把快照应用回一个只读 `Arena` 镜像：按 dataKey 重建敌人/传送门，填充绘制字段；不推进模拟 |
 | `games::Renderer` | `src/app/client/Games/Renderer/*` | 只读 `GameView` 画世界层/HUD/强化卡/暂停；世界绘制仍走 `Arena::draw()`，没有第二套画法 |
 
-服务端只拥有模拟，不链接/使用 Renderer、Menu 或 `BaseService` 的键鼠状态；`GameSimulation::Level` 里的台本经 `StartMatch` 从客户端提交，敌人类型在协议边界转成 `dataKey`。服务端用 `QElapsedTimer` 累加固定 1/60s 步长，每个 tick 后 `writeSnapshot()` 并广播；`ShopService.score().beginRun()` 在开局时重置本局统计，击杀仍由 `Arena::Events` 写回，因此比分/波次/胜负以服务端为准。表现事件（波次横幅、Boss 击破、震屏/闪屏、胜利/失败）通过 `Event` 消息发送，由客户端 `GameClient` 调用本地 `Renderer` 和音效；客户端不回传世界状态。
+服务端只拥有模拟，不链接/使用 Renderer、Menu 或 `BaseService` 的键鼠状态；`GameSimulation::Level` 里的台本由**本地宿主**通过 `GameServer::startMatch()` 或 `NeonCoreServer` 的 stdin 控制帧提交，TCP 客户端不能发 `StartMatch`。服务端用 `QElapsedTimer` 累加固定 1/60s 步长，每个 tick 后 `writeSnapshot()` 并广播；`ShopService.score().beginRun()` 在开局时重置本局统计，击杀仍由 `Arena::Events` 写回，因此比分/波次/胜负以服务端为准。表现事件（波次横幅、Boss 击破、震屏/闪屏、胜利/失败）通过 `Event` 消息发送，由客户端 `GameClient` 调用本地 `Renderer` 和音效；客户端不回传世界状态。
 
 `menu::Match` 默认是 `Mode::Network`：host 为空时在 127.0.0.1 上 `listen(0)` 启动内嵌 `GameServer`，再让 `GameClient` 连它的实际端口；`--connect host:port` 则连接远端。两条路径使用同一个协议和同一份快照。`Mode::Local` 保留本地直连 `Games` 路径，供 `SelfTest` 和 `--local` 回退。`--server --port N` 在 `QCoreApplication` 里只启动 `GameServer`，没有窗口/字体/音频。
 
-`net::Snapshot` 的全部结构默认生成 `operator==`，roundtrip 测试逐字段比较；`serializeSnapshot / encodeSnapshotMessage` 用 `QDataStream`（小端、Qt 6 版本），长度字段和版本字段都由 `Protocol.h` 的辅助函数校验。TCP 集成测试覆盖 Hello/Welcome、StartMatch、输入命令、权威位移、快照重建、双客户端广播、端口占用、协议版本不匹配、断线与重连调度。
+`net::Snapshot` 的全部结构默认生成 `operator==`，roundtrip 测试逐字段比较；`serializeSnapshot / encodeSnapshotMessage` 用 `QDataStream`（小端、Qt 6 版本），长度字段和版本字段都由 `Protocol.h` 的辅助函数校验。TCP 集成测试覆盖 Hello/Welcome、宿主本地 StartMatch、输入命令、权威位移、快照重建、双客户端广播、端口占用、协议版本不匹配、断线与重连调度；TCP StartMatch 被拒绝。
 
 ### lib / include / tests
 
@@ -632,7 +632,7 @@ GPU 加速没有采用：当前是 `QImage` + `QPainter` 光栅管线，走 GPU 
 - `net::Snapshot` 只含数据：敌人/传送门类型用注册表的 `dataKey` 字符串，`std::type_index` 不出现在协议里；帧格式是 `[u32 length][u16 type][u16 version][payload]`，序列化用 `QDataStream`。
 - 服务端固定 60Hz tick 广播完整快照（目前不压缩、不插值）；单机回环会引入一个 tick/一帧左右的延迟，远端高延迟下的插值/预测留到阶段 4。
 - `Player` 只读 `InputState`（`moveAxis / mouseActive / mousePosition / shooting / dashRequested`）；客户端把同样的字段封成 `net::InputCommand`，服务端校验后写回 `GameSimulation::setInput()`，冲刺/暂停/布雷/强化选择都是服务端权威动作。
-- 阶段 3 的多个客户端共享同一局：首个发送 `StartMatch` 的会话拥有输入权，其他会话只收快照（观战）；真正的多玩家/输入隔离留到阶段 5。
+- 阶段 3 的多个客户端共享同一局：控制面 StartMatch 只来自本地宿主（内嵌 Match 或 stdio）；网络侧只有第一个连接拥有输入权（含暂停/选强化），其他会话只收快照（观战）；真正的多玩家/输入隔离留到阶段 5。
 - 钱包/库存仍是阶段 3 的过渡状态：击杀和本局比分由服务端模拟写 `ShopService`（单机同进程所以立即可见）；远端客户端的本地钱包/地雷库存没有同步，服务端只接受布雷意图，阶段 4 再改成服务端权威并回执。
 - `Arena` 的玩家状态对 `games::Upgrades` 开放写权限（`Arena::playerState()`），不再需要模块间 friend。
 - `Arena` 的 5 个组件是它的私有基类：外部只看到 `Arena` 的公共接口；组件之间通过 `arena::Context` 注入的兄弟引用协作，组件 → 模块的反馈走 `arena::Host` 虚函数。

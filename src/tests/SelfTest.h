@@ -1041,7 +1041,8 @@ public:
                                QStringLiteral("TCP client starts connecting"));
             success &= require(pumpUntil([&] { return tcpClient.welcomed(); }, 3000),
                                QStringLiteral("TCP client completes Hello/Welcome handshake"));
-            tcpClient.startMatch(tcpLevel);
+            success &= require(tcpServer.startMatch(tcpLevel),
+                               QStringLiteral("host starts the authoritative match locally"));
             success &= require(pumpUntil([&] { return tcpClient.snapshotCount() > 0; }, 3000),
                                QStringLiteral("TCP client receives snapshots"));
             success &= require(tcpServer.clientCount() == 1
@@ -1080,6 +1081,33 @@ public:
             success &= require(tcpServer.clientCount() == 2,
                                QStringLiteral("server accepts two clients at once"));
 
+            // 控制面：本地 stdio 帧可以开局/输入；TCP 客户端不能开局。
+            server::GameServer stdioServer;
+            QString stdioError;
+            success &= require(stdioServer.listen(0, true, &stdioError),
+                               QStringLiteral("stdio control test server listens (%1)")
+                                   .arg(stdioError));
+            net::StartMatchMessage stdioStart;
+            stdioStart.levelName = QStringLiteral("stdio");
+            stdioStart.startWave = 1;
+            stdioStart.enemyLevel = 1;
+            net::StartMatchWave stdioWave;
+            stdioWave.spawns.push_back({QStringLiteral("drone"), 1});
+            stdioStart.waves.push_back(stdioWave);
+            success &= require(stdioServer.handleControlFrame(
+                                   net::encodeStartMatch(stdioStart), &stdioError),
+                               QStringLiteral("stdio StartMatch starts the authoritative match"));
+            net::InputCommand stdioInput;
+            stdioInput.moveX = 1.0f;
+            success &= require(stdioServer.handleControlFrame(
+                                   net::encodeInputMessage(stdioInput), &stdioError),
+                               QStringLiteral("stdio Input applies to the simulation"));
+            success &= require(pumpUntil([&] {
+                                   return stdioServer.snapshot().player.pos.x > 1.0f;
+                               }, 3000),
+                               QStringLiteral("stdio input moves the player"));
+            stdioServer.close();
+
             server::GameServer conflict;
             QString conflictError;
             success &= require(!conflict.listen(tcpServer.port(), true, &conflictError)
@@ -1103,6 +1131,35 @@ public:
                                QStringLiteral("server closes a client with a mismatched protocol"));
             success &= require(tcpServer.rejectedClients() >= 1,
                                QStringLiteral("protocol mismatch is rejected without crashing"));
+
+            // 控制面安全：TCP 客户端不能 StartMatch，即使已经 Hello。
+            QTcpSocket startProbe;
+            startProbe.connectToHost(QStringLiteral("127.0.0.1"), tcpServer.port());
+            pumpUntil([&] {
+                return startProbe.state() == QAbstractSocket::ConnectedState;
+            }, 2000);
+            net::HelloMessage probeHello;
+            probeHello.clientVersion = QStringLiteral("probe");
+            startProbe.write(net::encodeHello(probeHello));
+            startProbe.flush();
+            pumpUntil([&] { return startProbe.bytesAvailable() > 0; }, 2000);
+            net::StartMatchMessage intruderStart;
+            intruderStart.levelName = QStringLiteral("intruder");
+            intruderStart.startWave = 1;
+            intruderStart.enemyLevel = 1;
+            net::StartMatchWave intruderWave;
+            intruderWave.spawns.push_back({QStringLiteral("drone"), 99});
+            intruderStart.waves.push_back(intruderWave);
+            startProbe.write(net::encodeStartMatch(intruderStart));
+            startProbe.flush();
+            success &= require(pumpUntil([&] {
+                                   return startProbe.state()
+                                          == QAbstractSocket::UnconnectedState;
+                               }, 3000),
+                               QStringLiteral("server rejects TCP StartMatch from a client"));
+            success &= require(tcpServer.running()
+                                   && tcpServer.snapshot().waves.totalWaves == 1,
+                               QStringLiteral("TCP StartMatch cannot replace the host match"));
 
             tcpClient.close();
             watcher.close();

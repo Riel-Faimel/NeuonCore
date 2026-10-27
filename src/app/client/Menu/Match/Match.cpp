@@ -85,6 +85,13 @@ void Match::startNetwork(const Games::Level &level)
             error_ = client_->lastError();
             return;
         }
+        // 控制面不走 TCP：内嵌宿主直接开始对局；网络客户端只能收快照。
+        QString startError;
+        if (!server_->startMatch(level, &startError)) {
+            error_ = startError;
+            client_->setFatalError(startError);
+            return;
+        }
     } else {
         client_->setAutoReconnect(true);
         const quint16 port = port_ == 0 ? net::kDefaultPort : port_;
@@ -92,8 +99,8 @@ void Match::startNetwork(const Games::Level &level)
             error_ = client_->lastError();
             return;
         }
+        // 加入主机：控制权在主机/stdio，客户端不发送 StartMatch。
     }
-    client_->startMatch(level);
 }
 
 void Match::stop()

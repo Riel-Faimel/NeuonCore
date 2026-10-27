@@ -89,17 +89,6 @@ void GameClient::setAutoReconnect(bool enabled)
     }
 }
 
-void GameClient::startMatch(const games::GameSimulation::Level &level)
-{
-    pendingLevel_ = level;
-    hasPendingStart_ = true;
-    matchEnded_ = false;
-    matchEnd_.reason.clear();
-    if (welcomed_) {
-        sendStartMatch();
-    }
-}
-
 void GameClient::update(float dt)
 {
     if (view_.state() != net::RunState::Paused) {
@@ -330,9 +319,6 @@ void GameClient::handleWelcome(const QByteArray &frame)
     welcomed_ = true;
     reconnectAttempts_ = 0;
     lastError_.clear();
-    if (hasPendingStart_) {
-        sendStartMatch();
-    }
 }
 
 void GameClient::handleSnapshot(const QByteArray &frame)
@@ -384,50 +370,6 @@ void GameClient::sendHello()
     if (frame.isEmpty() || socket_.write(frame) == -1) {
         fail(QStringLiteral("cannot send hello"));
     }
-}
-
-void GameClient::sendStartMatch()
-{
-    if (!welcomed_ || !hasPendingStart_ || matchEnded_) {
-        return;
-    }
-    const QByteArray frame = buildStartMatch();
-    if (frame.isEmpty()) {
-        fail(QStringLiteral("cannot encode start match"));
-        return;
-    }
-    if (socket_.write(frame) == -1) {
-        fail(QStringLiteral("cannot send start match"));
-        return;
-    }
-    matchRequested_ = true;
-}
-
-QByteArray GameClient::buildStartMatch() const
-{
-    net::StartMatchMessage message;
-    message.levelName = pendingLevel_.name;
-    message.startWave = pendingLevel_.startWave;
-    message.enemyLevel = pendingLevel_.enemyLevel;
-    message.waves.reserve(pendingLevel_.script.size());
-    for (const games::Wave &wave : pendingLevel_.script) {
-        net::StartMatchWave waveData;
-        waveData.spawns.reserve(wave.enemies.size());
-        for (const games::EnemySpawn &spawn : wave.enemies) {
-            if (spawn.count <= 0) {
-                continue;
-            }
-            const QString key = arena::Enemy::dataKeyFor(spawn.type);
-            if (key.isEmpty()) {
-                continue;
-            }
-            waveData.spawns.push_back({key, spawn.count});
-        }
-        if (!waveData.spawns.empty()) {
-            message.waves.push_back(std::move(waveData));
-        }
-    }
-    return net::encodeStartMatch(message);
 }
 
 arena::InputState GameClient::localInput() const

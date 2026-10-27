@@ -48,7 +48,7 @@ NeonCoreServer.exe --port 7777
                         独立服务端（无窗口、60Hz 固定 tick）
 ```
 
-`build\NeonCoreServer.exe --port 7777` 是独立服务端，保留控制台输出，便于排查端口占用等问题；客户端内的 `--server` 模式仍然兼容，但独立二进制更适合联机。服务端只跑 `GameSimulation`（没有 Renderer / Menu / 输入采集），客户端只发 `Input` 意图、收 `Snapshot / Event / MatchEnd`，不向服务端回传世界状态。端口被占用、握手协议版本不匹配、客户端断线和重连失败都会返回错误并保持进程不崩溃。
+`build\NeonCoreServer.exe --port 7777` 是独立服务端，保留控制台输出，便于排查端口占用等问题；服务端模式已从 GUI 客户端移除，统一用 `NeonCoreServer.exe`。服务端只跑 `GameSimulation`（没有 Renderer / Menu / 输入采集）。控制面不走 TCP：`StartMatch` 只接受本地宿主（内嵌 `Match` 或 `NeonCoreServer` 的 stdin）；TCP 客户端只做 Hello / Input / 接收 `Snapshot / Event / MatchEnd`，不能开局或改服务器配置。独立服务端的 stdin 接受与 TCP 相同的 `[u32 length][payload]` 控制帧（`StartMatch` / `Input`），stdout 只输出启动日志；这样只有启动它的父进程能控制对局，网络客户端无法提交 `StartMatch`。端口被占用、握手协议版本不匹配、客户端断线和重连失败都会返回错误并保持进程不崩溃。
 
 ## 操作
 
@@ -344,7 +344,7 @@ mingw32-make -j12 test
 - 快照：完整场景提取 → QDataStream 序列化 → 反序列化，逐字段相等；帧长度/协议版本不匹配被拒绝
 - GameView：快照重建后的玩家/敌人/子弹/实体/HUD/强化卡/Boss 条正确，并能用现有 `Renderer` 画出完整一帧
 - 单机路径：`GameSimulation -> Snapshot -> GameView -> Renderer` 的视图与模拟状态一致
-- TCP 回环：真实 `QTcpServer/QTcpSocket` 握手、StartMatch、输入命令、权威模拟位移、快照重建、双客户端广播
+- TCP 回环：真实 `QTcpServer/QTcpSocket` 握手、宿主本地 StartMatch、输入命令、权威模拟位移、快照重建、双客户端广播；TCP StartMatch 被拒绝
 - 错误路径：端口占用、协议版本不匹配、客户端断线、连接失败/重连调度都不会崩溃
 - 内嵌单机：默认 `Menu` 网络路径启动 127.0.0.1 自动端口服务端并渲染一帧
 - 输出到当前目录的 `smoke.log`
