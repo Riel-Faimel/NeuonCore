@@ -7,7 +7,9 @@
 #include "Base/Base.h"
 #include "Client/GameView.h"
 #include "Data/GameData.h"
+#include "Net/Client.h"
 #include "Net/Protocol.h"
+#include "Net/Server.h"
 #include "Net/Snapshot.h"
 #include "Random.h"
 #include "Arena/Bullets/StandardBullet.h"
@@ -19,15 +21,21 @@
 #include "Arena/Combatants/Enemies/SpitterEnemy.h"
 #include "Arena/Combatants/Enemies/TankEnemy.h"
 
+#include <QAbstractSocket>
+#include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QEventLoop>
 #include <QFile>
 #include <QTextStream>
+#include <QThread>
+#include <QTcpSocket>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <memory>
 
 #ifdef DEBUG
@@ -163,7 +171,7 @@ public:
         log(QStringLiteral("Creating game (offscreen, audio %1)")
                 .arg(audioRequested ? QStringLiteral("enabled") : QStringLiteral("disabled")));
         LoadoutService.select(0);
-        Menu menu(audioRequested);
+        Menu menu(audioRequested, true);
         Games *game = nullptr;
         log(QStringLiteral("Audio initialized: %1")
                 .arg(menu.audioEnabled() ? QStringLiteral("yes") : QStringLiteral("no")));
@@ -958,6 +966,169 @@ public:
             menu.returnToMenu();
         }
 
+        log(QStringLiteral("TCP loopback"));
+        // 真实 QTcpServer/QTcpSocket 回环：握手、StartMatch、输入、快照广播。
+        auto pumpUntil = [](const std::function<bool()> &predicate, int timeoutMs) {
+            QElapsedTimer timer;
+            timer.start();
+            while (!predicate() && timer.elapsed() < timeoutMs) {
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+                QThread::msleep(1);
+            }
+            return predicate();
+        };
+
+        server::GameServer tcpServer;
+        QString tcpError;
+        const bool tcpListening = tcpServer.listen(0, true, &tcpError);
+        success &= require(tcpListening && tcpServer.port() != 0,
+                           QStringLiteral("TCP server listens on an automatic loopback port (%1)")
+                               .arg(tcpError));
+        if (tcpListening) {
+            Games::Level tcpLevel;
+            tcpLevel.name = QStringLiteral("TCP 回环测试");
+            tcpLevel.startWave = 1;
+            tcpLevel.enemyLevel = 1;
+            tcpLevel.script.push_back(games::Wave{{games::EnemySpawn{
+                arena::EnemyType(typeid(arena::DroneEnemy)), 1}}});
+
+            client::GameClient tcpClient;
+            success &= require(tcpClient.connectToHost(QStringLiteral("127.0.0.1"),
+                                                       tcpServer.port()),
+                               QStringLiteral("TCP client starts connecting"));
+            success &= require(pumpUntil([&] { return tcpClient.welcomed(); }, 3000),
+                               QStringLiteral("TCP client completes Hello/Welcome handshake"));
+            tcpClient.startMatch(tcpLevel);
+            success &= require(pumpUntil([&] { return tcpClient.snapshotCount() > 0; }, 3000),
+                               QStringLiteral("TCP client receives snapshots"));
+            success &= require(tcpServer.clientCount() == 1
+                                   && tcpServer.snapshot().waves.totalWaves == 1,
+                               QStringLiteral("server owns the authoritative match"));
+            success &= require(tcpClient.lastSnapshot().waves.totalWaves == 1
+                                   && tcpClient.view().playerState().pos
+                                          == tcpClient.lastSnapshot().player.pos
+                                   && tcpClient.view().waves().currentWave
+                                          == tcpClient.lastSnapshot().waves.currentWave,
+                               QStringLiteral("TCP snapshot rebuilds the client GameView"));
+
+            const float beforeX = tcpClient.view().playerState().pos.x;
+            net::InputCommand move;
+            move.moveX = 1.0f;
+            move.mouseActive = true;
+            move.mouseX = beforeX + 220.0f;
+            move.mouseY = tcpClient.view().playerState().pos.y;
+            success &= require(tcpClient.sendInput(move),
+                               QStringLiteral("input command is written to the TCP socket"));
+            success &= require(pumpUntil([&] {
+                                   return tcpClient.view().playerState().pos.x > beforeX + 5.0f;
+                               }, 3000),
+                               QStringLiteral("server applies the input command and broadcasts the result"));
+            success &= require(tcpServer.snapshot().player.pos.x > beforeX + 5.0f,
+                               QStringLiteral("authoritative simulation moved the player"));
+
+            client::GameClient watcher;
+            success &= require(watcher.connectToHost(QStringLiteral("127.0.0.1"),
+                                                     tcpServer.port()),
+                               QStringLiteral("a second client starts connecting"));
+            success &= require(pumpUntil([&] {
+                                   return watcher.welcomed() && watcher.snapshotCount() > 0;
+                               }, 3000),
+                               QStringLiteral("second client receives broadcast snapshots"));
+            success &= require(tcpServer.clientCount() == 2,
+                               QStringLiteral("server accepts two clients at once"));
+
+            server::GameServer conflict;
+            QString conflictError;
+            success &= require(!conflict.listen(tcpServer.port(), true, &conflictError)
+                                   && !conflictError.isEmpty(),
+                               QStringLiteral("port in use is reported instead of crashing"));
+
+            QTcpSocket rawClient;
+            rawClient.connectToHost(QStringLiteral("127.0.0.1"), tcpServer.port());
+            pumpUntil([&] {
+                return rawClient.state() == QAbstractSocket::ConnectedState;
+            }, 2000);
+            const QByteArray wrongHello = net::frameMessage(
+                net::MessageType::Hello, QByteArray(),
+                quint16(net::kProtocolVersion + 1));
+            rawClient.write(wrongHello);
+            rawClient.flush();
+            success &= require(pumpUntil([&] {
+                                   return rawClient.state()
+                                          == QAbstractSocket::UnconnectedState;
+                               }, 3000),
+                               QStringLiteral("server closes a client with a mismatched protocol"));
+            success &= require(tcpServer.rejectedClients() >= 1,
+                               QStringLiteral("protocol mismatch is rejected without crashing"));
+
+            tcpClient.close();
+            watcher.close();
+            success &= require(pumpUntil([&] { return tcpServer.clientCount() == 0; }, 3000),
+                               QStringLiteral("server drops sessions when clients disconnect"));
+
+            const quint16 closedPort = tcpServer.port();
+            tcpServer.close();
+            pumpUntil([&] { return !tcpServer.isListening(); }, 1000);
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            client::GameClient deadClient;
+            deadClient.setAutoReconnect(false);
+            success &= require(deadClient.connectToHost(QStringLiteral("127.0.0.1"),
+                                                        closedPort),
+                               QStringLiteral("client can attempt a closed-port connection"));
+            success &= require(pumpUntil([&] { return deadClient.failed(); }, 8000),
+                               QStringLiteral("connection failure is reported without crashing"));
+            success &= require(!deadClient.lastError().isEmpty(),
+                               QStringLiteral("connection failure carries an error message"));
+        }
+
+        log(QStringLiteral("Reconnect path"));
+        {
+            server::GameServer reconnectServer;
+            QString reconnectError;
+            const bool reconnectListening = reconnectServer.listen(0, true, &reconnectError);
+            success &= require(reconnectListening,
+                               QStringLiteral("reconnect test server listens (%1)")
+                                   .arg(reconnectError));
+            if (reconnectListening) {
+                client::GameClient reconnectClient;
+                reconnectClient.setAutoReconnect(true);
+                success &= require(reconnectClient.connectToHost(
+                                       QStringLiteral("127.0.0.1"),
+                                       reconnectServer.port()),
+                                   QStringLiteral("reconnect test client starts connecting"));
+                success &= require(pumpUntil([&] { return reconnectClient.welcomed(); }, 3000),
+                                   QStringLiteral("reconnect test client completes handshake"));
+                reconnectServer.close();
+                success &= require(pumpUntil([&] {
+                                       return reconnectClient.reconnectAttempts() >= 1;
+                                   }, 3000),
+                                   QStringLiteral("disconnect schedules a bounded reconnect"));
+                reconnectClient.close();
+            }
+        }
+
+        log(QStringLiteral("Embedded single-player network path"));
+        Menu networkMenu(false, false);
+        networkMenu.startLevel(0);
+        client::GameClient *netClient = networkMenu.match_.gameClient();
+        success &= require(netClient != nullptr && networkMenu.match_.localServer() != nullptr,
+                           QStringLiteral("default menu path starts an embedded loopback server"));
+        success &= require(pumpUntil([&] {
+                               return netClient != nullptr && netClient->snapshotCount() > 0;
+                           }, 4000),
+                           QStringLiteral("embedded server and client exchange snapshots"));
+        if (netClient != nullptr) {
+            success &= require(netClient->view().waves().totalWaves == 8,
+                               QStringLiteral("embedded match runs the submitted campaign script"));
+            networkMenu.update(1.0f / 60.0f);
+            networkMenu.render();
+            success &= require(networkMenu.match_.frame().size()
+                                   == QSize(GameConfig::ScreenWidth,
+                                            GameConfig::ScreenHeight),
+                               QStringLiteral("embedded network match renders a frame"));
+        }
+        networkMenu.returnToMenu();
+
         log(success ? QStringLiteral("ALL C++ SMOKE TESTS PASSED")
                     : QStringLiteral("SMOKE TESTS FAILED"));
         logFile.close();
@@ -968,7 +1139,7 @@ public:
     // 用于对比优化前后（配合 NEON_SINGLE_THREAD=1 做单线程对照）。
     static int bench()
     {
-        Menu menu(false);
+        Menu menu(false, true);
         menu.startLevel(0);
         Games *game = menu.match_.game();
         if (game == nullptr) {
@@ -1063,7 +1234,7 @@ public:
         if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
             return 1;
         }
-        Menu menu(false);
+        Menu menu(false, true);
         Games *game = nullptr;
         // 截图模拟窗口的合成顺序：画面 + 全局指针（BaseService 的 base::Pointer 组件）。
         auto movePointer = [&](const Math::Vec2 &position) {

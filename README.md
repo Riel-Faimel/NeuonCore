@@ -23,6 +23,32 @@ cpp\dist\NeonCore\NeonCore.exe
 
 双击仓库根目录的 **`start_cpp.bat`**，或 `cpp\run.bat` 即可启动。`dist\NeonCore` 已经包含运行所需的 Qt 6 和 FFmpeg DLL，不需要安装 Qt。
 
+默认启动方式已经是“客户端 + 服务端”结构：客户端在 127.0.0.1 上自动选择一个空闲端口，启动一个**内嵌的本地服务端**，再通过真实 TCP 连接进入对局。单机和联机使用同一套协议，因此不需要为了单机维护第二条逻辑。
+
+## 服务端 / 联机
+
+独立服务端（无窗口，60Hz 固定 tick，权威模拟）：
+
+```bat
+dist\NeonCore\NeonCore.exe --server --port 7777
+```
+
+远程客户端（先启动上面的服务端）：
+
+```bat
+dist\NeonCore\NeonCore.exe --connect 127.0.0.1:7777
+```
+
+其他命令行：
+
+```text
+--local                 离线直连模式（不经过 TCP；自动化测试和回退用）
+--server --port 7777    独立服务端，默认端口 7777
+--connect host:port     连接远端服务端
+```
+
+`NeonCoreConsole.exe --server --port 7777` 是同一个服务端，但会保留控制台输出，便于排查端口占用等问题。服务端只跑 `GameSimulation`（没有 Renderer / Menu / 输入采集），客户端只发 `Input` 意图、收 `Snapshot / Event / MatchEnd`，不向服务端回传世界状态。端口被占用、握手协议版本不匹配、客户端断线和重连失败都会返回错误并保持进程不崩溃。
+
 ## 操作
 
 | 按键 | 动作 |
@@ -177,7 +203,11 @@ cpp/
 │  │  │  ├─ Upgrades/Upgrades.h/.cpp 组件：强化池、抽取与应用
 │  │  │  └─ Renderer/Renderer.h/.cpp 组件：局内背景、发光、HUD、卡片、暂停（只读 GameView）
 │  │  ├─ Client/GameView.h/.cpp     客户端视图：快照 → 可绘制的 Arena 只读镜像
-│  │  ├─ Net/Protocol.cpp           协议帧打包/拆包实现（无 socket）
+│  │  ├─ Net/Protocol.cpp           协议帧打包/拆包 + TCP 粘包缓冲
+│  │  ├─ Net/Input.cpp              客户端 → 服务端输入命令
+│  │  ├─ Net/Messages.cpp           Hello / Welcome / StartMatch / Event / MatchEnd
+│  │  ├─ Net/Server.h/.cpp          QTcpServer：headless GameSimulation + 60Hz 广播
+│  │  ├─ Net/Client.h/.cpp          QTcpSocket：握手、输入、快照、GameView、Renderer
 │  │  ├─ Net/Snapshot.cpp           快照 QDataStream 序列化实现
 │  │  ├─ Menu/Menu.h/.cpp          模块入口：屏幕状态机、输入路由、关卡表
 │  │  ├─ Menu/Main/Main.h/.cpp     组件：标题页与关卡卡
@@ -205,7 +235,9 @@ cpp/
 │  │  ├─ Fighter.h                Player/Enemy 的公共虚接口
 │  │  ├─ Bullet.h                 子弹的全局纯虚接口（池只认这一层）
 │  │  └─ Net/
-│  │     ├─ Protocol.h            协议版本 / 消息 id / 长度前缀帧
+│  │     ├─ Protocol.h            协议版本 / 消息 id / 长度前缀帧 / FrameBuffer
+│  │     ├─ Input.h               客户端 → 服务端输入命令
+│  │     ├─ Messages.h            Hello / Welcome / StartMatch / Event / MatchEnd
 │  │     └─ Snapshot.h            只读世界快照模型与序列化接口
 │  ├─ json/
 │  │  ├─ player.json              玩家基础数值
@@ -233,15 +265,17 @@ cpp/
 
 `src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Music`、`Pointer`、`Paint`、`ThreadPool` 六个 `namespace base` 组件。`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），Menu / Games / Arena / Renderer / Shop 都直接调用 `BaseService`，不再通过构造函数传递 `Base&`。`Base.h` 仍只暴露 Base 的输入/音频/指针/并行/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Music` 的 QMediaPlayer、`Pointer` 的位置/时钟/准星、`Paint` 的 QFontDatabase 细节、`ThreadPool` 的线程管理都在各自组件内。字体与工作线程由 `main()` 在 `QApplication` 之后调 `Base::initialize()` 初始化；音频由 `BaseService.initAudio()` 按需初始化，`main()` 退出前调 `BaseService.shutdown()`（先停线程池，再释放 Qt 音频对象）。窗口通过 `BaseService.pointerMoveTo/pointerSetVisible/pointerUpdate/pointerDraw` 驱动全局指针。
 
-`src/app/Games/` 是模块目录：`Games` 是单机适配器，公开继承 `games::GameSimulation`（持有 `Arena / Waves / Upgrades`、一局状态、运行时间和输入），自己只拥有 `games::Renderer` 并实现模拟的表现钩子。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。`GameSimulation` 只推进模拟，不依赖 Renderer；`Games::update()` 每帧先从 `BaseService` 采集 `arena::InputState`（移动/鼠标/射击），再调用模拟，并通过 `on*` 钩子调用渲染器的震屏/闪屏/横幅/彩带和音效。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化。`Games::render()` 先 `writeSnapshot()` 提取 `net::Snapshot`，再让 `client::GameView::apply()` 重建只读世界，最后交给 `Renderer` 绘制——单机和以后的 TCP 客户端共用同一条表现路径（标题/结算在 `menu::*`，鼠标指针在 `BaseService` 的 `base::Pointer`）。`Renderer` 把世界层放到 `ThreadPool` 工作线程、辉光层留在主线程并行绘制，字体仍在主线程。随机数走全局 `RandomService`，不再作为构造参数传入。四个关卡分别使用 `waves/level-01..04.json`，`GameSimulation::Level.enemyLevel` 为 1–4，作为隐藏的敌人成长等级乘在血量/伤害/速度上；关卡越靠后波次越长、敌人组成越重。
+`src/app/Games/` 是模块目录：`Games` 是单机适配器，公开继承 `games::GameSimulation`（持有 `Arena / Waves / Upgrades`、一局状态、运行时间和输入），自己只拥有 `games::Renderer` 并实现模拟的表现钩子。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。`GameSimulation` 只推进模拟，不依赖 Renderer；`Games::update()` 每帧先从 `BaseService` 采集 `arena::InputState`（移动/鼠标/射击），再调用模拟，并通过 `on*` 钩子调用渲染器的震屏/闪屏/横幅/彩带和音效。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化。`Games::render()` 先 `writeSnapshot()` 提取 `net::Snapshot`，再让 `client::GameView::apply()` 重建只读世界，最后交给 `Renderer` 绘制——本地离线路径和 TCP 客户端共用同一条表现路径（标题/结算在 `menu::*`，鼠标指针在 `BaseService` 的 `base::Pointer`）。`Renderer` 把世界层放到 `ThreadPool` 工作线程、辉光层留在主线程并行绘制，字体仍在主线程。随机数走全局 `RandomService`，不再作为构造参数传入。四个关卡分别使用 `waves/level-01..04.json`，`GameSimulation::Level.enemyLevel` 为 1–4，作为隐藏的敌人成长等级乘在血量/伤害/速度上；关卡越靠后波次越长、敌人组成越重。
 
 积分和库存由进程级单例 `ShopService` 持有（`extern Shop ShopService;`）：`Shop` 组合 `shop::Score`（跨局钱包，键 `score/total`）和 `shop::Inventory`（地雷库存，键 `inventory/mines`），Windows 写注册表、其他平台写 `settings.ini`。`main()` 启动时调 `ShopService.load()`、退出前调 `ShopService.save()`；`arena::Events::handleKill()` 击杀上报积分；HUD 显示全局钱包，结算显示本局获得（`runScore()`）；`Shop::buyMine()` 负责扣款入库。
+
+`src/app/Net/` 是阶段 3 的客户端 / 服务端网络层：`server::GameServer` 用 `QTcpServer` 接受连接，拥有一个不依赖 Renderer 的 `games::GameSimulation`，以固定 60Hz tick 推进并通过 `net::Snapshot / Event / MatchEnd` 广播权威状态；`client::GameClient` 用 `QTcpSocket` 做 Hello/Welcome 握手、发送 `net::InputCommand`、接收快照并维护 `client::GameView`，再用现有的 `games::Renderer` 展示。`net::Protocol` 负责 `[u32 length][u16 type][u16 version][payload]` 帧和 TCP 粘包缓冲，`net::Input / Messages / Snapshot` 负责各类 payload 的 `QDataStream` 序列化。`menu::Match` 默认使用网络路径：单机时在 127.0.0.1 上自动选端口启动内嵌服务端，`--connect host:port` 连远端；`--local` 或 `Menu(..., offline=true)` 保留本地直连模式给自动化测试和回退。
 
 `src/app/Shop/` 和 `Arena/` 同构：`Shop` 是全局模块类（进程级单例 `ShopService`），组合 `Score`（全局钱包/本局统计）和 `Inventory`（地雷库存）两个 `namespace shop` 组件，负责 `load()/save()` 与 `buyMine()`；补给站界面是 `menu::Depot`，只展示和调用接口，不直接改数据。
 
 `src/app/Loadout/` 是战备全局模块（`LoadoutService`）：从 `loadout.json` 读发射器数值，选择持久化到 `loadout/launcher`；`Player::reset()` 应用伤害/射速/弹速倍率，`Player::shoot()` 应用散射倍率、额外弹丸和穿透。界面是 `menu::Armory`，默认标准发射器保持原弹道。
 
-`src/app/Menu/` 和 `Arena/` 同构：`Menu` 只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop`/`Loadout` 都是全局单例，不在 `Menu` 里），八个界面是 `namespace menu` 组件——`Main`（标题/关卡卡/设置入口）、`Map`（星区地图）、`Match`（持有这一局的 `Games`）、`Result`（只读 `Summary` 的结算层）、`Editor`（持有自定义台本）、`Depot`（补给站/商店）、`Armory`（战备/发射器）、`Settings`（音量 + 配置存储）。组件把玩家意图作为 `Action` 交回 `Menu`，`Menu` 负责开局、进编辑器和回主菜单；“自定义协议”点开即进编辑器，逐波编辑台本（1–12 波、四种敌人数量、单 Boss），部署时由 `Menu` 把 `Editor::script()` 写进 `Level.script` 交给 `Match`。
+`src/app/Menu/` 和 `Arena/` 同构：`Menu` 只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop`/`Loadout` 都是全局单例，不在 `Menu` 里），八个界面是 `namespace menu` 组件——`Main`（标题/关卡卡/设置入口）、`Map`（星区地图）、`Match`（默认持有网络 `GameClient` + 内嵌/远端服务端，`--local`/测试时持有这一局的 `Games`）、`Result`（只读 `Summary` 的结算层）、`Editor`（持有自定义台本）、`Depot`（补给站/商店）、`Armory`（战备/发射器）、`Settings`（音量 + 配置存储）。组件把玩家意图作为 `Action` 交回 `Menu`，`Menu` 负责开局、进编辑器和回主菜单；“自定义协议”点开即进编辑器，逐波编辑台本（1–12 波、四种敌人数量、单 Boss），部署时由 `Menu` 把 `Editor::script()` 写进 `Level.script` 交给 `Match`。
 
 `src/app/Arena/` 是模块目录：`Arena` 是全局模块类，**私有继承** `Bullets`、`Combatants`、`Entities`、`Events`、`State` 五个 `namespace arena` 组件。私有继承意味着这些组件是 `Arena` 的实现细节：外部只能调用 `Arena` 自己声明的接口（`beginWave/update/draw/placeMine/playerState/bossInfo/clear*/celebrate*/takeFeedback` 等），看不到 `enemies()`、`submit()`、`player()` 这类组件方法。组件之间通过 `Arena/Context.h` 的 `arena::Context` 协作——`Arena` 调用组件时把 `Host&` 和 5 个兄弟组件引用显式注入，组件头文件因此不需要知道 `Arena`；组件 → 模块的反馈（闪屏/震屏）通过 `Arena/Host.h` 的 `arena::Host` 虚接口回调 `Arena::addFeedback()`。`Bullet` 是 `src/include/Bullet.h` 里的全局纯虚接口，具体弹种（目前是 `StandardBullet`）在 `Arena/Bullets/`；发射方只 `submit()` 对象，推进、回收和绘制都由池统一做。`Fighter` 也放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段和玩家失败（积分在 `ShopService` 的 `Score` 组件）。`SelfTest` 是 `Arena` 唯一保留的 friend（测试要直接摆局面）。
 
@@ -326,6 +360,9 @@ mingw32-make -j12 test
 - 快照：完整场景提取 → QDataStream 序列化 → 反序列化，逐字段相等；帧长度/协议版本不匹配被拒绝
 - GameView：快照重建后的玩家/敌人/子弹/实体/HUD/强化卡/Boss 条正确，并能用现有 `Renderer` 画出完整一帧
 - 单机路径：`GameSimulation -> Snapshot -> GameView -> Renderer` 的视图与模拟状态一致
+- TCP 回环：真实 `QTcpServer/QTcpSocket` 握手、StartMatch、输入命令、权威模拟位移、快照重建、双客户端广播
+- 错误路径：端口占用、协议版本不匹配、客户端断线、连接失败/重连调度都不会崩溃
+- 内嵌单机：默认 `Menu` 网络路径启动 127.0.0.1 自动端口服务端并渲染一帧
 - 输出到当前目录的 `smoke.log`
 
 重新生成离屏截图：

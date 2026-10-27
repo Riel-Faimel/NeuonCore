@@ -4,6 +4,8 @@
 
 这篇文档先定边界和迁移顺序，不直接改运行代码。当前 `local` 单机路径保持可玩，迁移按阶段进行，每阶段都能构建、能跑 smoke。
 
+> 状态：阶段 0–3 已完成。阶段 3 的实现是 `src/app/Net/Server.*`（`server::GameServer`，headless `GameSimulation` + 60Hz tick + `QTcpServer`）和 `Client.*`（`client::GameClient`，`QTcpSocket` + 握手/输入/快照/`GameView`/`Renderer`），消息在 `include/Net/Input.h`、`Messages.h`、`Snapshot.h`。`menu::Match` 默认走网络：单机在 127.0.0.1 上启动自动端口的内嵌服务端，`--connect host:port` 连远端。与本文原计划的差异：内嵌服务端与客户端在同一 Qt 事件循环（真实 TCP 回环，不额外起线程）；本地 `Games` 路径保留为 `--local`/自动化测试回退，等阶段 4 再删除。
+
 ## 1. 当前耦合点
 
 - `Games` 同时拥有 `Arena`、`Waves`、`Upgrades`、`Renderer`，并在 `update()` 里同时推进模拟和表现；

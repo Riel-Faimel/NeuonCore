@@ -33,6 +33,39 @@ QByteArray frameMessage(MessageType type, const QByteArray &payload, quint16 ver
     return stream.status() == QDataStream::Ok ? frame : QByteArray();
 }
 
+FrameBuffer::Result FrameBuffer::next(QByteArray *frame, QString *error)
+{
+    if (frame == nullptr) {
+        setError(error, QStringLiteral("null frame destination"));
+        return Result::Error;
+    }
+    if (buffer_.size() < int(kFrameHeaderSize)) {
+        return Result::NeedMore;
+    }
+
+    QDataStream stream(buffer_);
+    stream.setVersion(QDataStream::Qt_6_0);
+    stream.setByteOrder(QDataStream::LittleEndian);
+    quint32 length = 0;
+    stream >> length;
+    if (stream.status() != QDataStream::Ok) {
+        setError(error, QStringLiteral("unreadable frame length"));
+        return Result::Error;
+    }
+    if (length > kMaxPayloadBytes) {
+        setError(error, QStringLiteral("payload too large"));
+        return Result::Error;
+    }
+    const qsizetype total = qsizetype(kFrameHeaderSize) + qsizetype(length);
+    if (buffer_.size() < total) {
+        return Result::NeedMore;
+    }
+
+    *frame = buffer_.left(total);
+    buffer_.remove(0, total);
+    return Result::Ready;
+}
+
 bool decodeFrame(const QByteArray &bytes, MessageHeader *header, QByteArray *payload,
                  QString *error)
 {

@@ -2,9 +2,12 @@
 #include "Base/Base.h"
 #include "Data/GameData.h"
 #include "Loadout/Loadout.h"
+#include "Net/Protocol.h"
+#include "Net/Server.h"
 #include "Shop/Shop.h"
 
 #include <QApplication>
+#include <QCoreApplication>
 #include <QDir>
 #include <QCursor>
 #include <QElapsedTimer>
@@ -40,7 +43,9 @@
 
 class GameWindow : public QWidget {
 public:
-    explicit GameWindow(QWidget *parent = nullptr) : QWidget(parent), menu_(true)
+    explicit GameWindow(bool offline = false, const QString &host = QString(),
+                        quint16 port = 0, QWidget *parent = nullptr)
+        : QWidget(parent), menu_(true, offline, host, port)
     {
         setWindowTitle(QStringLiteral("星核协议 · NEON CORE"));
         qreal pixelRatio = 1.0;
@@ -218,6 +223,14 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    bool offline = false;
+    bool serverMode = false;
+    bool showHelp = false;
+    quint16 serverPort = net::kDefaultPort;
+    QString connectHost;
+    quint16 connectPort = net::kDefaultPort;
+    QString argumentError;
+
 #ifdef DEBUG
     bool headless = false;
     bool smoke = false;
@@ -226,9 +239,49 @@ int main(int argc, char *argv[])
     bool bench = false;
     QString captureDirectory = QStringLiteral("screenshots");
     QString windowShot = QStringLiteral("screenshots/window.png");
+#endif
+
     for (int i = 1; i < argc; ++i) {
         const QString argument = QString::fromLocal8Bit(argv[i]);
-        if (argument == QStringLiteral("--smoke-test")) {
+        if (argument == QStringLiteral("--server")) {
+            serverMode = true;
+        } else if (argument == QStringLiteral("--local")) {
+            offline = true;
+        } else if (argument == QStringLiteral("--help") || argument == QStringLiteral("-h")) {
+            showHelp = true;
+        } else if (argument == QStringLiteral("--port")) {
+            if (i + 1 >= argc) {
+                argumentError = QStringLiteral("--port requires a value");
+                break;
+            }
+            bool ok = false;
+            const uint value = QString::fromLocal8Bit(argv[++i]).toUInt(&ok);
+            if (!ok || value == 0 || value > 65535) {
+                argumentError = QStringLiteral("--port expects 1..65535");
+                break;
+            }
+            serverPort = quint16(value);
+        } else if (argument == QStringLiteral("--connect")) {
+            if (i + 1 >= argc) {
+                argumentError = QStringLiteral("--connect requires host:port");
+                break;
+            }
+            const QString endpoint = QString::fromLocal8Bit(argv[++i]);
+            const int colon = endpoint.lastIndexOf(QLatin1Char(':'));
+            if (colon <= 0 || colon >= endpoint.size() - 1) {
+                argumentError = QStringLiteral("--connect expects host:port");
+                break;
+            }
+            bool ok = false;
+            const uint value = endpoint.mid(colon + 1).toUInt(&ok);
+            if (!ok || value == 0 || value > 65535) {
+                argumentError = QStringLiteral("--connect port must be 1..65535");
+                break;
+            }
+            connectHost = endpoint.left(colon);
+            connectPort = quint16(value);
+#ifdef DEBUG
+        } else if (argument == QStringLiteral("--smoke-test")) {
             smoke = true;
             headless = true;
         } else if (argument == QStringLiteral("--capture")) {
@@ -245,9 +298,55 @@ int main(int argc, char *argv[])
         } else if (argument == QStringLiteral("--bench")) {
             bench = true;
             headless = true;
+#endif
+        } else {
+            argumentError = QStringLiteral("unknown argument: %1").arg(argument);
+            break;
         }
     }
 
+    auto usage = [] {
+        std::fprintf(stderr,
+                     "usage: NeonCore [--local] [--connect host:port]\n"
+                     "       NeonCore --server [--port 7777]\n"
+                     "       NeonCoreConsole --smoke-test | --capture DIR | --bench\n");
+    };
+    if (showHelp) {
+        usage();
+        return 0;
+    }
+    if (!argumentError.isEmpty()) {
+        std::fprintf(stderr, "ARGUMENT ERROR: %s\n", argumentError.toUtf8().constData());
+        usage();
+        return 2;
+    }
+    if (serverMode && !connectHost.isEmpty()) {
+        std::fprintf(stderr, "ARGUMENT ERROR: --server cannot be combined with --connect\n");
+        return 2;
+    }
+    if (offline && !connectHost.isEmpty()) {
+        std::fprintf(stderr, "ARGUMENT ERROR: --local cannot be combined with --connect\n");
+        return 2;
+    }
+
+    // 独立服务端：不需要 GUI / 字体 / 音频，只跑 QCoreApplication + 60Hz 模拟。
+    if (serverMode) {
+        QCoreApplication app(argc, argv);
+        QCoreApplication::setApplicationName(QStringLiteral("NeonCore"));
+        QCoreApplication::setOrganizationName(QStringLiteral("NeonCore"));
+        server::GameServer gameServer;
+        QString error;
+        if (!gameServer.listen(serverPort, false, &error)) {
+            std::fprintf(stderr, "SERVER ERROR: %s\n", error.toUtf8().constData());
+            return 1;
+        }
+        std::printf("NEON CORE server listening on port %u (tick %d Hz)\n",
+                    unsigned(gameServer.port()), gameServer.tickRate());
+        std::fflush(stdout);
+        return app.exec();
+    }
+
+#ifdef DEBUG
     if (headless) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
     }
@@ -294,7 +393,7 @@ int main(int argc, char *argv[])
         if (!QDir().mkpath(QFileInfo(windowShot).absolutePath())) {
             return 1;
         }
-        GameWindow window;
+        GameWindow window(offline, connectHost, connectPort);
         window.show();
         QTimer::singleShot(250, &window, [&window] {
             QKeyEvent press(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
@@ -314,7 +413,7 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    GameWindow window;
+    GameWindow window(offline, connectHost, connectPort);
     window.show();
     const int code = app.exec();
     // BaseService 是全局对象，析构发生在 QApplication 之后；

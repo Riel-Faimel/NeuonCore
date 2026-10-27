@@ -35,7 +35,10 @@ public:
         Settings,
     };
 
-    explicit Menu(bool enableAudio = true);
+    // offline=true 保留阶段 2 的本地直连路径（自动化测试/离线回退）；
+    // 默认走网络路径：host 为空时由 Match 启动 127.0.0.1 内嵌服务端。
+    explicit Menu(bool enableAudio = true, bool offline = false,
+                  const QString &host = QString(), quint16 port = 0);
     ~Menu();
 
     Menu(const Menu &) = delete;

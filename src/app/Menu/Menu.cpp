@@ -9,11 +9,14 @@
 
 #include <utility>
 
-Menu::Menu(bool enableAudio) : settings_(enableAudio)
+Menu::Menu(bool enableAudio, bool offline, const QString &host, quint16 port)
+    : settings_(enableAudio)
 {
     // 绘制资源（字体/颜色）由 main() 在 QApplication 之后统一初始化。
     // Shop 也是进程级单例，由 main() 负责 load()/save()。
     audioRequested_ = enableAudio;
+    match_.configure(offline ? menu::Match::Mode::Local : menu::Match::Mode::Network,
+                     host, port);
     if (enableAudio) {
         BaseService.initAudio();
         settings_.load();

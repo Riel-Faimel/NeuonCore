@@ -58,10 +58,17 @@ public:
     // 请求冲刺；本地按键和测试都走这里（等价于输入里的 dashRequested）。
     void requestDash();
 
+    // 网络服务端/适配器使用的权威动作入口；校验由模拟层负责。
+    void placeMine(const Math::Vec2 &position);
+    void setPaused(bool paused);
+    // 0..2 对应三张强化卡；状态不是 Upgrade 或索引非法时返回 false。
+    bool chooseUpgrade(int index);
+
     State state() const { return state_; }
     float runTime() const { return runTime_; }
     int currentWave() const { return waves_.currentWave(); }
     int totalWaves() const { return waves_.totalWaves(); }
+    const Level &level() const { return level_; }
 
     // ----- 网络快照（阶段 2） -----
     // 服务端边界：把一局模拟提取成只读数据；不传任何对象指针/RTTI。

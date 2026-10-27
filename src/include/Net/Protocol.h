@@ -47,4 +47,25 @@ QByteArray frameMessage(MessageType type, const QByteArray &payload,
 bool decodeFrame(const QByteArray &bytes, MessageHeader *header, QByteArray *payload,
                  QString *error = nullptr);
 
+// TCP 粘包/拆包缓冲：append() 收到的字节，next() 取出一条完整帧。
+// 协议头里的 length 只表示 payload 长度，所以一帧是 kFrameHeaderSize + length。
+class FrameBuffer {
+public:
+    enum class Result {
+        NeedMore,
+        Ready,
+        Error,
+    };
+
+    void append(const QByteArray &bytes) { buffer_.append(bytes); }
+    void clear() { buffer_.clear(); }
+    int bufferedBytes() const { return buffer_.size(); }
+
+    // Ready 时把完整帧写进 frame；Error 时把原因写进 error（若提供）。
+    Result next(QByteArray *frame, QString *error = nullptr);
+
+private:
+    QByteArray buffer_;
+};
+
 } // namespace net

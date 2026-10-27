@@ -51,6 +51,32 @@ void GameSimulation::requestDash()
     arena_.requestDash();
 }
 
+void GameSimulation::placeMine(const Math::Vec2 &position)
+{
+    if (state_ == State::Playing) {
+        arena_.placeMine(position);
+    }
+}
+
+void GameSimulation::setPaused(bool paused)
+{
+    if (paused && state_ == State::Playing) {
+        state_ = State::Paused;
+    } else if (!paused && state_ == State::Paused) {
+        state_ = State::Playing;
+    }
+}
+
+bool GameSimulation::chooseUpgrade(int index)
+{
+    if (state_ != State::Upgrade || index < 0
+        || index >= int(upgrades_.offers().size())) {
+        return false;
+    }
+    selectUpgrade(index);
+    return true;
+}
+
 void GameSimulation::update(float dt)
 {
     switch (state_) {
