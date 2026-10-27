@@ -15,6 +15,9 @@ Menu::Menu(bool enableAudio, bool offline, const QString &host, quint16 port)
     // 绘制资源（字体/颜色）由 main() 在 QApplication 之后统一初始化。
     // Shop 也是进程级单例，由 main() 负责 load()/save()。
     audioRequested_ = enableAudio;
+    offline_ = offline;
+    defaultHost_ = host;
+    defaultPort_ = port;
     match_.configure(offline ? menu::Match::Mode::Local : menu::Match::Mode::Network,
                      host, port);
     if (enableAudio) {
@@ -158,6 +161,8 @@ void Menu::render()
         depot_.render(painter);
     } else if (screen_ == Screen::Armory) {
         armory_.render(painter);
+    } else if (screen_ == Screen::ServerSetup) {
+        serverSetup_.render(painter);
     } else if (screen_ == Screen::Settings) {
         settings_.render(painter);
     } else {
@@ -171,9 +176,37 @@ void Menu::startCampaign(int index)
     if (index < 0 || index >= int(campaignLevels_.size())) {
         return;
     }
+    // 标准协议永远走默认路径：不读自定义服务器配置。
+    match_.configure(offline_ ? menu::Match::Mode::Local : menu::Match::Mode::Network,
+                     defaultHost_, defaultPort_);
     activeCampaign_ = index;
     campaignActive_ = true;
     match_.start(campaignLevels_[size_t(index)]);
+    screen_ = Screen::Match;
+    BaseService.keyRelease(Qt::Key_Escape);
+}
+
+void Menu::startCustom(const menu::ServerSetup::Config &config)
+{
+    customConfig_ = config;
+    campaignActive_ = false;
+    level_ = CustomLevelIndex;
+    Games::Level level = levels_[size_t(CustomLevelIndex)];
+    level.script = editor_.script();
+    level.startWave = 1;
+
+    if (config.mode == menu::ServerSetup::Mode::Single) {
+        // 单机自定义：不开放端口，使用本地直连路径。
+        match_.configure(menu::Match::Mode::Local);
+    } else if (config.mode == menu::ServerSetup::Mode::Host) {
+        // 本机开房：port 非 0 让 Match 在 0.0.0.0 上启动内嵌服务端。
+        match_.configure(menu::Match::Mode::Network, QString(), config.port);
+    } else {
+        // 加入已有主机。
+        match_.configure(menu::Match::Mode::Network, config.host, config.port);
+    }
+
+    match_.start(level);
     screen_ = Screen::Match;
     BaseService.keyRelease(Qt::Key_Escape);
 }
@@ -187,15 +220,14 @@ void Menu::startLevel(int index)
     if (index < 0 || index >= int(levels_.size())) {
         return;
     }
+    if (index == CustomLevelIndex) {
+        // 直接进入自定义关卡时等价于“单机自定义”；编辑器部署会先走联机设置。
+        startCustom(menu::ServerSetup::Config{});
+        return;
+    }
     campaignActive_ = false;
     level_ = index;
-    Games::Level level = levels_[size_t(index)];
-    if (index == CustomLevelIndex) {
-        // 自定义模式：台本整体由玩家定义，永远从第 1 波开始。
-        level.script = editor_.script();
-        level.startWave = 1;
-    }
-    match_.start(level);
+    match_.start(levels_[size_t(index)]);
     screen_ = Screen::Match;
     BaseService.keyRelease(Qt::Key_Escape);
 }
@@ -204,6 +236,8 @@ void Menu::retry()
 {
     if (campaignActive_) {
         startCampaign(activeCampaign_);
+    } else if (level_ == CustomLevelIndex) {
+        startCustom(customConfig_);
     } else {
         startLevel(level_);
     }
@@ -293,9 +327,21 @@ void Menu::keyPress(int key, bool autoRepeat)
     case Screen::Editor: {
         const menu::Editor::Action action = editor_.keyPress(key, autoRepeat);
         if (action == menu::Editor::Action::Deploy) {
-            startLevel(CustomLevelIndex);
+            serverSetup_.open();
+            screen_ = Screen::ServerSetup;
+            BaseService.playSound(QStringLiteral("ui"));
         } else if (action == menu::Editor::Action::Back) {
             returnToMenu();
+        }
+        break;
+    }
+    case Screen::ServerSetup: {
+        const menu::ServerSetup::Action action = serverSetup_.keyPress(key);
+        if (action == menu::ServerSetup::Action::Start) {
+            startCustom(serverSetup_.config());
+        } else if (action == menu::ServerSetup::Action::Back) {
+            screen_ = Screen::Editor;
+            BaseService.playSound(QStringLiteral("ui"));
         }
         break;
     }
@@ -409,9 +455,21 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
     case Screen::Editor: {
         const menu::Editor::Action action = editor_.mousePress(position);
         if (action == menu::Editor::Action::Deploy) {
-            startLevel(CustomLevelIndex);
+            serverSetup_.open();
+            screen_ = Screen::ServerSetup;
+            BaseService.playSound(QStringLiteral("ui"));
         } else if (action == menu::Editor::Action::Back) {
             returnToMenu();
+        }
+        break;
+    }
+    case Screen::ServerSetup: {
+        const menu::ServerSetup::Action action = serverSetup_.mousePress(position);
+        if (action == menu::ServerSetup::Action::Start) {
+            startCustom(serverSetup_.config());
+        } else if (action == menu::ServerSetup::Action::Back) {
+            screen_ = Screen::Editor;
+            BaseService.playSound(QStringLiteral("ui"));
         }
         break;
     }

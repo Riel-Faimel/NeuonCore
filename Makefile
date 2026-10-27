@@ -25,7 +25,8 @@ INCS := -I$(QTDIR)/include/QtWidgets \
         -I$(QTDIR)/include/QtNetwork \
         -I$(QTDIR)/include/QtCore \
         -I$(QTDIR)/mkspecs/win32-g++ \
-        -Isrc/app -Isrc/include -Isrc/lib -I$(BUILD)/generated
+        -Isrc/app/shared -Isrc/app/client -Isrc/app/server -Isrc/app \
+        -Isrc/include -Isrc/lib -I$(BUILD)/generated
 DEFS := -DQT_WIDGETS_LIB -DQT_MULTIMEDIA_LIB -DQT_GUI_LIB \
         -DQT_CORE_LIB -DQT_NETWORK_LIB -DWIN32 -DWIN64 -D_WIN64 \
         -DMINGW_HAS_SECURE_API=1 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -DNDEBUG
@@ -35,101 +36,104 @@ LIBS := -L$(QTDIR)/lib \
         -luser32 -lkernel32 -lgdi32 -lwinmm -limm32 -lversion \
         -ldwmapi -luxtheme -lmsimg32 -static-libgcc -static-libstdc++
 
-GAMES_COMPONENTS := Games Waves/Waves Upgrades/Upgrades Renderer/Renderer \
-                    Simulation/GameSimulation
-GAMES_OBJS := $(addprefix $(BUILD)/app/Games/,$(addsuffix .o,$(GAMES_COMPONENTS)))
-CLIENT_COMPONENTS := Client/GameView
-CLIENT_OBJS := $(addprefix $(BUILD)/app/,$(addsuffix .o,$(CLIENT_COMPONENTS)))
-NET_COMPONENTS := Net/Protocol Net/Snapshot Net/Input Net/Messages Net/Server Net/Client
-NET_OBJS := $(addprefix $(BUILD)/app/,$(addsuffix .o,$(NET_COMPONENTS)))
-MENU_COMPONENTS := Menu Main/Main Map/Map Match/Match Result/Result Editor/Editor Depot/Depot Armory/Armory Settings/Settings
-MENU_OBJS := $(addprefix $(BUILD)/app/Menu/,$(addsuffix .o,$(MENU_COMPONENTS)))
 LIB_SRC := Math Random
 LIB_OBJS := $(addprefix $(BUILD)/lib/,$(addsuffix .o,$(LIB_SRC)))
-BASE_COMPONENTS := Base Input/Input Audio/Audio Audio/Music Paint/Paint Pointer/Pointer ThreadPool/ThreadPool
-SHOP_COMPONENTS := Shop Score/Score Inventory/Inventory
-SHOP_OBJS := $(addprefix $(BUILD)/app/Shop/,$(addsuffix .o,$(SHOP_COMPONENTS)))
-LOADOUT_COMPONENTS := Loadout/Loadout
-LOADOUT_OBJS := $(addprefix $(BUILD)/app/,$(addsuffix .o,$(LOADOUT_COMPONENTS)))
-BASE_OBJS := $(addprefix $(BUILD)/app/Base/,$(addsuffix .o,$(BASE_COMPONENTS)))
-MAIN_RELEASE_OBJ := $(BUILD)/app/main_release.o
-MAIN_TEST_OBJ := $(BUILD)/app/main_test.o
+
+# 三棵源码树：
+#   shared: Arena 数据模型 + 网络协议/快照，服务端和客户端共同链接
+#   client: 窗口、输入、音频、菜单、Renderer、本地适配器、TCP 客户端
+#   server: GameSimulation、Waves、Upgrades、TCP 服务端
+SHARED_COMPONENTS := Arena/Arena Arena/Bullets/Bullets \
+                     Arena/Bullets/StandardBullet \
+                     Arena/Combatants/Combatants Arena/Entities/Entities \
+                     Arena/Events Arena/State \
+                     Arena/Combatants/Player Arena/Combatants/Enemy \
+                     Arena/Combatants/Enemies/EnemyTypes \
+                     Arena/Combatants/Enemies/DroneEnemy Arena/Combatants/Enemies/TankEnemy \
+                     Arena/Combatants/Enemies/MiniEnemy Arena/Combatants/Enemies/RusherEnemy \
+                     Arena/Combatants/Enemies/SplitterEnemy Arena/Combatants/Enemies/SpitterEnemy \
+                     Arena/Combatants/Enemies/SummonerEnemy Arena/Combatants/Enemies/AmplifierEnemy \
+                     Arena/Combatants/Enemies/MenderEnemy Arena/Combatants/Enemies/NecromancerEnemy \
+                     Arena/Combatants/Enemies/LinkerEnemy Arena/Combatants/Enemies/BossEnemy \
+                     Arena/Entities/Mine Arena/Entities/Portal Arena/Entities/Pickup \
+                     Arena/Entities/Particle Arena/Entities/FloatingText Arena/Entities/Shockwave \
+                     Net/Protocol Net/Snapshot Net/Input Net/Messages
+SHARED_OBJS := $(addprefix $(BUILD)/app/shared/,$(addsuffix .o,$(SHARED_COMPONENTS)))
+
+CLIENT_COMPONENTS := Base/Base Base/Input/Input Base/Audio/Audio Base/Audio/Music \
+                     Base/Paint/Paint Base/Pointer/Pointer Base/ThreadPool/ThreadPool \
+                     Games/Games Games/Renderer/Renderer Client/GameView \
+                     Net/Client \
+                     Menu/Menu Menu/Main/Main Menu/Map/Map Menu/Match/Match \
+                     Menu/Result/Result Menu/Editor/Editor Menu/Depot/Depot \
+                     Menu/Armory/Armory Menu/ServerSetup/ServerSetup \
+                     Menu/Settings/Settings \
+                     Shop/Shop Shop/Score/Score Shop/Inventory/Inventory \
+                     Loadout/Loadout
+CLIENT_OBJS := $(addprefix $(BUILD)/app/client/,$(addsuffix .o,$(CLIENT_COMPONENTS)))
+
+SERVER_COMPONENTS := Games/Simulation/GameSimulation Games/Waves/Waves \
+                     Games/Upgrades/Upgrades Net/Server
+SERVER_OBJS := $(addprefix $(BUILD)/app/server/,$(addsuffix .o,$(SERVER_COMPONENTS)))
+
+MAIN_RELEASE_OBJ := $(BUILD)/app/client/main_release.o
+MAIN_TEST_OBJ := $(BUILD)/app/client/main_test.o
+SERVER_MAIN_OBJ := $(BUILD)/app/server/main.o
 RC := $(MINGWDIR)/bin/windres.exe
-ICON_RES_OBJ := $(BUILD)/app/app_res.o
+ICON_RES_OBJ := $(BUILD)/app/client/app_res.o
+
+# 独立服务端只链接模拟和它依赖的客户端基础服务（Base/Shop/Loadout），
+# 不链接 Menu / Renderer / GameView / TCP Client。
+SERVER_SUPPORT_COMPONENTS := Base/Base Base/Input/Input Base/Audio/Audio Base/Audio/Music \
+                             Base/Paint/Paint Base/Pointer/Pointer Base/ThreadPool/ThreadPool \
+                             Shop/Shop Shop/Score/Score Shop/Inventory/Inventory \
+                             Loadout/Loadout
+SERVER_SUPPORT_OBJS := $(addprefix $(BUILD)/app/client/,$(addsuffix .o,$(SERVER_SUPPORT_COMPONENTS)))
+SERVER_APP_OBJS := $(LIB_OBJS) $(SHARED_OBJS) $(SERVER_OBJS) $(SERVER_SUPPORT_OBJS)
 
 # 数值数据：src/json/*.json 在构建期被嵌成 raw string，编译期由 constexpr JSON 解析器读成常量。
 JSON_FILES := $(wildcard src/json/*.json) $(wildcard src/json/waves/*.json)
 EMBED_TOOL := $(BUILD)/embed_json.exe
 GENERATED_JSON := $(BUILD)/generated/GameDataJson.h
 
-ARENA_COMPONENTS := Arena Bullets/Bullets Bullets/StandardBullet \
-                    Combatants/Combatants Entities/Entities Events State \
-                    Combatants/Player Combatants/Enemy \
-                    Combatants/Enemies/EnemyTypes \
-                    Combatants/Enemies/DroneEnemy Combatants/Enemies/TankEnemy \
-                    Combatants/Enemies/MiniEnemy Combatants/Enemies/RusherEnemy \
-                    Combatants/Enemies/SplitterEnemy Combatants/Enemies/SpitterEnemy \
-                    Combatants/Enemies/SummonerEnemy Combatants/Enemies/AmplifierEnemy \
-                    Combatants/Enemies/MenderEnemy Combatants/Enemies/NecromancerEnemy \
-                    Combatants/Enemies/LinkerEnemy Combatants/Enemies/BossEnemy \
-                    Entities/Mine Entities/Portal Entities/Pickup \
-                    Entities/Particle Entities/FloatingText Entities/Shockwave
-ARENA_OBJS := $(addprefix $(BUILD)/app/Arena/,$(addsuffix .o,$(ARENA_COMPONENTS)))
-
-SHARED_OBJS := $(BASE_OBJS) $(LIB_OBJS) $(GAMES_OBJS) $(CLIENT_OBJS) $(NET_OBJS) \
-               $(MENU_OBJS) $(SHOP_OBJS) $(LOADOUT_OBJS) $(ARENA_OBJS)
-RELEASE_OBJS := $(SHARED_OBJS) $(MAIN_RELEASE_OBJ) $(ICON_RES_OBJ)
-TEST_OBJS := $(SHARED_OBJS) $(MAIN_TEST_OBJ)
-DEPS := $(RELEASE_OBJS:.o=.d) $(TEST_OBJS:.o=.d)
+LINK_OBJS := $(LIB_OBJS) $(SHARED_OBJS) $(CLIENT_OBJS) $(SERVER_OBJS)
+RELEASE_OBJS := $(LINK_OBJS) $(MAIN_RELEASE_OBJ) $(ICON_RES_OBJ)
+TEST_OBJS := $(LINK_OBJS) $(MAIN_TEST_OBJ)
+DEPS := $(RELEASE_OBJS:.o=.d) $(TEST_OBJS:.o=.d) $(SERVER_APP_OBJS:.o=.d) $(SERVER_MAIN_OBJ:.o=.d)
 
 # 所有编译单元在生成头就绪后再编译（增量重编译由 .d 依赖负责）。
-$(SHARED_OBJS) $(MAIN_RELEASE_OBJ) $(MAIN_TEST_OBJ): | $(GENERATED_JSON)
+$(LINK_OBJS) $(MAIN_RELEASE_OBJ) $(MAIN_TEST_OBJ) $(SERVER_APP_OBJS) $(SERVER_MAIN_OBJ): | $(GENERATED_JSON)
 
 # 默认目标：第一条规则是上面的 order-only 依赖（空规则），
 # 不显式指定的话 `make` 只会构建 build/app/Base/Base.o。
 .DEFAULT_GOAL := all
 
-.PHONY: all release test deploy clean
+.PHONY: all release test server deploy clean
 
 all: $(BUILD)/NeonCore.exe
 release: $(BUILD)/NeonCore.exe
 test: $(BUILD)/NeonCoreConsole.exe
+server: $(BUILD)/NeonCoreServer.exe
 
 $(BUILD):
 	@if not exist "$(BUILD_WIN)" mkdir "$(BUILD_WIN)"
 	@if not exist "$(BUILD_WIN)\app" mkdir "$(BUILD_WIN)\app"
+	@if not exist "$(BUILD_WIN)\app\client" mkdir "$(BUILD_WIN)\app\client"
+	@if not exist "$(BUILD_WIN)\app\server" mkdir "$(BUILD_WIN)\app\server"
+	@if not exist "$(BUILD_WIN)\app\shared" mkdir "$(BUILD_WIN)\app\shared"
 	@if not exist "$(BUILD_WIN)\lib" mkdir "$(BUILD_WIN)\lib"
-	@if not exist "$(BUILD_WIN)\app\Base" mkdir "$(BUILD_WIN)\app\Base"
-	@if not exist "$(BUILD_WIN)\app\Base\Input" mkdir "$(BUILD_WIN)\app\Base\Input"
-	@if not exist "$(BUILD_WIN)\app\Base\Audio" mkdir "$(BUILD_WIN)\app\Base\Audio"
-	@if not exist "$(BUILD_WIN)\app\Base\Paint" mkdir "$(BUILD_WIN)\app\Base\Paint"
-	@if not exist "$(BUILD_WIN)\app\Base\Pointer" mkdir "$(BUILD_WIN)\app\Base\Pointer"
-	@if not exist "$(BUILD_WIN)\app\Base\ThreadPool" mkdir "$(BUILD_WIN)\app\Base\ThreadPool"
-	@if not exist "$(BUILD_WIN)\app\Games" mkdir "$(BUILD_WIN)\app\Games"
-	@if not exist "$(BUILD_WIN)\app\Games\Waves" mkdir "$(BUILD_WIN)\app\Games\Waves"
-	@if not exist "$(BUILD_WIN)\app\Games\Upgrades" mkdir "$(BUILD_WIN)\app\Games\Upgrades"
-	@if not exist "$(BUILD_WIN)\app\Games\Renderer" mkdir "$(BUILD_WIN)\app\Games\Renderer"
-	@if not exist "$(BUILD_WIN)\app\Games\Simulation" mkdir "$(BUILD_WIN)\app\Games\Simulation"
-	@if not exist "$(BUILD_WIN)\app\Client" mkdir "$(BUILD_WIN)\app\Client"
-	@if not exist "$(BUILD_WIN)\app\Net" mkdir "$(BUILD_WIN)\app\Net"
-	@if not exist "$(BUILD_WIN)\app\Menu" mkdir "$(BUILD_WIN)\app\Menu"
-	@if not exist "$(BUILD_WIN)\app\Shop" mkdir "$(BUILD_WIN)\app\Shop"
-	@if not exist "$(BUILD_WIN)\app\Shop\Score" mkdir "$(BUILD_WIN)\app\Shop\Score"
-	@if not exist "$(BUILD_WIN)\app\Shop\Inventory" mkdir "$(BUILD_WIN)\app\Shop\Inventory"
-	@if not exist "$(BUILD_WIN)\app\Menu\Main" mkdir "$(BUILD_WIN)\app\Menu\Main"
-	@if not exist "$(BUILD_WIN)\app\Menu\Map" mkdir "$(BUILD_WIN)\app\Menu\Map"
-	@if not exist "$(BUILD_WIN)\app\Menu\Match" mkdir "$(BUILD_WIN)\app\Menu\Match"
-	@if not exist "$(BUILD_WIN)\app\Menu\Result" mkdir "$(BUILD_WIN)\app\Menu\Result"
-	@if not exist "$(BUILD_WIN)\app\Menu\Editor" mkdir "$(BUILD_WIN)\app\Menu\Editor"
-	@if not exist "$(BUILD_WIN)\app\Menu\Settings" mkdir "$(BUILD_WIN)\app\Menu\Settings"
-	@if not exist "$(BUILD_WIN)\app\Menu\Depot" mkdir "$(BUILD_WIN)\app\Menu\Depot"
-	@if not exist "$(BUILD_WIN)\app\Arena" mkdir "$(BUILD_WIN)\app\Arena"
-	@if not exist "$(BUILD_WIN)\app\Arena\Combatants" mkdir "$(BUILD_WIN)\app\Arena\Combatants"
-	@if not exist "$(BUILD_WIN)\app\Arena\Combatants\Enemies" mkdir "$(BUILD_WIN)\app\Arena\Combatants\Enemies"
-	@if not exist "$(BUILD_WIN)\app\Arena\Bullets" mkdir "$(BUILD_WIN)\app\Arena\Bullets"
-	@if not exist "$(BUILD_WIN)\app\Arena\Entities" mkdir "$(BUILD_WIN)\app\Arena\Entities"
 
-$(BASE_OBJS): $(BUILD)/app/Base/%.o: src/app/Base/%.cpp | $(BUILD)
+$(SHARED_OBJS): $(BUILD)/app/shared/%.o: src/app/shared/%.cpp | $(BUILD)
+	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
+	@echo [CXX] $<
+	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
+
+$(CLIENT_OBJS): $(BUILD)/app/client/%.o: src/app/client/%.cpp | $(BUILD)
+	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
+	@echo [CXX] $<
+	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
+
+$(SERVER_OBJS): $(BUILD)/app/server/%.o: src/app/server/%.cpp | $(BUILD)
 	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
 	@echo [CXX] $<
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
@@ -138,52 +142,23 @@ $(LIB_OBJS): $(BUILD)/lib/%.o: src/lib/%.cpp | $(BUILD)
 	@echo [CXX] $<
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
-$(GAMES_OBJS): $(BUILD)/app/Games/%.o: src/app/Games/%.cpp | $(BUILD)
-	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
-	@echo [CXX] $<
-	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
-
-$(CLIENT_OBJS): $(BUILD)/app/Client/%.o: src/app/Client/%.cpp | $(BUILD)
-	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
-	@echo [CXX] $<
-	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
-
-$(NET_OBJS): $(BUILD)/app/Net/%.o: src/app/Net/%.cpp | $(BUILD)
-	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
-	@echo [CXX] $<
-	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
-
-$(SHOP_OBJS): $(BUILD)/app/Shop/%.o: src/app/Shop/%.cpp | $(BUILD)
-	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
-	@echo [CXX] $<
-	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
-
-$(LOADOUT_OBJS): $(BUILD)/app/Loadout/%.o: src/app/Loadout/%.cpp | $(BUILD)
-	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
-	@echo [CXX] $<
-	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
-
-$(MENU_OBJS): $(BUILD)/app/Menu/%.o: src/app/Menu/%.cpp | $(BUILD)
-	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
-	@echo [CXX] $<
-	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
-
-$(ARENA_OBJS): $(BUILD)/app/Arena/%.o: src/app/Arena/%.cpp | $(BUILD)
-	@echo [CXX] $<
-	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
-
-$(MAIN_RELEASE_OBJ): src/app/main.cpp | $(BUILD)
-	@if not exist "$(BUILD_WIN)\app" mkdir "$(BUILD_WIN)\app"
+$(MAIN_RELEASE_OBJ): src/app/client/main.cpp | $(BUILD)
+	@if not exist "$(BUILD_WIN)\app\client" mkdir "$(BUILD_WIN)\app\client"
 	@echo [CXX] $< (release)
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
-$(MAIN_TEST_OBJ): src/app/main.cpp | $(BUILD)
-	@if not exist "$(BUILD_WIN)\app" mkdir "$(BUILD_WIN)\app"
+$(MAIN_TEST_OBJ): src/app/client/main.cpp | $(BUILD)
+	@if not exist "$(BUILD_WIN)\app\client" mkdir "$(BUILD_WIN)\app\client"
 	@echo [CXX] $< (debug/tests)
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -DDEBUG -c $< -o $@
 
-$(ICON_RES_OBJ): src/app/app.rc assets/icon.ico | $(BUILD)
-	@if not exist "$(BUILD_WIN)\app" mkdir "$(BUILD_WIN)\app"
+$(SERVER_MAIN_OBJ): src/app/server/main.cpp | $(BUILD)
+	@if not exist "$(BUILD_WIN)\app\server" mkdir "$(BUILD_WIN)\app\server"
+	@echo [CXX] $< (server)
+	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
+
+$(ICON_RES_OBJ): src/app/client/app.rc assets/icon.ico | $(BUILD)
+	@if not exist "$(BUILD_WIN)\app\client" mkdir "$(BUILD_WIN)\app\client"
 	@echo [RC] $<
 	@$(RC) -I assets -i $< -o $@
 
@@ -204,13 +179,18 @@ $(BUILD)/NeonCore.exe: $(RELEASE_OBJS)
 	@echo [LD] $@ (release)
 	@$(CXX) -mwindows $(RELEASE_OBJS) -o $@ $(LIBS)
 
-deploy: release
+$(BUILD)/NeonCoreServer.exe: $(SERVER_APP_OBJS) $(SERVER_MAIN_OBJ)
+	@echo [LD] $@ (server)
+	@$(CXX) $(SERVER_APP_OBJS) $(SERVER_MAIN_OBJ) -o $@ $(LIBS)
+
+deploy: release server
 	@if not exist "$(DIST_WIN)" mkdir "$(DIST_WIN)"
 	@if not exist "$(DIST_WIN)\music" mkdir "$(DIST_WIN)\music"
 	@if not exist "$(DIST_WIN)\platforms" mkdir "$(DIST_WIN)\platforms"
 	@if not exist "$(DIST_WIN)\multimedia" mkdir "$(DIST_WIN)\multimedia"
 	@if not exist "$(DIST_WIN)\styles" mkdir "$(DIST_WIN)\styles"
 	@copy /Y "$(BUILD_WIN)\NeonCore.exe" "$(DIST_WIN)\NeonCore.exe" >nul
+	@copy /Y "$(BUILD_WIN)\NeonCoreServer.exe" "$(DIST_WIN)\NeonCoreServer.exe" >nul
 	@if exist "$(DIST_WIN)\NeonCoreConsole.exe" del /Q "$(DIST_WIN)\NeonCoreConsole.exe"
 	@copy /Y "THIRD_PARTY.txt" "$(DIST_WIN)\THIRD_PARTY.txt" >nul
 	@for %%F in (Qt6Core.dll Qt6Gui.dll Qt6Widgets.dll Qt6Multimedia.dll Qt6Network.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll avcodec-61.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll) do @copy /Y "$(QTDIR_WIN)\bin\%%F" "$(DIST_WIN)\%%F" >nul

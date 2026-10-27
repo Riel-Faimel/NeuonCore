@@ -35,80 +35,33 @@
 ```text
 cpp/src/
 ├─ app/
-│  ├─ Base/
-│  │  ├─ Base.h / Base.cpp
-│  │  ├─ Input/Input.h/.cpp
-│  │  ├─ Audio/Audio.h/.cpp
-│  │  ├─ Audio/Music.h/.cpp
-│  │  ├─ Pointer/Pointer.h/.cpp   全局鼠标指针
-│  │  ├─ Paint/Paint.h/.cpp
-│  │  └─ ThreadPool/ThreadPool.h/.cpp 帧内并行任务池
-│  ├─ Arena/
-│  │  ├─ Arena.h / Arena.cpp      私有继承组件 + 编排
-│  │  ├─ Context.h                组件之间共享的引用（Arena 注入，模块内部）
-│  │  ├─ Host.h                   组件 → 模块的虚函数回调接口
-│  │  ├─ Events.h / Events.cpp
-│  │  ├─ State.h / State.cpp
-│  │  ├─ Bullets/
-│  │  │  ├─ Bullets.h/.cpp
-│  │  │  └─ StandardBullet.h/.cpp
-│  │  ├─ Combatants/
-│  │  │  ├─ Combatants.h/.cpp
-│  │  │  ├─ Player.h/.cpp
-│  │  │  ├─ Enemy.h/.cpp              敌人基类 + RTTI 类型注册表
-│  │  │  └─ Enemies/
-│  │  │     ├─ EnemyTypes.h/.cpp      六个虚基类
-│  │  │     ├─ EnemyRegistry.h        CRTP 注册器（按 EnemyType）
-│  │  │     ├─ DroneEnemy.h/.cpp
-│  │  │     ├─ SpitterEnemy.h/.cpp
-│  │  │     ├─ TankEnemy.h/.cpp
-│  │  │     ├─ SplitterEnemy.h/.cpp
-│  │  │     ├─ MiniEnemy.h/.cpp
-│  │  │     ├─ RusherEnemy.h/.cpp
-│  │  │     ├─ AmplifierEnemy.h/.cpp
-│  │  │     ├─ LinkerEnemy.h/.cpp
-│  │  │     ├─ MenderEnemy.h/.cpp
-│  │  │     ├─ NecromancerEnemy.h/.cpp
-│  │  │     ├─ SummonerEnemy.h/.cpp
-│  │  │     └─ BossEnemy.h/.cpp
-│  │  └─ Entities/
-│  │     ├─ Entities.h/.cpp
-│  │     ├─ Mine.h/.cpp
-│  │     ├─ Portal.h/.cpp
-│  │     ├─ Pickup.h/.cpp
-│  │     ├─ Particle.h/.cpp
-│  │     ├─ FloatingText.h/.cpp
-│  │     └─ Shockwave.h/.cpp
-│  ├─ Games/
-│  │  ├─ Games.h / Games.cpp      单机适配器：GameSimulation + Renderer
-│  │  ├─ Simulation/GameSimulation.h/.cpp 组件：Arena / Waves / Upgrades、状态、计时、输入
-│  │  ├─ Waves/Waves.h/.cpp       组件：按台本出生敌人
-│  │  ├─ Upgrades/Upgrades.h/.cpp 组件：强化池、抽取与应用
-│  │  └─ Renderer/Renderer.h/.cpp 组件：局内画面与特效（只读 GameView）
-│  ├─ Client/
-│  │  └─ GameView.h/.cpp          客户端视图：Snapshot → 可绘制的 Arena 只读镜像
-│  ├─ Net/
-│  │  ├─ Protocol.cpp             协议帧打包/拆包 + FrameBuffer（无 socket 依赖）
-│  │  ├─ Input.cpp                客户端 → 服务端输入命令序列化
-│  │  ├─ Messages.cpp             Hello / Welcome / StartMatch / Event / MatchEnd
-│  │  ├─ Server.h/.cpp            QTcpServer：headless GameSimulation、60Hz tick、广播
-│  │  ├─ Client.h/.cpp            QTcpSocket：握手、输入、快照、GameView、Renderer
-│  │  └─ Snapshot.cpp             快照 QDataStream 序列化
-│  ├─ Menu/Menu.h / Menu.cpp
-│  │  ├─ Main/Main.h/.cpp         标题页组件
-│  │  ├─ Map/Map.h/.cpp           星区地图组件
-│  │  ├─ Match/Match.h/.cpp       当前对局组件
-│  │  ├─ Result/Result.h/.cpp     结算覆盖层组件
-│  │  ├─ Editor/Editor.h/.cpp     台本编辑器组件
-│  │  ├─ Depot/Depot.h/.cpp       补给站界面组件
-│  │  ├─ Armory/Armory.h/.cpp     战备界面组件
-│  │  └─ Settings/Settings.h/.cpp 音量设置组件
-│  ├─ Loadout/Loadout.h/.cpp      全局模块：发射器选择（持久化）
-│  ├─ Shop/Shop.h / Shop.cpp      模块入口：组合 Score / Inventory
-│  │  ├─ Score/Score.h/.cpp       组件：全局积分
-│  │  └─ Inventory/Inventory.h/.cpp 组件：消耗品库存
-│  ├─ app.rc
-│  └─ main.cpp
+│  ├─ shared/
+│  │  ├─ Arena/                    Arena + Bullets / Combatants / Enemies / Entities / Events / State
+│  │  └─ Net/                      Protocol.cpp / Input.cpp / Messages.cpp / Snapshot.cpp
+│  ├─ server/
+│  │  ├─ Games/
+│  │  │  ├─ Simulation/GameSimulation.h/.cpp
+│  │  │  ├─ Waves/Waves.h/.cpp
+│  │  │  └─ Upgrades/Upgrades.h/.cpp
+│  │  ├─ Net/Server.h/.cpp         QTcpServer：headless 模拟、60Hz tick、广播
+│  │  └─ main.cpp                  独立服务端入口（--port）
+│  └─ client/
+│     ├─ Base/                     窗口/输入/音频/绘制原语/线程池
+│     ├─ Games/
+│     │  ├─ Games.h / Games.cpp    单机适配器：GameSimulation + Renderer
+│     │  └─ Renderer/Renderer.h/.cpp
+│     ├─ Client/GameView.h/.cpp    快照 → 可绘制的只读 Arena 镜像
+│     ├─ Net/Client.h/.cpp         QTcpSocket：握手、输入、快照
+│     ├─ Menu/
+│     │  ├─ Menu.h / Menu.cpp
+│     │  ├─ Main/ Map/ Match/ Result/
+│     │  ├─ Editor/ Depot/ Armory/
+│     │  ├─ ServerSetup/ServerSetup.h/.cpp 自定义协议：单机/开房/加入 + 端口
+│     │  └─ Settings/
+│     ├─ Shop/                     Score / Inventory
+│     ├─ Loadout/
+│     ├─ app.rc
+│     └─ main.cpp                  客户端入口/窗口；--server 走同一可执行文件的服务端模式
 ├─ lib/
 │  ├─ Math.h / Math.cpp
 │  ├─ Json.h                        constexpr JSON 解析器
@@ -183,7 +136,7 @@ cpp/src/
 
 `Games` 只负责单机表现：每帧从 `BaseService` 采集 `arena::InputState` 再调用 `GameSimulation::update()`，实现钩子调用 `renderer_.shake/flash/showBanner/burstConfetti` 和 `BaseService.playSound()`，并继续把胜负结果交给 `Menu`。`Games::render()` 不再把模拟对象直接交给 `Renderer`：先 `writeSnapshot()` 提取 `net::Snapshot`，再用 `client::GameView::apply()` 重建视图，最后 `Renderer` 只读这份视图。单机和将来的 TCP 客户端因此共用同一条表现路径；`GameSimulation` 可以脱离 `Renderer` 单独构造和 update。
 
-积分由全局 `ShopService.score()`（`shop::Score`，`src/app/Shop/Score/`）统一持有：`Games` 构造时调用 `beginRun()`（只重置本局统计），`arena::Events::handleKill()` 击杀时调用 `addKill(enemy.score)`。全局余额跨局累计并写入配置存储（Windows 注册表 `HKCU\Software\NeonCore\NeonCore`，其他平台 exe 同级 `settings.ini`；键 `score/total`），HUD 显示钱包，结算显示本局获得（`Games::runScore()`）；`Score::spend()` 供商店使用。
+积分由全局 `ShopService.score()`（`shop::Score`，`src/app/client/Shop/Score/`）统一持有：`Games` 构造时调用 `beginRun()`（只重置本局统计），`arena::Events::handleKill()` 击杀时调用 `addKill(enemy.score)`。全局余额跨局累计并写入配置存储（Windows 注册表 `HKCU\Software\NeonCore\NeonCore`，其他平台 exe 同级 `settings.ini`；键 `score/total`），HUD 显示钱包，结算显示本局获得（`Games::runScore()`）；`Score::spend()` 供商店使用。
 
 一局的结束条件只由台本决定：清空最后一波即胜利。`Boss` 只是一个带阶段的强敌，击杀它不会结束对局，只触发表现反馈（目标摧毁横幅、震屏、音效），所以它可以被放在任意一波。
 
@@ -191,7 +144,7 @@ cpp/src/
 
 ### Menu
 
-`Menu` 是顶层界面模块入口，结构和 `Arena` 一样：自己只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop` 都是全局单例，不在 `Menu` 里），把八个界面拆成 `namespace menu` 组件：
+`Menu` 是顶层界面模块入口，结构和 `Arena` 一样：自己只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop` 都是全局单例，不在 `Menu` 里），把九个界面拆成 `namespace menu` 组件：
 
 | 组件 | 职责 |
 | --- | --- |
@@ -202,18 +155,21 @@ cpp/src/
 | `Editor` | 自定义台本编辑器：动态列（底部敌人库拖入）、逐波编辑 |
 | `Depot` | 补给站界面：展示钱包/库存，把购买意图转给全局 `Shop` |
 | `Armory` | 战备界面：展示/选择发射器，把装备意图转给全局 `Loadout` |
+| `ServerSetup` | 自定义协议联机设置：单机 / 局域网主机 / 加入主机，端口和地址 |
 | `Settings` | 音效 / 背景音乐音量，读写配置存储 |
 
 `Menu` 自己只负责：
 
-- 屏幕状态机（`Main / Map / Match / Result / Editor / Shop / Armory / Settings`）和输入路由；
-- 把 `Main` / `Map` / `Editor` / `Depot` / `Armory` / `Settings` 的意图（`OpenMap / Start / OpenEditor / OpenShop / OpenArmory / Deploy / Back` 等 `Action`）翻译成进地图、开局、进编辑器、进商店/战备、回主菜单；
+- 屏幕状态机（`Main / Map / Match / Result / Editor / Shop / Armory / ServerSetup / Settings`）和输入路由；
+- 把 `Main` / `Map` / `Editor` / `Depot` / `Armory` / `ServerSetup` / `Settings` 的意图（`OpenMap / Start / OpenEditor / OpenShop / OpenArmory / Deploy / Back` 等 `Action`）翻译成进地图、开局、进编辑器、进商店/战备、回主菜单；
 - 开局时把 `Games::Level`（展示信息 + 台本 + 起始波）交给 `Match`；回主菜单时让 `Match` 销毁这一局；
 - 给 `Result` 组装 `Summary`（胜负、得分、击杀、波次、时间）；
-- 管理关卡表 `campaignLevels_`（四个关卡）与 `levels_`（标准/自定义卡）：地图节点按 campaign 索引开局，自定义协议部署时用 `Editor::script()` 覆盖台本、固定从第 1 波开始；
+- 管理关卡表 `campaignLevels_`（四个关卡）与 `levels_`（标准/自定义卡）：地图节点按 campaign 索引开局，自定义协议部署时先进入 `ServerSetup`，再用 `Editor::script()` 覆盖台本、固定从第 1 波开始；标准协议始终使用默认服务器配置；
 - 启动时按需初始化音频（`BaseService.initAudio()`），并按配置存储恢复音量（`Shop` 的加载/保存在 `main()`）；
 
 `Games` 一旦构造就由 `Match` 持有，`Menu` 不再直接访问；`Menu` 不参与战斗、波次或强化计算，也不直接画任何屏幕（组件的 `render()` 才画）。
+
+自定义协议的部署流程是 `Editor → ServerSetup → Match`。`ServerSetup` 的 `Single` 使用本地直连，不监听端口；`Host` 只填端口，`Match` 在 `0.0.0.0` 上启动内嵌服务端；`Join` 填地址和端口，只创建 `GameClient`，不创建本地服务端。标准协议的 `startCampaign()` 每次都会重新套用 `Menu` 构造时的默认 host/port（无参数时是自动端口回环），不会继承上一次自定义联机设置。
 
 ### Shop
 
@@ -312,10 +268,10 @@ public:
 | `net::Messages` | `src/include/Net/Messages.h` | `Hello / Welcome / StartMatch / Event / MatchEnd` 的 payload 与带帧头的编码/解码 |
 | `net::Snapshot` | `src/include/Net/Snapshot.h` | 玩家、敌人（dataKey + 绘制字段）、子弹、传送门/掉落/地雷/粒子/飘字/冲击波、波次 HUD、强化卡、状态/时间/分数/击杀/Boss |
 | 提取 | `GameSimulation::snapshot()` | `Arena / Combatants / Bullets / Entities` 各自把只读数据写进快照，RTTI 在边界转 `Enemy::dataKeyFor()` |
-| `server::GameServer` | `src/app/Net/Server.*` | `QTcpServer`、会话、固定 60Hz tick、headless `GameSimulation`、`Snapshot/Event/MatchEnd` 广播、权威输入应用 |
-| `client::GameClient` | `src/app/Net/Client.*` | `QTcpSocket`、Hello/Welcome、输入发送、快照接收、`client::GameView`、重连与错误状态 |
-| `client::GameView` | `src/app/Client/GameView.*` | 把快照应用回一个只读 `Arena` 镜像：按 dataKey 重建敌人/传送门，填充绘制字段；不推进模拟 |
-| `games::Renderer` | `src/app/Games/Renderer/*` | 只读 `GameView` 画世界层/HUD/强化卡/暂停；世界绘制仍走 `Arena::draw()`，没有第二套画法 |
+| `server::GameServer` | `src/app/server/Net/Server.*` | `QTcpServer`、会话、固定 60Hz tick、headless `GameSimulation`、`Snapshot/Event/MatchEnd` 广播、权威输入应用 |
+| `client::GameClient` | `src/app/client/Net/Client.*` | `QTcpSocket`、Hello/Welcome、输入发送、快照接收、`client::GameView`、重连与错误状态 |
+| `client::GameView` | `src/app/client/Client/GameView.*` | 把快照应用回一个只读 `Arena` 镜像：按 dataKey 重建敌人/传送门，填充绘制字段；不推进模拟 |
+| `games::Renderer` | `src/app/client/Games/Renderer/*` | 只读 `GameView` 画世界层/HUD/强化卡/暂停；世界绘制仍走 `Arena::draw()`，没有第二套画法 |
 
 服务端只拥有模拟，不链接/使用 Renderer、Menu 或 `BaseService` 的键鼠状态；`GameSimulation::Level` 里的台本经 `StartMatch` 从客户端提交，敌人类型在协议边界转成 `dataKey`。服务端用 `QElapsedTimer` 累加固定 1/60s 步长，每个 tick 后 `writeSnapshot()` 并广播；`ShopService.score().beginRun()` 在开局时重置本局统计，击杀仍由 `Arena::Events` 写回，因此比分/波次/胜负以服务端为准。表现事件（波次横幅、Boss 击破、震屏/闪屏、胜利/失败）通过 `Event` 消息发送，由客户端 `GameClient` 调用本地 `Renderer` 和音效；客户端不回传世界状态。
 
@@ -451,7 +407,7 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
             ├─ BaseService ────────► base::Input / Audio / Music / Pointer / Paint / ThreadPool（全局单例）
             ├─ RandomService ──────► 随机引擎（全局单例）
             ├─ ShopService ────────► shop::Score / Inventory（全局单例，注册表 / ini）
-            └─ Menu（持有四个关卡表，组合 8 个界面组件）
+            └─ Menu（持有四个关卡表，组合 9 个界面组件）
                ├─ menu::Main ─────────► 关卡卡 / 商店与设置入口（数据由 Menu 提供）
 ├─ menu::Map ──────────► 星区地图节点（levels.json），Start → 开局
                ├─ menu::Match ────────► Network: client::GameClient ──► net::Snapshot / Event
@@ -550,7 +506,7 @@ GameWindow::paintEvent()
 
 ### 加强化
 
-数值区间在 `src/json/upgrades.json`（按 key 的 `min`/`max`），其余在 `src/app/Games/Upgrades/`：
+数值区间在 `src/json/upgrades.json`（按 key 的 `min`/`max`），其余在 `src/app/server/Games/Upgrades/`：
 
 1. `src/json/upgrades.json` 加 `"key": {"min": ..., "max": ...}`（`min = max` 表示固定值，如 +1 穿透）；
 2. `Upgrades::catalog()` 加名称/标签/颜色（数值会自动从 `data::findUpgrade()` 填）；
@@ -573,7 +529,7 @@ GameWindow::paintEvent()
 
 ### 加关卡
 
-改 `src/app/Menu/Menu.cpp` 的 `levels_`：
+改 `src/app/client/Menu/Menu.cpp` 的 `levels_`：
 
 ```cpp
 {name, subtitle, startWave, script}
@@ -585,7 +541,7 @@ GameWindow::paintEvent()
 
 ### 加一个界面 / 界面字段
 
-每个屏幕都是一个 `menu::*` 组件（`src/app/Menu/<名字>/`）：
+每个屏幕都是一个 `menu::*` 组件（`src/app/client/Menu/<名字>/`）：
 
 1. 组件自己持有 UI 状态、绘制和命中测试，用返回的 `Action` 表达意图；
 2. `Menu` 的 `Screen` 枚举加一项，`render()` 里调它的 `render()`，输入路由里处理它的 `Action`；
@@ -597,25 +553,25 @@ GameWindow::paintEvent()
 
 ### 加敌人 / 状态 / 事件
 
-- 敌人：数值在 `src/json/enemies.json`，颜色与行为在 `src/app/Arena/Combatants/Enemy.*`，出生在 `Waves`；支援/特殊敌人的光环参数也在 `enemies.json`。
-- 状态：`src/app/Arena/State.*`。
-- 碰撞/击杀：`src/app/Arena/Events.*`。
-- 实体：`src/app/Arena/Entities/*`。
+- 敌人：数值在 `src/json/enemies.json`，颜色与行为在 `src/app/shared/Arena/Combatants/Enemy.*`，出生在 `Waves`；支援/特殊敌人的光环参数也在 `enemies.json`。
+- 状态：`src/app/shared/Arena/State.*`。
+- 碰撞/击杀：`src/app/shared/Arena/Events.*`。
+- 实体：`src/app/shared/Arena/Entities/*`。
 
 ### 加弹种
 
-1. 在 `src/include/Bullet.h` 之外、`src/app/Arena/Bullets/` 里新建实现（参考 `StandardBullet`）；
+1. 在 `src/include/Bullet.h` 之外、`src/app/shared/Arena/Bullets/` 里新建实现（参考 `StandardBullet`）；
 2. 实现 `advance`（推进/寿命/出屏）、`draw`（样式）、`hit`（命中结算并返回是否继续存活）；
 3. 发射处调用 `arena.submit(std::make_unique<YourBullet>(...))`，池会按 `standpoint()` 分流；
 4. `Events` 的几何判定、`Arena` 的批量清理和绘制都不需要改。
 
 ### 加 IO / 音频 / 绘制原语
 
-- 输入：`src/app/Base/Input/`。
-- 线程池：`src/app/Base/ThreadPool/`（帧内并行；`BaseService.parallelFor` 转发）。
-- 音效：`src/app/Base/Audio/Audio.*`；背景音乐：`src/app/Base/Audio/Music.*`。
-- 字体/颜色/绘制：`src/app/Base/Paint/`。
-- 鼠标指针：`src/app/Base/Pointer/`（位置 + 时钟 + 可见性，`BaseService` 转发）；准星画法在 `base::Paint::reticle()`。
+- 输入：`src/app/client/Base/Input/`。
+- 线程池：`src/app/client/Base/ThreadPool/`（帧内并行；`BaseService.parallelFor` 转发）。
+- 音效：`src/app/client/Base/Audio/Audio.*`；背景音乐：`src/app/client/Base/Audio/Music.*`。
+- 字体/颜色/绘制：`src/app/client/Base/Paint/`。
+- 鼠标指针：`src/app/client/Base/Pointer/`（位置 + 时钟 + 可见性，`BaseService` 转发）；准星画法在 `base::Paint::reticle()`。
 - `Base` 只保留转发接口。
 
 ## 性能与并行

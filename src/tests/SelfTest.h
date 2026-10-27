@@ -30,6 +30,8 @@
 #include <QTextStream>
 #include <QThread>
 #include <QTcpSocket>
+#include <QTcpServer>
+#include <QHostAddress>
 
 #include <algorithm>
 #include <array>
@@ -603,11 +605,56 @@ public:
                            QStringLiteral("dragging from the palette adds an enemy column"));
 
         menu.keyPress(Qt::Key_Return);
+        success &= require(menu.screen() == Menu::Screen::ServerSetup,
+                           QStringLiteral("custom deploy opens server setup"));
+        const menu::ServerSetup::Config defaultSetup = menu.serverSetup_.config();
+        success &= require(defaultSetup.mode == menu::ServerSetup::Mode::Single
+                               && defaultSetup.port == 0
+                               && defaultSetup.host.isEmpty(),
+                           QStringLiteral("custom setup defaults to no server"));
+
+        menu.serverSetup_.setMode(menu::ServerSetup::Mode::Host);
+        menu.serverSetup_.setPort(8899);
+        const menu::ServerSetup::Config hostSetup = menu.serverSetup_.config();
+        success &= require(hostSetup.mode == menu::ServerSetup::Mode::Host
+                               && hostSetup.port == 8899
+                               && hostSetup.host.isEmpty(),
+                           QStringLiteral("custom setup exposes the host port"));
+        menu.serverSetup_.setMode(menu::ServerSetup::Mode::Join);
+        menu.serverSetup_.setHost(QStringLiteral("192.168.1.9"));
+        menu.serverSetup_.setPort(8899);
+        const menu::ServerSetup::Config joinSetup = menu.serverSetup_.config();
+        success &= require(joinSetup.mode == menu::ServerSetup::Mode::Join
+                               && joinSetup.port == 8899
+                               && joinSetup.host == QStringLiteral("192.168.1.9"),
+                           QStringLiteral("custom setup exposes join host and port"));
+
+        menu.keyPress(Qt::Key_Escape);
+        success &= require(menu.screen() == Menu::Screen::Editor,
+                           QStringLiteral("escape leaves server setup"));
+        menu.keyPress(Qt::Key_Return);
+        menu.serverSetup_.setMode(menu::ServerSetup::Mode::Single);
+        menu.keyPress(Qt::Key_Return);
         game = menu.match_.game();
         success &= require(menu.screen() == Menu::Screen::Match
                                && game->totalWaves() == editedWaves + 2
                                && game->currentWave() == 1,
                            QStringLiteral("edited script drives the run from wave 1"));
+        menu.returnToMenu();
+
+        QTcpServer probe;
+        success &= require(probe.listen(QHostAddress::LocalHost, 0),
+                           QStringLiteral("custom host can reserve a test port"));
+        const quint16 customHostPort = probe.serverPort();
+        probe.close();
+        menu.serverSetup_.setMode(menu::ServerSetup::Mode::Host);
+        menu.serverSetup_.setPort(customHostPort);
+        menu.startCustom(menu.serverSetup_.config());
+        success &= require(menu.screen() == Menu::Screen::Match
+                               && menu.match_.localServer() != nullptr
+                               && menu.match_.localServer()->isListening()
+                               && menu.match_.localServer()->port() == customHostPort,
+                           QStringLiteral("custom host binds the configured port"));
         menu.returnToMenu();
 
         log(QStringLiteral("Script editor"));
@@ -1321,6 +1368,12 @@ public:
         menu.mouseMove({float(dropRow.center().x()), float(dropRow.center().y())});
         menu.mouseReleaseLeft();
         save(QStringLiteral("editor.png"));
+        menu.keyPress(Qt::Key_Return);
+        menu.serverSetup_.setMode(menu::ServerSetup::Mode::Host);
+        menu.serverSetup_.setPort(8899);
+        movePointer({640, 378});
+        save(QStringLiteral("server_setup.png"));
+        menu.keyPress(Qt::Key_Escape);
         menu.keyPress(Qt::Key_Escape);
 
         menu.startLevel(0);

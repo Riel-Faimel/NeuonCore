@@ -71,9 +71,11 @@ void Match::startNetwork(const Games::Level &level)
     client_ = std::make_unique<client::GameClient>();
     if (host_.isEmpty()) {
         // 单机：同进程内嵌服务端，自动端口 + 127.0.0.1 回环，仍然走真实 TCP。
+        // 自定义“局域网主机”会传入显式端口：此时绑定所有网卡，让局域网客户端加入。
         server_ = std::make_unique<server::GameServer>();
         QString error;
-        if (!server_->listen(0, true, &error)) {
+        const bool lanHost = port_ != 0;
+        if (!server_->listen(lanHost ? port_ : 0, !lanHost, &error)) {
             error_ = error;
             client_->setFatalError(error);
             return;
