@@ -37,13 +37,15 @@ LIBS := -L$(QTDIR)/lib \
 
 GAMES_COMPONENTS := Games Waves/Waves Upgrades/Upgrades Renderer/Renderer
 GAMES_OBJS := $(addprefix $(BUILD)/app/Games/,$(addsuffix .o,$(GAMES_COMPONENTS)))
-MENU_COMPONENTS := Menu Main/Main Map/Map Match/Match Result/Result Editor/Editor Depot/Depot Settings/Settings
+MENU_COMPONENTS := Menu Main/Main Map/Map Match/Match Result/Result Editor/Editor Depot/Depot Armory/Armory Settings/Settings
 MENU_OBJS := $(addprefix $(BUILD)/app/Menu/,$(addsuffix .o,$(MENU_COMPONENTS)))
 LIB_SRC := Math Random
 LIB_OBJS := $(addprefix $(BUILD)/lib/,$(addsuffix .o,$(LIB_SRC)))
 BASE_COMPONENTS := Base Input/Input Audio/Audio Audio/Music Paint/Paint Pointer/Pointer ThreadPool/ThreadPool
 SHOP_COMPONENTS := Shop Score/Score Inventory/Inventory
 SHOP_OBJS := $(addprefix $(BUILD)/app/Shop/,$(addsuffix .o,$(SHOP_COMPONENTS)))
+LOADOUT_COMPONENTS := Loadout/Loadout
+LOADOUT_OBJS := $(addprefix $(BUILD)/app/,$(addsuffix .o,$(LOADOUT_COMPONENTS)))
 BASE_OBJS := $(addprefix $(BUILD)/app/Base/,$(addsuffix .o,$(BASE_COMPONENTS)))
 MAIN_RELEASE_OBJ := $(BUILD)/app/main_release.o
 MAIN_TEST_OBJ := $(BUILD)/app/main_test.o
@@ -69,7 +71,7 @@ ARENA_COMPONENTS := Arena Bullets/Bullets Bullets/StandardBullet \
                     Entities/Particle Entities/FloatingText Entities/Shockwave
 ARENA_OBJS := $(addprefix $(BUILD)/app/Arena/,$(addsuffix .o,$(ARENA_COMPONENTS)))
 
-SHARED_OBJS := $(BASE_OBJS) $(LIB_OBJS) $(GAMES_OBJS) $(MENU_OBJS) $(SHOP_OBJS) $(ARENA_OBJS)
+SHARED_OBJS := $(BASE_OBJS) $(LIB_OBJS) $(GAMES_OBJS) $(MENU_OBJS) $(SHOP_OBJS) $(LOADOUT_OBJS) $(ARENA_OBJS)
 RELEASE_OBJS := $(SHARED_OBJS) $(MAIN_RELEASE_OBJ) $(ICON_RES_OBJ)
 TEST_OBJS := $(SHARED_OBJS) $(MAIN_TEST_OBJ)
 DEPS := $(RELEASE_OBJS:.o=.d) $(TEST_OBJS:.o=.d)
@@ -137,6 +139,11 @@ $(SHOP_OBJS): $(BUILD)/app/Shop/%.o: src/app/Shop/%.cpp | $(BUILD)
 	@echo [CXX] $<
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
+$(LOADOUT_OBJS): $(BUILD)/app/Loadout/%.o: src/app/Loadout/%.cpp | $(BUILD)
+	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
+	@echo [CXX] $<
+	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
+
 $(MENU_OBJS): $(BUILD)/app/Menu/%.o: src/app/Menu/%.cpp | $(BUILD)
 	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
 	@echo [CXX] $<
@@ -165,7 +172,7 @@ $(EMBED_TOOL): tools/embed_json.cpp | $(BUILD)
 $(GENERATED_JSON): $(EMBED_TOOL) $(JSON_FILES) | $(BUILD)
 	@if not exist "$(BUILD_WIN)\generated" mkdir "$(BUILD_WIN)\generated"
 	@echo [JSON] $@
-	@$(EMBED_TOOL) $@ player_json src/json/player.json enemies_json src/json/enemies.json waves_level_01 src/json/waves/level-01.json upgrades_json src/json/upgrades.json bullets_json src/json/bullets.json items_json src/json/items.json levels_json src/json/levels.json
+	@$(EMBED_TOOL) $@ player_json src/json/player.json enemies_json src/json/enemies.json waves_level_01 src/json/waves/level-01.json waves_level_02 src/json/waves/level-02.json waves_level_03 src/json/waves/level-03.json waves_level_04 src/json/waves/level-04.json loadout_json src/json/loadout.json upgrades_json src/json/upgrades.json bullets_json src/json/bullets.json items_json src/json/items.json levels_json src/json/levels.json
 
 $(BUILD)/NeonCoreConsole.exe: $(TEST_OBJS)
 	@echo [LD] $@ (debug/tests)

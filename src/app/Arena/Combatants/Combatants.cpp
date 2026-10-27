@@ -77,13 +77,14 @@ void Combatants::draw(QPainter &world, QPainter &glow, const Context &ctx) const
 }
 
 void Combatants::spawnEnemy(const Context &ctx, EnemyType type,
-                            const Math::Vec2 &pos, int wave)
+                            const Math::Vec2 &pos, int wave, int enemyLevel)
 {
     std::unique_ptr<Enemy> enemy = Enemy::create(type, pos, wave);
     if (!enemy) {
         return;
     }
     Enemy *ptr = enemy.get();
+    ptr->setLevel(enemyLevel);
     enemies_.push_back(std::move(enemy));
     if (ptr->boss) {
         boss_ = ptr;
@@ -95,14 +96,15 @@ void Combatants::spawnEnemy(const Context &ctx, EnemyType type,
 }
 
 void Combatants::spawnEnemy(const Context &ctx, const QString &dataKey,
-                            const Math::Vec2 &pos, int wave)
+                            const Math::Vec2 &pos, int wave, int enemyLevel)
 {
     if (const auto type = Enemy::typeForKey(dataKey)) {
-        spawnEnemy(ctx, *type, pos, wave);
+        spawnEnemy(ctx, *type, pos, wave, enemyLevel);
     }
 }
 
-void Combatants::spawnMinions(const Context &ctx, const Math::Vec2 &pos, int count, int wave)
+void Combatants::spawnMinions(const Context &ctx, const Math::Vec2 &pos, int count,
+                              int wave, int enemyLevel)
 {
     for (int i = 0; i < count; ++i) {
         const float angle = RandomService.real(0.0f, Math::Tau);
@@ -113,6 +115,7 @@ void Combatants::spawnMinions(const Context &ctx, const Math::Vec2 &pos, int cou
         if (!child) {
             continue;
         }
+        child->setLevel(enemyLevel);
         ctx.entities.spawnBurst(ctx, child->pos, child->color, 6, 110.0f, 0.35f);
         enemies_.push_back(std::move(child));
     }

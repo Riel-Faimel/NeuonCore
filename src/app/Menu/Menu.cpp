@@ -22,22 +22,38 @@ Menu::Menu(bool enableAudio) : settings_(enableAudio)
                     QImage::Format_ARGB32_Premultiplied);
     levels_ = {
         {QStringLiteral("标准协议"),
-         QStringLiteral("八波战役 · 守住星核"), 1, standardScript()},
+         QStringLiteral("星区地图 · 四个区域"), 1, standardScript(0)},
         {QStringLiteral("自定义协议"),
          QStringLiteral("点击编辑台本"), 1, editor_.script()},
     };
+    for (int i = 0; i < int(data::kCampaigns.size())
+                    && i < data::kLevelNodes.count; ++i) {
+        const data::LevelNode &node = data::kLevelNodes.items[size_t(i)];
+        Games::Level level;
+        level.name = QString::fromUtf8(node.name.data(), int(node.name.size()));
+        level.subtitle = QString::fromUtf8(node.subtitle.data(),
+                                           int(node.subtitle.size()));
+        level.startWave = 1;
+        level.enemyLevel = i + 1;
+        level.script = standardScript(i);
+        campaignLevels_.push_back(std::move(level));
+    }
 }
 
 Menu::~Menu() = default;
 
-// 台本是数据：src/json/waves.json 的 campaign 在编译期展开成常量，
+// 台本是数据：src/json/waves/level-0N.json 的 campaign 在编译期展开成常量，
 // 这里只是把它转成这一局要提交给 Games 的 games::Script。
-games::Script Menu::standardScript()
+games::Script Menu::standardScript(int index)
 {
     games::Script script;
-    script.reserve(size_t(data::kCampaign.count));
-    for (int w = 0; w < data::kCampaign.count; ++w) {
-        const data::WaveDef &definition = data::kCampaign.waves[size_t(w)];
+    if (index < 0 || index >= int(data::kCampaigns.size())) {
+        return script;
+    }
+    const data::Campaign &campaign = data::kCampaigns[size_t(index)];
+    script.reserve(size_t(campaign.count));
+    for (int w = 0; w < campaign.count; ++w) {
+        const data::WaveDef &definition = campaign.waves[size_t(w)];
         games::Wave wave;
         wave.enemies.reserve(size_t(definition.count));
         for (int i = 0; i < definition.count; ++i) {
@@ -75,9 +91,13 @@ menu::Result::Summary Menu::summary() const
 {
     menu::Result::Summary summary;
     summary.victory = match_.state() == Games::State::Victory;
-    summary.levelName = level_ >= 0 && level_ < int(levels_.size())
-                            ? levels_[size_t(level_)].name
-                            : QString();
+    summary.levelName =
+        campaignActive_ && activeCampaign_ >= 0
+                && activeCampaign_ < int(campaignLevels_.size())
+            ? campaignLevels_[size_t(activeCampaign_)].name
+            : (level_ >= 0 && level_ < int(levels_.size())
+                   ? levels_[size_t(level_)].name
+                   : QString());
     summary.score = match_.runScore();
     summary.kills = match_.kills();
     summary.wave = match_.wave();
@@ -133,6 +153,8 @@ void Menu::render()
         editor_.render(painter, BaseService.muted());
     } else if (screen_ == Screen::Shop) {
         depot_.render(painter);
+    } else if (screen_ == Screen::Armory) {
+        armory_.render(painter);
     } else if (screen_ == Screen::Settings) {
         settings_.render(painter);
     } else {
@@ -141,11 +163,28 @@ void Menu::render()
     }
 }
 
+void Menu::startCampaign(int index)
+{
+    if (index < 0 || index >= int(campaignLevels_.size())) {
+        return;
+    }
+    activeCampaign_ = index;
+    campaignActive_ = true;
+    match_.start(campaignLevels_[size_t(index)]);
+    screen_ = Screen::Match;
+    BaseService.keyRelease(Qt::Key_Escape);
+}
+
 void Menu::startLevel(int index)
 {
+    if (index == 0) {
+        startCampaign(0);
+        return;
+    }
     if (index < 0 || index >= int(levels_.size())) {
         return;
     }
+    campaignActive_ = false;
     level_ = index;
     Games::Level level = levels_[size_t(index)];
     if (index == CustomLevelIndex) {
@@ -156,6 +195,15 @@ void Menu::startLevel(int index)
     match_.start(level);
     screen_ = Screen::Match;
     BaseService.keyRelease(Qt::Key_Escape);
+}
+
+void Menu::retry()
+{
+    if (campaignActive_) {
+        startCampaign(activeCampaign_);
+    } else {
+        startLevel(level_);
+    }
 }
 
 void Menu::returnToMenu()
@@ -194,6 +242,11 @@ void Menu::keyPress(int key, bool autoRepeat)
             screen_ = Screen::Shop;
             BaseService.playSound(QStringLiteral("ui"));
             break;
+        case menu::Main::Action::OpenArmory:
+            armory_.open();
+            screen_ = Screen::Armory;
+            BaseService.playSound(QStringLiteral("ui"));
+            break;
         case menu::Main::Action::OpenSettings:
             settings_.reset();
             screen_ = Screen::Settings;
@@ -207,11 +260,8 @@ void Menu::keyPress(int key, bool autoRepeat)
     case Screen::Map: {
         const menu::Map::Command command = map_.keyPress(key);
         if (command.action == menu::Map::Action::Start) {
-            if (command.level >= 0 && command.level < CustomLevelIndex) {
-                startLevel(command.level);
-            } else {
-                // 区域已解锁但还没有对应标准关卡：等关卡内容补齐再放行。
-                BaseService.playSound(QStringLiteral("ui"));
+            if (command.level >= 0 && command.level < int(campaignLevels_.size())) {
+                startCampaign(command.level);
             }
         } else if (command.action == menu::Map::Action::Back) {
             screen_ = Screen::Main;
@@ -231,7 +281,7 @@ void Menu::keyPress(int key, bool autoRepeat)
     case Screen::Result: {
         const menu::Result::Action action = result_.keyPress(key);
         if (action == menu::Result::Action::Retry) {
-            startLevel(level_);
+            retry();
         } else if (action == menu::Result::Action::Back) {
             returnToMenu();
         }
@@ -249,6 +299,13 @@ void Menu::keyPress(int key, bool autoRepeat)
     case Screen::Shop: {
         const menu::Depot::Action action = depot_.keyPress(key);
         if (action == menu::Depot::Action::Back) {
+            screen_ = Screen::Main;
+            BaseService.playSound(QStringLiteral("ui"));
+        }
+        break;
+    }
+    case Screen::Armory: {
+        if (armory_.keyPress(key) == menu::Armory::Action::Back) {
             screen_ = Screen::Main;
             BaseService.playSound(QStringLiteral("ui"));
         }
@@ -307,6 +364,11 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
             screen_ = Screen::Shop;
             BaseService.playSound(QStringLiteral("ui"));
             break;
+        case menu::Main::Action::OpenArmory:
+            armory_.open();
+            screen_ = Screen::Armory;
+            BaseService.playSound(QStringLiteral("ui"));
+            break;
         case menu::Main::Action::OpenSettings:
             settings_.reset();
             screen_ = Screen::Settings;
@@ -320,11 +382,8 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
     case Screen::Map: {
         const menu::Map::Command command = map_.mousePress(position);
         if (command.action == menu::Map::Action::Start) {
-            if (command.level >= 0 && command.level < CustomLevelIndex) {
-                startLevel(command.level);
-            } else {
-                // 区域已解锁但还没有对应标准关卡：等关卡内容补齐再放行。
-                BaseService.playSound(QStringLiteral("ui"));
+            if (command.level >= 0 && command.level < int(campaignLevels_.size())) {
+                startCampaign(command.level);
             }
         } else if (command.action == menu::Map::Action::Back) {
             screen_ = Screen::Main;
@@ -338,7 +397,7 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
     case Screen::Result: {
         const menu::Result::Action action = result_.mousePress(position);
         if (action == menu::Result::Action::Retry) {
-            startLevel(level_);
+            retry();
         } else if (action == menu::Result::Action::Back) {
             returnToMenu();
         }
@@ -357,6 +416,13 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
         const menu::Depot::Action action =
             depot_.mousePress(position);
         if (action == menu::Depot::Action::Back) {
+            screen_ = Screen::Main;
+            BaseService.playSound(QStringLiteral("ui"));
+        }
+        break;
+    }
+    case Screen::Armory: {
+        if (armory_.mousePress(position) == menu::Armory::Action::Back) {
             screen_ = Screen::Main;
             BaseService.playSound(QStringLiteral("ui"));
         }

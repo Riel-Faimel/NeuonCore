@@ -39,7 +39,7 @@ void SummonerEnemy::onAllyKilled(const Context &ctx, Enemy &dead)
         return;
     }
     charge -= chargeRequired;
-    ctx.combatants.spawnMinions(ctx, pos, summonCount, wave);
+    ctx.combatants.spawnMinions(ctx, pos, summonCount, wave, enemyLevel);
     ctx.entities.spawnBurst(ctx, pos, color, 18, 160.0f, 0.5f);
     ctx.entities.floatingTexts().push_back(FloatingText{
         pos + Math::Vec2(0.0f, -28.0f), QStringLiteral("召唤"),

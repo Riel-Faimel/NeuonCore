@@ -13,7 +13,8 @@
 // Base / Random / Shop 都是进程级单例（BaseService / RandomService / ShopService），
 // 不再作为构造参数传入；Games 只剩"这一局的安排"这一个输入。
 Games::Games(const Level &level)
-    : level_(level), arena_(), waves_(arena_, level_.script), upgrades_(arena_),
+    : level_(level), arena_(), waves_(arena_, level_.script, level_.enemyLevel),
+      upgrades_(arena_),
       renderer_()
 {
     ShopService.score().beginRun();

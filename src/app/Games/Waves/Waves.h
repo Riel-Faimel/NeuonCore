@@ -29,7 +29,7 @@ using Script = std::vector<Wave>;
 // 暴露：开始/推进波次、当前波、总波数、剩余威胁、是否清空。
 class Waves {
 public:
-    Waves(Arena &arena, const Script &script);
+    Waves(Arena &arena, const Script &script, int enemyLevel = 1);
 
     void start(int wave);
     void update(float dt);
@@ -52,6 +52,7 @@ private:
     const Script &script_;
     std::vector<arena::EnemyType> queue_;
     int currentWave_ = 0;
+    int enemyLevel_ = 1;
     int waveTotal_ = 0;
     float spawnTimer_ = 0.0f;
 };

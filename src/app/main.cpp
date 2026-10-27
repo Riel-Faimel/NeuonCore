@@ -1,6 +1,7 @@
 #include "Menu/Menu.h"
 #include "Base/Base.h"
 #include "Data/GameData.h"
+#include "Loadout/Loadout.h"
 #include "Shop/Shop.h"
 
 #include <QApplication>
@@ -264,23 +265,27 @@ int main(int argc, char *argv[])
     Base::initialize();
     // Shop 的存档由 main 负责：启动读一次，退出前写一次。
     ShopService.load();
+    LoadoutService.load();
 
 #ifdef DEBUG
     if (smoke) {
         const int code = SelfTest::run();
         ShopService.save();
+        LoadoutService.save();
         BaseService.shutdown();
         return code;
     }
     if (capture) {
         const int code = SelfTest::capture(captureDirectory);
         ShopService.save();
+        LoadoutService.save();
         BaseService.shutdown();
         return code;
     }
     if (bench) {
         const int code = SelfTest::bench();
         ShopService.save();
+        LoadoutService.save();
         BaseService.shutdown();
         return code;
     }
@@ -303,6 +308,7 @@ int main(int argc, char *argv[])
         });
         const int code = app.exec();
         ShopService.save();
+        LoadoutService.save();
         BaseService.shutdown();
         return code;
     }
@@ -314,6 +320,7 @@ int main(int argc, char *argv[])
     // BaseService 是全局对象，析构发生在 QApplication 之后；
     // 先把音频对象在应用还活着时释放掉。
     ShopService.save();
+    LoadoutService.save();
     BaseService.shutdown();
     return code;
 }

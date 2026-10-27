@@ -22,6 +22,7 @@ public:
         QString subtitle;
         int startWave = 1;
         games::Script script;
+        int enemyLevel = 1;
     };
 
     enum class State {

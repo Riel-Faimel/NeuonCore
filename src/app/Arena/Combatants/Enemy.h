@@ -65,6 +65,7 @@ public:
     Math::Vec2 pos;
     Math::Vec2 vel;
     int wave = 1;
+    int enemyLevel = 1;
     float radius = 13.0f;
     QColor color;
     int score = 10;
@@ -112,6 +113,7 @@ public:
     static const EnemyStats &statsFor(const QString &dataKey);
     static std::optional<Type> typeForKey(const QString &dataKey);
     static bool isBoss(Type type);
+    void setLevel(int level);
     Type type() const { return type_; }
     Role role() const { return role_; }
     Archetype archetype() const { return archetype_; }

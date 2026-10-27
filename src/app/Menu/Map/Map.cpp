@@ -160,7 +160,7 @@ void Map::render(QPainter &painter) const
                    Base::White, {GameConfig::ScreenWidth / 2.0f, 172},
                    QStringLiteral("center"));
     Base::text(painter, Base::smallFont(),
-               QStringLiteral("选择作战区域，ENTER 进入。未解锁区域会随进度开放。"),
+               QStringLiteral("选择作战区域，ENTER 进入。四个区域难度依次上升。"),
                Base::Muted,
                {GameConfig::ScreenWidth / 2.0f, 208}, QStringLiteral("center"), 200);
 

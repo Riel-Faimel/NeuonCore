@@ -1,8 +1,8 @@
 {
   "levels": [
     {"name": "外围防线", "subtitle": "八波战役 · 守住星核", "waves": "level-01", "x": 0.14, "y": 0.62, "locked": false},
-    {"name": "残骸带",   "subtitle": "信号被干扰 · 未解锁", "x": 0.36, "y": 0.40, "locked": true},
-    {"name": "深空裂隙", "subtitle": "高能反应 · 未解锁",   "x": 0.60, "y": 0.56, "locked": true},
-    {"name": "星核要塞", "subtitle": "虚空吞噬者 · 未解锁", "x": 0.84, "y": 0.34, "locked": true}
+    {"name": "残骸带",   "subtitle": "十波战役 · 敌方火力上升", "waves": "level-02", "x": 0.36, "y": 0.40, "locked": false},
+    {"name": "深空裂隙", "subtitle": "十二波战役 · 支援单位成群", "waves": "level-03", "x": 0.60, "y": 0.56, "locked": false},
+    {"name": "星核要塞", "subtitle": "最终战役 · 虚空吞噬者", "waves": "level-04", "x": 0.84, "y": 0.34, "locked": false}
   ]
 }

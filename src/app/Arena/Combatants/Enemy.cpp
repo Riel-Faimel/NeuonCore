@@ -162,6 +162,25 @@ Enemy::Enemy(Type type, Role role, Archetype archetype,
     radialTimer = RandomService.real(1.3f, 2.2f);
     strafe = RandomService.integer(0, 1) == 0 ? -1 : 1;
     phase = RandomService.real(0.0f, Math::Tau);
+    setLevel(1);
+}
+
+void Enemy::setLevel(int level)
+{
+    enemyLevel = std::max(1, level);
+    const EnemyStats &stats = statsFor(type_);
+    const float rankHp = 1.0f + 0.20f * float(enemyLevel - 1);
+    const float rankDamage = 1.0f + 0.12f * float(enemyLevel - 1);
+    const float rankSpeed = 1.0f + 0.035f * float(enemyLevel - 1);
+    const float waveHp = boss ? 1.0f : 1.0f + data::kWaveScaling.hp * float(wave - 1);
+    const float waveDamage = boss ? 1.0f : 1.0f + data::kWaveScaling.damage * float(wave - 1);
+    const float waveSpeed = boss ? 1.0f : 1.0f + data::kWaveScaling.speed * float(wave - 1);
+    maxHp = stats.hp * waveHp * rankHp;
+    hp = maxHp;
+    hpDisplay = maxHp;
+    damage = stats.damage * waveDamage * rankDamage;
+    speed = stats.speed * waveSpeed * rankSpeed;
+    score = int(std::lround(float(stats.score) * (1.0f + 0.10f * float(enemyLevel - 1))));
 }
 
 void Enemy::update(const Context &ctx, float dt)

@@ -11,6 +11,7 @@
 #include "Arena/Entities/Particle.h"
 #include "Arena/Entities/Shockwave.h"
 #include "Data/GameData.h"
+#include "Loadout/Loadout.h"
 #include "GameConfig.h"
 #include "Random.h"
 #include "Base/Base.h"
@@ -28,9 +29,10 @@ void Player::reset()
     state.maxHp = data::kPlayer.hp;
     state.hpDisplay = data::kPlayer.hp;
     state.speed = data::kPlayer.speed;
-    state.damage = data::kPlayer.damage;
-    state.fireCd = data::kPlayer.fireCd;
-    state.bulletSpeed = data::kPlayer.bulletSpeed;
+    const data::LauncherDef &launcher = LoadoutService.launcher();
+    state.damage = data::kPlayer.damage * launcher.damageScale;
+    state.fireCd = data::kPlayer.fireCd * launcher.fireCdScale;
+    state.bulletSpeed = data::kPlayer.bulletSpeed * launcher.speedScale;
     state.pos = {GameConfig::ScreenWidth / 2.0f,
                  GameConfig::ScreenHeight / 2.0f + 32.0f};
     state.muzzlePos = state.pos;
@@ -131,16 +133,18 @@ void Player::shoot(const Context &ctx)
 {
     const Math::Vec2 forward(std::cos(state.aim), std::sin(state.aim));
     const Math::Vec2 side(-forward.y, forward.x);
-    constexpr float spread = 0.115f;
-    const int count = std::max(1, state.multishot);
+    const data::LauncherDef &launcher = LoadoutService.launcher();
+    const float spread = 0.115f * launcher.spreadScale;
+    const int count = std::max(1, state.multishot + launcher.extraShots);
     for (int index = 0; index < count; ++index) {
         const float offset = (float(index) - (count - 1) / 2.0f) * spread;
         const Math::Vec2 direction = forward.rotated(offset);
         const Math::Vec2 origin = state.pos + forward * 20.0f
                                   + side * ((float(index) - (count - 1) / 2.0f) * 4.0f);
         ctx.bullets.spawnStandard(
-            origin, direction * state.bulletSpeed, state.damage, Base::Cyan,
-            Bullet::Standpoint::Player, data::kPlayer.bulletRadius, state.pierce,
+            origin, direction * state.bulletSpeed, state.damage,
+            LoadoutService.color(), Bullet::Standpoint::Player,
+            launcher.radius, state.pierce + launcher.pierceBonus,
             state.critChance);
     }
     state.muzzlePos = state.pos + forward * 22.0f;

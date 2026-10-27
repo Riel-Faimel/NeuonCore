@@ -1,0 +1,42 @@
+{
+  "spawn": {
+    "first": 0.95,
+    "later": 1.15,
+    "gap_min": 0.38,
+    "gap_max": 0.68
+  },
+  "scaling": {
+    "speed": 0.022,
+    "damage": 0.045,
+    "hp": 0.16
+  },
+  "campaign": [
+    [{"kind": "drone", "count": 8}],
+    [{"kind": "drone", "count": 8}, {"kind": "spitter", "count": 4},
+     {"kind": "amplifier", "count": 1}],
+    [{"kind": "drone", "count": 8}, {"kind": "spitter", "count": 4},
+     {"kind": "tank", "count": 2}, {"kind": "mender", "count": 1}],
+    [{"kind": "drone", "count": 9}, {"kind": "spitter", "count": 5},
+     {"kind": "tank", "count": 2}, {"kind": "splitter", "count": 2},
+     {"kind": "rusher", "count": 3}],
+    [{"kind": "drone", "count": 9}, {"kind": "spitter", "count": 5},
+     {"kind": "tank", "count": 3}, {"kind": "splitter", "count": 3},
+     {"kind": "linker", "count": 1}],
+    [{"kind": "drone", "count": 10}, {"kind": "spitter", "count": 6},
+     {"kind": "tank", "count": 3}, {"kind": "splitter", "count": 3},
+     {"kind": "necromancer", "count": 1}, {"kind": "rusher", "count": 3}],
+    [{"kind": "drone", "count": 10}, {"kind": "spitter", "count": 6},
+     {"kind": "tank", "count": 4}, {"kind": "splitter", "count": 4},
+     {"kind": "summoner", "count": 1}, {"kind": "amplifier", "count": 1}],
+    [{"kind": "drone", "count": 10}, {"kind": "spitter", "count": 6},
+     {"kind": "tank", "count": 4}, {"kind": "splitter", "count": 4},
+     {"kind": "mender", "count": 1}, {"kind": "linker", "count": 1}],
+    [{"kind": "drone", "count": 11}, {"kind": "spitter", "count": 7},
+     {"kind": "tank", "count": 4}, {"kind": "splitter", "count": 4},
+     {"kind": "necromancer", "count": 1}, {"kind": "summoner", "count": 1}],
+    [{"kind": "drone", "count": 8}, {"kind": "spitter", "count": 5},
+     {"kind": "tank", "count": 3}, {"kind": "splitter", "count": 4},
+     {"kind": "mender", "count": 1}, {"kind": "linker", "count": 1},
+     {"kind": "boss", "count": 1}]
+  ]
+}

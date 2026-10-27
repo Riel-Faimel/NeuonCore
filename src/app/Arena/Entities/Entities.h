@@ -32,7 +32,8 @@ public:
     // 飘字单独一层：字体渲染留在主线程，世界层可以放到工作线程。
     void drawTexts(QPainter &world) const;
 
-    void spawnPortal(const Context &ctx, EnemyType type, int wave);
+    void spawnPortal(const Context &ctx, EnemyType type, int wave,
+                     int enemyLevel = 1);
     void spawnPickup(const Context &ctx, const Math::Vec2 &pos, int amount);
     void spawnMine(const Context &ctx, const Math::Vec2 &pos);
     void clearMines();

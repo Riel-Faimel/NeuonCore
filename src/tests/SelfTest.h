@@ -9,6 +9,7 @@
 #include "Arena/Bullets/StandardBullet.h"
 #include "Arena/Combatants/Enemies/EnemyTypes.h"
 #include "Arena/Combatants/Enemies/BossEnemy.h"
+#include "Loadout/Loadout.h"
 #include "Arena/Combatants/Enemies/DroneEnemy.h"
 #include "Arena/Combatants/Enemies/MiniEnemy.h"
 #include "Arena/Combatants/Enemies/SpitterEnemy.h"
@@ -157,6 +158,7 @@ public:
         const bool audioRequested = qEnvironmentVariableIsSet("NEON_AUDIO_TEST");
         log(QStringLiteral("Creating game (offscreen, audio %1)")
                 .arg(audioRequested ? QStringLiteral("enabled") : QStringLiteral("disabled")));
+        LoadoutService.select(0);
         Menu menu(audioRequested);
         Games *game = nullptr;
         log(QStringLiteral("Audio initialized: %1")
@@ -179,15 +181,25 @@ public:
         menu.keyRelease(Qt::Key_Right);
         success &= require(menu.map_.selected() == 1,
                            QStringLiteral("map arrows move the selection"));
+        success &= require(data::kCampaigns[0].count == 8
+                               && data::kCampaigns[1].count == 10
+                               && data::kCampaigns[2].count == 12
+                               && data::kCampaigns[3].count == 12,
+                           QStringLiteral("later campaigns get longer"));
         menu.keyPress(Qt::Key_Return);
         menu.keyRelease(Qt::Key_Return);
-        success &= require(menu.screen() == Menu::Screen::Map
-                               && menu.match_.game() == nullptr,
-                           QStringLiteral("locked region cannot be entered"));
-        menu.keyPress(Qt::Key_Left);
-        menu.keyRelease(Qt::Key_Left);
-        menu.keyPress(Qt::Key_Return);
-        menu.keyRelease(Qt::Key_Return);
+        game = menu.match_.game();
+        success &= require(game != nullptr && game->totalWaves() == 10,
+                           QStringLiteral("second region starts the level 2 campaign"));
+        success &= require(game != nullptr && game->waves_.enemyLevel_ == 2,
+                           QStringLiteral("level 2 enemies use level 2 scaling"));
+        menu.startCampaign(3);
+        game = menu.match_.game();
+        success &= require(game != nullptr && game->totalWaves() == 12
+                               && game->waves_.enemyLevel_ == 4,
+                           QStringLiteral("final region uses the level 4 campaign"));
+        menu.returnToMenu();
+        menu.startLevel(0);
         game = menu.match_.game();
         success &= require(game != nullptr && game->state() == Games::State::Playing,
                            QStringLiteral("enter on the first node starts the run"));
@@ -640,6 +652,42 @@ public:
         success &= require(menu.screen() == Menu::Screen::Main,
                            QStringLiteral("escape leaves settings"));
 
+        log(QStringLiteral("Armory"));
+        LoadoutService.select(0);
+        const QRectF armoryEntry = menu.main_.armoryButtonRect();
+        menu.mousePressLeft({float(armoryEntry.center().x()),
+                             float(armoryEntry.center().y())});
+        menu.mouseReleaseLeft();
+        success &= require(menu.screen() == Menu::Screen::Armory,
+                           QStringLiteral("armory button opens war prep"));
+        menu.keyPress(Qt::Key_Right);
+        menu.keyRelease(Qt::Key_Right);
+        menu.keyPress(Qt::Key_Return);
+        menu.keyRelease(Qt::Key_Return);
+        success &= require(LoadoutService.selected() == 1,
+                           QStringLiteral("armory equips the scatter launcher"));
+        LoadoutService.select(2);
+        arena::Player railPlayer;
+        railPlayer.reset();
+        success &= require(railPlayer.state.damage > data::kPlayer.damage
+                               && railPlayer.state.fireCd > data::kPlayer.fireCd,
+                           QStringLiteral("launcher changes player damage and fire rate"));
+        LoadoutService.select(0);
+        menu.keyPress(Qt::Key_Escape);
+        menu.keyRelease(Qt::Key_Escape);
+        success &= require(menu.screen() == Menu::Screen::Main,
+                           QStringLiteral("escape leaves war prep"));
+
+        log(QStringLiteral("Enemy levels"));
+        const auto levelOne = arena::Enemy::create(
+            QStringLiteral("drone"), {0, 0}, 1);
+        const auto levelThree = arena::Enemy::create(
+            QStringLiteral("drone"), {0, 0}, 1);
+        levelThree->setLevel(3);
+        success &= require(levelThree->maxHp > levelOne->maxHp * 1.3f
+                               && levelThree->damage > levelOne->damage,
+                           QStringLiteral("enemy levels scale stats without a level readout"));
+
         log(QStringLiteral("Score"));
         const int wallet = ShopService.score().total();
         ShopService.score().beginRun();
@@ -888,6 +936,18 @@ public:
                              float(shopEntry.center().y())});
         save(QStringLiteral("shop.png"));
         menu.keyPress(Qt::Key_Escape);
+
+        // 战备
+        LoadoutService.select(1);
+        const QRectF armoryEntry = menu.main_.armoryButtonRect();
+        movePointer({float(armoryEntry.center().x()),
+                     float(armoryEntry.center().y())});
+        menu.mousePressLeft({float(armoryEntry.center().x()),
+                             float(armoryEntry.center().y())});
+        menu.mouseReleaseLeft();
+        save(QStringLiteral("armory.png"));
+        menu.keyPress(Qt::Key_Escape);
+        LoadoutService.select(0);
 
         // 应用图标（程序化绘制）
         Base::appIcon(256).save(dir.filePath(QStringLiteral("icon.png")));

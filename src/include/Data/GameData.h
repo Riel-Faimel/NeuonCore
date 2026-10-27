@@ -126,7 +126,7 @@ constexpr int findEnemyIndex(std::string_view kind)
     return -1;
 }
 
-// ----- 战役台本与出怪节奏（src/json/waves/level-01.json） -----
+// ----- 战役台本与出怪节奏（src/json/waves/level-0N.json） -----
 struct WaveSpawn {
     std::string_view kind;
     int count = 0;
@@ -158,31 +158,36 @@ struct WaveScaling {
     float hp = 0.16f;
 };
 
-inline constexpr json::Document kWavesDoc = json::parse(game_data::waves_level_01);
+inline constexpr std::array<json::Document, 4> kWavesDocs = {
+    json::parse(game_data::waves_level_01),
+    json::parse(game_data::waves_level_02),
+    json::parse(game_data::waves_level_03),
+    json::parse(game_data::waves_level_04),
+};
 
-constexpr Campaign loadCampaign()
+constexpr Campaign loadCampaign(const json::Document &doc)
 {
     Campaign campaign;
-    const json::Node *waves = kWavesDoc.member(kWavesDoc.root(), "campaign");
+    const json::Node *waves = doc.member(doc.root(), "campaign");
     if (waves == nullptr) {
         return campaign;
     }
-    const int waveCount = kWavesDoc.size(*waves);
+    const int waveCount = doc.size(*waves);
     for (int w = 0; w < waveCount && campaign.count < MaxCampaignWaves; ++w) {
-        const json::Node *waveNode = kWavesDoc.at(*waves, w);
+        const json::Node *waveNode = doc.at(*waves, w);
         if (waveNode == nullptr) {
             continue;
         }
         WaveDef wave;
-        const int spawnCount = kWavesDoc.size(*waveNode);
+        const int spawnCount = doc.size(*waveNode);
         for (int s = 0; s < spawnCount && wave.count < MaxSpawnsPerWave; ++s) {
-            const json::Node *spawn = kWavesDoc.at(*waveNode, s);
+            const json::Node *spawn = doc.at(*waveNode, s);
             if (spawn == nullptr) {
                 continue;
             }
             WaveSpawn entry;
-            entry.kind = kWavesDoc.text(kWavesDoc.member(*spawn, "kind"));
-            entry.count = kWavesDoc.integer(kWavesDoc.member(*spawn, "count"));
+            entry.kind = doc.text(doc.member(*spawn, "kind"));
+            entry.count = doc.integer(doc.member(*spawn, "count"));
             wave.spawns[wave.count++] = entry;
         }
         campaign.waves[campaign.count++] = wave;
@@ -190,36 +195,98 @@ constexpr Campaign loadCampaign()
     return campaign;
 }
 
-constexpr WaveTiming loadWaveTiming()
+constexpr WaveTiming loadWaveTiming(const json::Document &doc)
 {
     WaveTiming timing;
-    const json::Node *spawn = kWavesDoc.member(kWavesDoc.root(), "spawn");
+    const json::Node *spawn = doc.member(doc.root(), "spawn");
     if (spawn == nullptr) {
         return timing;
     }
-    timing.firstSpawn = float(kWavesDoc.number(kWavesDoc.member(*spawn, "first"), timing.firstSpawn));
-    timing.laterSpawn = float(kWavesDoc.number(kWavesDoc.member(*spawn, "later"), timing.laterSpawn));
-    timing.gapMin = float(kWavesDoc.number(kWavesDoc.member(*spawn, "gap_min"), timing.gapMin));
-    timing.gapMax = float(kWavesDoc.number(kWavesDoc.member(*spawn, "gap_max"), timing.gapMax));
+    timing.firstSpawn = float(doc.number(doc.member(*spawn, "first"), timing.firstSpawn));
+    timing.laterSpawn = float(doc.number(doc.member(*spawn, "later"), timing.laterSpawn));
+    timing.gapMin = float(doc.number(doc.member(*spawn, "gap_min"), timing.gapMin));
+    timing.gapMax = float(doc.number(doc.member(*spawn, "gap_max"), timing.gapMax));
     return timing;
 }
 
-constexpr WaveScaling loadWaveScaling()
+constexpr WaveScaling loadWaveScaling(const json::Document &doc)
 {
     WaveScaling scaling;
-    const json::Node *node = kWavesDoc.member(kWavesDoc.root(), "scaling");
+    const json::Node *node = doc.member(doc.root(), "scaling");
     if (node == nullptr) {
         return scaling;
     }
-    scaling.speed = float(kWavesDoc.number(kWavesDoc.member(*node, "speed"), scaling.speed));
-    scaling.damage = float(kWavesDoc.number(kWavesDoc.member(*node, "damage"), scaling.damage));
-    scaling.hp = float(kWavesDoc.number(kWavesDoc.member(*node, "hp"), scaling.hp));
+    scaling.speed = float(doc.number(doc.member(*node, "speed"), scaling.speed));
+    scaling.damage = float(doc.number(doc.member(*node, "damage"), scaling.damage));
+    scaling.hp = float(doc.number(doc.member(*node, "hp"), scaling.hp));
     return scaling;
 }
 
-inline constexpr Campaign kCampaign = loadCampaign();
-inline constexpr WaveTiming kWaveTiming = loadWaveTiming();
-inline constexpr WaveScaling kWaveScaling = loadWaveScaling();
+inline constexpr std::array<Campaign, 4> kCampaigns = {
+    loadCampaign(kWavesDocs[0]),
+    loadCampaign(kWavesDocs[1]),
+    loadCampaign(kWavesDocs[2]),
+    loadCampaign(kWavesDocs[3]),
+};
+inline constexpr Campaign kCampaign = kCampaigns[0];
+inline constexpr WaveTiming kWaveTiming = loadWaveTiming(kWavesDocs[0]);
+inline constexpr WaveScaling kWaveScaling = loadWaveScaling(kWavesDocs[0]);
+
+// ----- 战备发射器（loadout.json） -----
+struct LauncherDef {
+    std::string_view id;
+    std::string_view name;
+    std::string_view subtitle;
+    float damageScale = 1.0f;
+    float speedScale = 1.0f;
+    float fireCdScale = 1.0f;
+    float spreadScale = 1.0f;
+    float radius = 3.0f;
+    int extraShots = 0;
+    int pierceBonus = 0;
+    std::string_view color;
+};
+
+inline constexpr int MaxLaunchers = 4;
+
+struct LauncherTable {
+    std::array<LauncherDef, MaxLaunchers> items{};
+    int count = 0;
+};
+
+inline constexpr json::Document kLoadoutDoc = json::parse(game_data::loadout_json);
+
+constexpr LauncherTable loadLaunchers()
+{
+    LauncherTable table;
+    const json::Node *launchers = kLoadoutDoc.member(kLoadoutDoc.root(), "launchers");
+    if (launchers == nullptr) {
+        return table;
+    }
+    const int total = kLoadoutDoc.size(*launchers);
+    for (int i = 0; i < total && table.count < MaxLaunchers; ++i) {
+        const json::Node *entry = kLoadoutDoc.at(*launchers, i);
+        if (entry == nullptr) {
+            continue;
+        }
+        LauncherDef def;
+        def.id = kLoadoutDoc.text(kLoadoutDoc.member(*entry, "id"));
+        def.name = kLoadoutDoc.text(kLoadoutDoc.member(*entry, "name"));
+        def.subtitle = kLoadoutDoc.text(kLoadoutDoc.member(*entry, "subtitle"));
+        def.damageScale = float(kLoadoutDoc.number(kLoadoutDoc.member(*entry, "damage"), def.damageScale));
+        def.speedScale = float(kLoadoutDoc.number(kLoadoutDoc.member(*entry, "speed"), def.speedScale));
+        def.fireCdScale = float(kLoadoutDoc.number(kLoadoutDoc.member(*entry, "fire_cd"), def.fireCdScale));
+        def.spreadScale = float(kLoadoutDoc.number(kLoadoutDoc.member(*entry, "spread"), def.spreadScale));
+        def.radius = float(kLoadoutDoc.number(kLoadoutDoc.member(*entry, "radius"), def.radius));
+        def.extraShots = kLoadoutDoc.integer(kLoadoutDoc.member(*entry, "extra_shots"), def.extraShots);
+        def.pierceBonus = kLoadoutDoc.integer(kLoadoutDoc.member(*entry, "pierce"), def.pierceBonus);
+        def.color = kLoadoutDoc.text(kLoadoutDoc.member(*entry, "color"));
+        table.items[table.count++] = def;
+    }
+    return table;
+}
+
+inline constexpr LauncherTable kLaunchers = loadLaunchers();
 
 // ----- 强化数值区间（upgrades.json） -----
 struct UpgradeRange {
@@ -383,8 +450,13 @@ inline const char *validationError()
     if (kEnemies.count <= 0) {
         return "src/json/enemies.json: enemy table is empty";
     }
-    if (kCampaign.count <= 0) {
-        return "src/json/waves.json: wave table is empty";
+    for (const Campaign &campaign : kCampaigns) {
+        if (campaign.count <= 0) {
+            return "src/json/waves/: a campaign is empty";
+        }
+    }
+    if (kLaunchers.count <= 0) {
+        return "src/json/loadout.json: launcher table is empty";
     }
     if (kUpgradeRanges.count <= 0) {
         return "src/json/upgrades.json: upgrade table is empty";

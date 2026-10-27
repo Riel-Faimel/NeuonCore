@@ -88,7 +88,9 @@ cpp/src/
 │  │  ├─ Result/Result.h/.cpp     结算覆盖层组件
 │  │  ├─ Editor/Editor.h/.cpp     台本编辑器组件
 │  │  ├─ Depot/Depot.h/.cpp       补给站界面组件
+│  │  ├─ Armory/Armory.h/.cpp     战备界面组件
 │  │  └─ Settings/Settings.h/.cpp 音量设置组件
+│  ├─ Loadout/Loadout.h/.cpp      全局模块：发射器选择（持久化）
 │  ├─ Shop/Shop.h / Shop.cpp      模块入口：组合 Score / Inventory
 │  │  ├─ Score/Score.h/.cpp       组件：全局积分
 │  │  └─ Inventory/Inventory.h/.cpp 组件：消耗品库存
@@ -107,7 +109,8 @@ cpp/src/
 ├─ json/
 │  ├─ player.json                   玩家基础数值
 │  ├─ enemies.json                  敌人基础数值
-│  ├─ waves/level-01.json           第 1 关台本 + 出怪节奏
+│  ├─ waves/level-01..04.json       四个关卡的台本 + 出怪节奏
+│  ├─ loadout.json                  战备发射器数值
 │  ├─ upgrades.json                 强化数值区间
 │  ├─ items.json                    商店道具（地雷）
 │  ├─ levels.json                   星区地图节点
@@ -164,27 +167,30 @@ cpp/src/
 
 一局的结束条件只由台本决定：清空最后一波即胜利。`Boss` 只是一个带阶段的强敌，击杀它不会结束对局，只触发表现反馈（目标摧毁横幅、震屏、音效），所以它可以被放在任意一波。
 
+关卡使用 `waves/level-01..04.json`，长度 8/10/12/12 波；`Games::Level.enemyLevel` 为 1–4，通过 `Waves` → `Portal` → `Combatants::spawnEnemy()` 传到 `Enemy::setLevel()`：每级约 +20% 血量、+12% 伤害、+3.5% 速度，只影响数值，不显示等级数字，也不进入 HUD。召唤/分裂产生的单位沿用来源的等级。
+
 ### Menu
 
-`Menu` 是顶层界面模块入口，结构和 `Arena` 一样：自己只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop` 都是全局单例，不在 `Menu` 里），把六个界面拆成 `namespace menu` 组件：
+`Menu` 是顶层界面模块入口，结构和 `Arena` 一样：自己只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop` 都是全局单例，不在 `Menu` 里），把八个界面拆成 `namespace menu` 组件：
 
 | 组件 | 职责 |
 | --- | --- |
-| `Main` | 标题页：标题、关卡卡、商店/设置入口；选中状态和命中测试 |
+| `Main` | 标题页：标题、关卡卡、商店/战备/设置入口；选中状态和命中测试 |
 | `Map` | 星区地图：关卡节点、锁定状态、选择与进入 |
 | `Match` | 持有当前这一局 `Games`：开局、推进、渲染、局内输入转发 |
 | `Result` | 结算覆盖层：只接收一份只读 `Summary`，不读取 `Games` |
 | `Editor` | 自定义台本编辑器：动态列（底部敌人库拖入）、逐波编辑 |
 | `Depot` | 补给站界面：展示钱包/库存，把购买意图转给全局 `Shop` |
+| `Armory` | 战备界面：展示/选择发射器，把装备意图转给全局 `Loadout` |
 | `Settings` | 音效 / 背景音乐音量，读写配置存储 |
 
 `Menu` 自己只负责：
 
-- 屏幕状态机（`Main / Map / Match / Result / Editor / Shop / Settings`）和输入路由；
-- 把 `Main` / `Map` / `Editor` / `Depot` / `Settings` 的意图（`OpenMap / Start / OpenEditor / OpenShop / Deploy / Back` 等 `Action`）翻译成进地图、开局、进编辑器、进商店、回主菜单；
+- 屏幕状态机（`Main / Map / Match / Result / Editor / Shop / Armory / Settings`）和输入路由；
+- 把 `Main` / `Map` / `Editor` / `Depot` / `Armory` / `Settings` 的意图（`OpenMap / Start / OpenEditor / OpenShop / OpenArmory / Deploy / Back` 等 `Action`）翻译成进地图、开局、进编辑器、进商店/战备、回主菜单；
 - 开局时把 `Games::Level`（展示信息 + 台本 + 起始波）交给 `Match`；回主菜单时让 `Match` 销毁这一局；
 - 给 `Result` 组装 `Summary`（胜负、得分、击杀、波次、时间）；
-- 管理关卡表 `levels_`：标准协议与自定义协议的展示信息，自定义协议部署时用 `Editor::script()` 覆盖台本、固定从第 1 波开始；
+- 管理关卡表 `campaignLevels_`（四个关卡）与 `levels_`（标准/自定义卡）：地图节点按 campaign 索引开局，自定义协议部署时用 `Editor::script()` 覆盖台本、固定从第 1 波开始；
 - 启动时按需初始化音频（`BaseService.initAudio()`），并按配置存储恢复音量（`Shop` 的加载/保存在 `main()`）；
 
 `Games` 一旦构造就由 `Match` 持有，`Menu` 不再直接访问；`Menu` 不参与战斗、波次或强化计算，也不直接画任何屏幕（组件的 `render()` 才画）。
@@ -199,6 +205,10 @@ cpp/src/
 | `Inventory` | 地雷库存、`takeMine()` |
 
 `Shop` 只做组合与持久化：`load()/save()` 读写配置存储的 `score/total` 和 `inventory/mines`（Windows 注册表 / 其他平台 ini，见 `Data/Settings.h`），`buyMine()` 负责扣款 + 入库。持久化生命周期由 `main()` 管：启动时 `ShopService.load()`，退出前 `ShopService.save()`；`Menu` / `Games` / `Arena` / `menu::Depot` 都直接使用 `ShopService`，不再由某个模块持有并向下传递引用。
+
+### Loadout
+
+`Loadout` 是进程级单例 `LoadoutService`：从 `loadout.json` 读 `LauncherDef`（伤害/射速/弹速倍率、散射倍率、额外弹丸、穿透），把选择持久化到配置存储的 `loadout/launcher`。`Player::reset()` 应用倍率到 `PlayerState`，`Player::shoot()` 应用散射/额外弹丸/穿透；默认 `standard` 发射器所有倍率为 1，保持原弹道。`menu::Armory` 只展示与选择，不直接改子弹数据。
 
 ### Arena
 
@@ -399,7 +409,7 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
             ├─ BaseService ────────► base::Input / Audio / Music / Pointer / Paint / ThreadPool（全局单例）
             ├─ RandomService ──────► 随机引擎（全局单例）
             ├─ ShopService ────────► shop::Score / Inventory（全局单例，注册表 / ini）
-            └─ Menu（持有商店外的关卡表，组合 7 个界面组件）
+            └─ Menu（持有四个关卡表，组合 8 个界面组件）
                ├─ menu::Main ─────────► 关卡卡 / 商店与设置入口（数据由 Menu 提供）
 ├─ menu::Map ──────────► 星区地图节点（levels.json），Start → 开局
                ├─ menu::Match ────────► Games(Level)   ← 一局一个实例
@@ -469,7 +479,8 @@ GameWindow::paintEvent()
 | --- | --- |
 | 玩家血量 / 移速 / 伤害 / 射速 / 弹速 / 弹体半径 | `src/json/player.json` |
 | 敌人血量 / 速度 / 半径 / 接触伤害 / 分数、Boss 基础值 | `src/json/enemies.json` |
-| 战役波次组成、出怪节奏、波次成长系数 | `src/json/waves/level-01.json` |
+| 战役波次组成、出怪节奏、波次成长系数 | `src/json/waves/level-01..04.json` |
+| 战备发射器：伤害/射速/弹速/散射/额外弹丸/穿透 | `src/json/loadout.json` |
 | 强化每轮的随机区间 | `src/json/upgrades.json` |
 | 敌方子弹速度 / 伤害 / 半径 | `src/json/bullets.json` |
 | 地雷价格 / 伤害 / 感应与爆炸半径 / 引爆延迟 / 寿命 | `src/json/items.json` |
@@ -492,7 +503,7 @@ GameWindow::paintEvent()
 
 ### 加 / 改波次
 
-只改 `src/json/waves/level-01.json` 的 `campaign`：每一波是 `[{"kind": "...", "count": N}, ...]`，最后一波带 `boss` 即为 Boss 波；`Menu::standardScript()` 把它转成 `games::Script` 提交。每个关卡一个文件（`src/json/waves/level-0N.json`），`levels.json` 的节点用 `waves` 字段登记文件 id；新增文件后同步 Makefile 的嵌入参数和 `GameData` 里的文档常量。
+只改 `src/json/waves/level-0N.json` 的 `campaign`：每一波是 `[{"kind": "...", "count": N}, ...]`，最后一波带 `boss` 即为 Boss 波；`Menu::standardScript(index)` 把它转成 `games::Script` 提交。每个关卡一个文件，`levels.json` 的节点用 `waves` 字段登记文件 id；新增文件后同步 Makefile 的嵌入参数、`GameData` 的文档常量和 `Menu` 的 `campaignLevels_`。
 
 - 台本是数据，开局时作为 `Games::Level.script` 提交，`Waves` 只负责按它排队出生，不再有内置台本；
 - 星区地图节点在 `src/json/levels.json`；把节点 `locked` 设为 `false` 前，需要先在关卡表里补上对应的标准关卡（目前只有第一个区域可用）；

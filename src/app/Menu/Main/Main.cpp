@@ -48,6 +48,11 @@ QRectF Main::shopButtonRect() const
     return QRectF(GameConfig::ScreenWidth - 286.0f, 26.0f, 122.0f, 38.0f);
 }
 
+QRectF Main::armoryButtonRect() const
+{
+    return QRectF(GameConfig::ScreenWidth - 420.0f, 26.0f, 122.0f, 38.0f);
+}
+
 void Main::render(QPainter &painter, const std::vector<Card> &cards,
                   const Math::Vec2 &mouse, bool mouseActive, bool muted,
                   bool audioUnavailable)
@@ -147,6 +152,33 @@ void Main::render(QPainter &painter, const std::vector<Card> &cards,
                    QStringLiteral("midright"), 210);
     }
 
+    const QRectF armoryButton = armoryButtonRect();
+    const bool armoryHover = mouseActive
+                             && armoryButton.contains(QPointF(mouse.x, mouse.y));
+    Base::panel(painter, armoryButton,
+                armoryHover ? Base::Cyan : QColor(48, 91, 112),
+                armoryHover ? 235 : 195, 10, QColor(6, 14, 25));
+    {
+        const Math::Vec2 center(float(armoryButton.left()) + 26.0f,
+                                float(armoryButton.center().y()));
+        const QColor icon = armoryHover ? Base::Cyan : QColor(150, 200, 220);
+        Base::strokeCircle(painter, center, 8.0f, icon, 1.5f);
+        Base::strokeLine(painter, {center.x - 12.0f, center.y},
+                         {center.x - 4.0f, center.y}, icon, 1.5f);
+        Base::strokeLine(painter, {center.x + 4.0f, center.y},
+                         {center.x + 12.0f, center.y}, icon, 1.5f);
+        Base::strokeLine(painter, {center.x, center.y - 12.0f},
+                         {center.x, center.y - 4.0f}, icon, 1.5f);
+        Base::strokeLine(painter, {center.x, center.y + 4.0f},
+                         {center.x, center.y + 12.0f}, icon, 1.5f);
+        Base::fillCircle(painter, center, 2.0f, icon);
+    }
+    Base::text(painter, Base::smallFont(), QStringLiteral("战备"),
+               armoryHover ? Base::White : QColor(191, 216, 230),
+               {float(armoryButton.left()) + 46.0f,
+                float(armoryButton.center().y())},
+               QStringLiteral("midleft"), 220);
+
     const QRectF shopButton = shopButtonRect();
     const bool shopHover = mouseActive
                            && shopButton.contains(QPointF(mouse.x, mouse.y));
@@ -223,6 +255,8 @@ Main::Command Main::keyPress(int key, const std::vector<Card> &cards)
         command.action = Action::OpenMap;
     } else if (key == Qt::Key_2) {
         command.action = Action::OpenEditor;
+    } else if (key == Qt::Key_3) {
+        command.action = Action::OpenArmory;
     }
     return command;
 }
@@ -232,6 +266,10 @@ Main::Command Main::mousePress(const Math::Vec2 &position,
 {
     Command command;
     const QPointF point(position.x, position.y);
+    if (armoryButtonRect().contains(point)) {
+        command.action = Action::OpenArmory;
+        return command;
+    }
     if (shopButtonRect().contains(point)) {
         command.action = Action::OpenShop;
         return command;

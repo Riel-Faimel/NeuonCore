@@ -26,6 +26,7 @@ public:
         OpenMap,
         OpenEditor,
         OpenShop,
+        OpenArmory,
         OpenSettings,
     };
 
@@ -46,6 +47,7 @@ public:
     QRectF levelRect(int index, int cardCount) const;
     QRectF settingsButtonRect() const;
     QRectF shopButtonRect() const;
+    QRectF armoryButtonRect() const;
 
 private:
     int selected_ = 0;

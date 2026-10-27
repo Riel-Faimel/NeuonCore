@@ -9,8 +9,8 @@
 
 namespace games {
 
-Waves::Waves(Arena &arena, const Script &script)
-    : arena_(arena), script_(script)
+Waves::Waves(Arena &arena, const Script &script, int enemyLevel)
+    : arena_(arena), script_(script), enemyLevel_(std::max(1, enemyLevel))
 {
 }
 
@@ -33,7 +33,7 @@ void Waves::update(float dt)
     }
     const arena::EnemyType type = queue_.front();
     queue_.erase(queue_.begin());
-    arena_.spawnPortal(type, currentWave_);
+    arena_.spawnPortal(type, currentWave_, enemyLevel_);
     if (!queue_.empty()) {
         spawnTimer_ = RandomService.real(data::kWaveTiming.gapMin, data::kWaveTiming.gapMax);
     }

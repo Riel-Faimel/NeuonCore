@@ -41,6 +41,7 @@ void NecromancerEnemy::onAllyKilled(const Context &ctx, Enemy &dead)
     if (!revived) {
         return;
     }
+    revived->setLevel(dead.enemyLevel);
     revived->hp = revived->maxHp * 0.5f;
     revived->hpDisplay = revived->hp;
     revived->revived = true;

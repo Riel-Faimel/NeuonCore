@@ -34,6 +34,7 @@ void SplitterEnemy::onKilled(const Context &ctx)
         if (!child) {
             continue;
         }
+        child->setLevel(enemyLevel);
         ctx.entities.spawnBurst(ctx, child->pos, child->color, 6, 90.0f, 0.3f);
         ctx.combatants.enemies().push_back(std::move(child));
     }
