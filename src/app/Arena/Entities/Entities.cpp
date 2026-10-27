@@ -6,6 +6,7 @@
 #include "Arena/Combatants/Enemy.h"
 #include "Data/GameData.h"
 #include "GameConfig.h"
+#include "Net/Snapshot.h"
 #include "Random.h"
 #include "Base/Base.h"
 
@@ -196,6 +197,211 @@ void Entities::addShockwave(const Math::Vec2 &pos, float radius, const QColor &c
                             float duration, int width)
 {
     shockwaves_.emplace_back(pos, radius, color, duration, width);
+}
+
+void Entities::writeSnapshot(net::Snapshot &out) const
+{
+    out.portals.clear();
+    out.portals.reserve(portals_.size());
+    for (const Portal &portal : portals_) {
+        if (!portal.alive) {
+            continue;
+        }
+        net::PortalSnapshot data;
+        data.dataKey = Enemy::dataKeyFor(portal.type);
+        data.boss = portal.boss;
+        data.pos = portal.pos;
+        data.wave = portal.wave;
+        data.enemyLevel = portal.enemyLevel;
+        data.color = portal.color;
+        data.duration = portal.duration;
+        data.timer = portal.timer;
+        data.radius = portal.radius;
+        data.alive = portal.alive;
+        out.portals.push_back(std::move(data));
+    }
+
+    out.pickups.clear();
+    out.pickups.reserve(pickups_.size());
+    for (const Pickup &pickup : pickups_) {
+        if (!pickup.alive) {
+            continue;
+        }
+        net::PickupSnapshot data;
+        data.pos = pickup.pos;
+        data.vel = pickup.vel;
+        data.amount = pickup.amount;
+        data.age = pickup.age;
+        data.life = pickup.life;
+        data.phase = pickup.phase;
+        data.radius = pickup.radius;
+        data.alive = pickup.alive;
+        out.pickups.push_back(data);
+    }
+
+    out.mines.clear();
+    out.mines.reserve(mines_.size());
+    for (const Mine &mine : mines_) {
+        if (!mine.alive) {
+            continue;
+        }
+        net::MineSnapshot data;
+        data.pos = mine.pos;
+        data.radius = mine.radius;
+        data.triggerRadius = mine.triggerRadius;
+        data.blastRadius = mine.blastRadius;
+        data.damage = mine.damage;
+        data.armTime = mine.armTime;
+        data.life = mine.life;
+        data.age = mine.age;
+        data.alive = mine.alive;
+        out.mines.push_back(data);
+    }
+
+    out.particles.clear();
+    out.particles.reserve(particles_.size());
+    for (const Particle &particle : particles_) {
+        if (particle.life <= 0.0f) {
+            continue;
+        }
+        net::ParticleSnapshot data;
+        data.pos = particle.pos;
+        data.vel = particle.vel;
+        data.life = particle.life;
+        data.maxLife = particle.maxLife;
+        data.radius = particle.radius;
+        data.color = particle.color;
+        data.drag = particle.drag;
+        data.gravity = particle.gravity;
+        data.layer = particle.layer;
+        out.particles.push_back(data);
+    }
+
+    out.floatingTexts.clear();
+    out.floatingTexts.reserve(floatingTexts_.size());
+    for (const FloatingText &text : floatingTexts_) {
+        if (text.life <= 0.0f) {
+            continue;
+        }
+        net::FloatingTextSnapshot data;
+        data.pos = text.pos;
+        data.text = text.text;
+        data.color = text.color;
+        data.life = text.life;
+        data.maxLife = text.maxLife;
+        data.size = text.size;
+        data.crit = text.crit;
+        out.floatingTexts.push_back(std::move(data));
+    }
+
+    out.shockwaves.clear();
+    out.shockwaves.reserve(shockwaves_.size());
+    for (const Shockwave &wave : shockwaves_) {
+        if (wave.life <= 0.0f) {
+            continue;
+        }
+        net::ShockwaveSnapshot data;
+        data.pos = wave.pos;
+        data.maxRadius = wave.maxRadius;
+        data.color = wave.color;
+        data.duration = wave.duration;
+        data.life = wave.life;
+        data.width = wave.width;
+        out.shockwaves.push_back(data);
+    }
+}
+
+void Entities::applySnapshot(const net::Snapshot &snapshot)
+{
+    portals_.clear();
+    portals_.reserve(snapshot.portals.size());
+    for (const net::PortalSnapshot &data : snapshot.portals) {
+        const auto type = Enemy::typeForKey(data.dataKey);
+        if (!type) {
+            continue;
+        }
+        Portal portal(*type, data.pos, data.wave, data.enemyLevel);
+        portal.boss = data.boss;
+        portal.color = data.color;
+        portal.duration = data.duration;
+        portal.timer = data.timer;
+        portal.radius = data.radius;
+        portal.alive = data.alive;
+        portals_.push_back(portal);
+    }
+
+    pickups_.clear();
+    pickups_.reserve(snapshot.pickups.size());
+    for (const net::PickupSnapshot &data : snapshot.pickups) {
+        Pickup pickup(data.pos, data.amount);
+        pickup.vel = data.vel;
+        pickup.age = data.age;
+        pickup.life = data.life;
+        pickup.phase = data.phase;
+        pickup.radius = data.radius;
+        pickup.alive = data.alive;
+        pickups_.push_back(pickup);
+    }
+
+    mines_.clear();
+    mines_.reserve(snapshot.mines.size());
+    for (const net::MineSnapshot &data : snapshot.mines) {
+        Mine mine;
+        mine.pos = data.pos;
+        mine.radius = data.radius;
+        mine.triggerRadius = data.triggerRadius;
+        mine.blastRadius = data.blastRadius;
+        mine.damage = data.damage;
+        mine.armTime = data.armTime;
+        mine.life = data.life;
+        mine.age = data.age;
+        mine.alive = data.alive;
+        mines_.push_back(mine);
+    }
+
+    particles_.clear();
+    particles_.reserve(snapshot.particles.size());
+    for (const net::ParticleSnapshot &data : snapshot.particles) {
+        Particle particle;
+        particle.pos = data.pos;
+        particle.vel = data.vel;
+        particle.life = data.life;
+        particle.maxLife = data.maxLife;
+        particle.radius = data.radius;
+        particle.color = data.color;
+        particle.drag = data.drag;
+        particle.gravity = data.gravity;
+        particle.layer = data.layer;
+        particles_.push_back(particle);
+    }
+
+    floatingTexts_.clear();
+    floatingTexts_.reserve(snapshot.floatingTexts.size());
+    for (const net::FloatingTextSnapshot &data : snapshot.floatingTexts) {
+        FloatingText text;
+        text.pos = data.pos;
+        text.text = data.text;
+        text.color = data.color;
+        text.life = data.life;
+        text.maxLife = data.maxLife;
+        text.size = data.size;
+        text.crit = data.crit;
+        floatingTexts_.push_back(std::move(text));
+    }
+
+    shockwaves_.clear();
+    shockwaves_.reserve(snapshot.shockwaves.size());
+    for (const net::ShockwaveSnapshot &data : snapshot.shockwaves) {
+        Shockwave wave;
+        wave.pos = data.pos;
+        wave.maxRadius = data.maxRadius;
+        wave.color = data.color;
+        wave.duration = data.duration;
+        wave.life = data.life;
+        wave.width = data.width;
+        shockwaves_.push_back(wave);
+    }
+    effectsTimer_ = 0.0f;
 }
 
 Math::Vec2 Entities::randomSpawnPosition(const Context &ctx) const

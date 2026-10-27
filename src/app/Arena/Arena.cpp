@@ -2,6 +2,8 @@
 
 #include "Base/Base.h"
 #include "GameConfig.h"
+#include "Net/Snapshot.h"
+#include "Random.h"
 #include "Shop/Shop.h"
 
 #include <algorithm>
@@ -177,6 +179,25 @@ Arena::Feedback Arena::takeFeedback()
     Feedback result = feedback_;
     feedback_ = Feedback{};
     return result;
+}
+
+void Arena::writeSnapshot(net::Snapshot &out) const
+{
+    Combatants::writeSnapshot(out);
+    Bullets::writeSnapshot(out);
+    Entities::writeSnapshot(out);
+}
+
+void Arena::applySnapshot(const net::Snapshot &snapshot)
+{
+    // 重建敌人/传送门会走构造函数，其中一部分会取随机数（攻击计时、走位相位等）。
+    // 视图重建必须对权威模拟的随机流零影响，因此保存并恢复全局随机引擎状态。
+    const Random::EngineState rngState = RandomService.engineState();
+    Combatants::applySnapshot(snapshot);
+    Bullets::applySnapshot(snapshot);
+    Entities::applySnapshot(snapshot);
+    RandomService.setEngineState(rngState);
+    feedback_ = Feedback{};
 }
 
 // arena::Host 的实现：组件通过虚接口调用到这里。

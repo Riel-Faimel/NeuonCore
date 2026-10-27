@@ -1,10 +1,9 @@
 #include "Games/Renderer/Renderer.h"
 
 #include "Arena/Arena.h"
-#include "Games/Games.h"
+#include "Client/GameView.h"
 #include "Random.h"
 #include "Games/Upgrades/Upgrades.h"
-#include "Games/Waves/Waves.h"
 #include "Base/Base.h"
 
 #include <QFontMetricsF>
@@ -239,8 +238,7 @@ void Renderer::drawSparks(QPainter &world, QPainter &glow) const
     }
 }
 
-void Renderer::render(const Games &game, const Arena &arena, const Waves &waves,
-                      const Upgrades &upgrades)
+void Renderer::render(const client::GameView &view)
 {
     glow_.fill(Qt::transparent);
 
@@ -257,18 +255,18 @@ void Renderer::render(const Games &game, const Arena &arena, const Waves &waves,
         BaseService.parallelFor(2, [&](int task) {
             if (task == 0) {
                 Base::beginGlowPass();
-                drawGlowPass(arena);
+                drawGlowPass(view);
                 Base::endRenderPass();
             } else {
                 Base::beginWorldPass();
-                drawWorldPass(arena, offsetX, offsetY);
+                drawWorldPass(view, offsetX, offsetY);
                 Base::endRenderPass();
             }
         });
     } else {
         // 单线程回退：一次遍历同时画世界层和辉光层，避免两遍绘制的重复开销。
         Base::endRenderPass();
-        drawCombinedPass(arena, offsetX, offsetY);
+        drawCombinedPass(view, offsetX, offsetY);
     }
 
     // 飘字留在主线程：画在世界层上、辉光叠加之前，与拆分前的顺序一致。
@@ -277,7 +275,7 @@ void Renderer::render(const Games &game, const Arena &arena, const Waves &waves,
         painter.setRenderHint(QPainter::Antialiasing, true);
         painter.setRenderHint(QPainter::TextAntialiasing, true);
         painter.translate(float(offsetX), float(offsetY));
-        arena.drawTexts(painter);
+        view.world().drawTexts(painter);
     }
 
     compositeFrame(offsetX, offsetY);
@@ -285,10 +283,10 @@ void Renderer::render(const Games &game, const Arena &arena, const Waves &waves,
     QPainter painter(&frame_);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
-    drawUi(painter, game, arena, waves, upgrades);
+    drawUi(painter, view);
 }
 
-void Renderer::drawWorldPass(const Arena &arena, int offsetX, int offsetY)
+void Renderer::drawWorldPass(const client::GameView &view, int offsetX, int offsetY)
 {
     if (offsetX != 0 || offsetY != 0) {
         frame_.fill(QColor(2, 3, 9));
@@ -300,11 +298,11 @@ void Renderer::drawWorldPass(const Arena &arena, int offsetX, int offsetY)
     // background_ 不透明且整幅覆盖，不需要先清 frame。
     worldPainter.drawImage(0, 0, background_);
     drawStars(worldPainter, dummy);
-    arena.draw(worldPainter, dummy);
+    view.world().draw(worldPainter, dummy);
     drawSparks(worldPainter, dummy);
 }
 
-void Renderer::drawCombinedPass(const Arena &arena, int offsetX, int offsetY)
+void Renderer::drawCombinedPass(const client::GameView &view, int offsetX, int offsetY)
 {
     if (offsetX != 0 || offsetY != 0) {
         frame_.fill(QColor(2, 3, 9));
@@ -316,41 +314,40 @@ void Renderer::drawCombinedPass(const Arena &arena, int offsetX, int offsetY)
     worldPainter.translate(float(offsetX), float(offsetY));
     worldPainter.drawImage(0, 0, background_);
     drawStars(worldPainter, glowPainter);
-    arena.draw(worldPainter, glowPainter);
+    view.world().draw(worldPainter, glowPainter);
     drawSparks(worldPainter, glowPainter);
 }
 
-void Renderer::drawGlowPass(const Arena &arena)
+void Renderer::drawGlowPass(const client::GameView &view)
 {
     QPainter glowPainter(&glow_);
     QPainter dummy(&dummyWorld_);
     glowPainter.setRenderHint(QPainter::Antialiasing, true);
     drawStars(dummy, glowPainter);
-    arena.draw(dummy, glowPainter);
+    view.world().draw(dummy, glowPainter);
     drawSparks(dummy, glowPainter);
 }
 
-void Renderer::drawUi(QPainter &painter, const Games &game, const Arena &arena,
-                      const Waves &waves, const Upgrades &upgrades)
+void Renderer::drawUi(QPainter &painter, const client::GameView &view)
 {
-    switch (game.state()) {
-    case Games::State::Playing:
-        drawHUD(painter, arena, waves);
-        drawBossBar(painter, arena);
+    switch (view.state()) {
+    case net::RunState::Playing:
+        drawHUD(painter, view);
+        drawBossBar(painter, view);
         drawWaveBanner(painter);
         drawPlayHints(painter);
         break;
-    case Games::State::Paused:
-        drawHUD(painter, arena, waves);
-        drawBossBar(painter, arena);
-        drawPauseOverlay(painter, arena, waves);
+    case net::RunState::Paused:
+        drawHUD(painter, view);
+        drawBossBar(painter, view);
+        drawPauseOverlay(painter, view);
         drawPlayHints(painter);
         break;
-    case Games::State::Upgrade:
-        drawUpgradeOverlay(painter, upgrades, waves);
+    case net::RunState::Upgrade:
+        drawUpgradeOverlay(painter, view);
         break;
-    case Games::State::Victory:
-    case Games::State::Defeat:
+    case net::RunState::Victory:
+    case net::RunState::Defeat:
         break;
     }
 }
@@ -372,9 +369,9 @@ void Renderer::compositeFrame(int offsetX, int offsetY)
     }
 }
 
-void Renderer::drawHUD(QPainter &painter, const Arena &arena, const games::Waves &waves)
+void Renderer::drawHUD(QPainter &painter, const client::GameView &view)
 {
-    const Arena::PlayerState &player = arena.playerState();
+    const arena::PlayerState &player = view.playerState();
     painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, 100), QColor(3, 8, 17, 208));
     Base::strokeLine(painter, {0, 99}, {GameConfig::ScreenWidth, 99},
                       QColor(23, 50, 66), 1.0f);
@@ -411,11 +408,11 @@ void Renderer::drawHUD(QPainter &painter, const Arena &arena, const games::Waves
 
     Base::text(painter, Base::mediumFont(),
                 QStringLiteral("波次  %1 / %2")
-                    .arg(waves.currentWave(), 2, 10, QChar('0'))
-                    .arg(waves.totalWaves(), 2, 10, QChar('0')),
+                    .arg(view.waves().currentWave, 2, 10, QChar('0'))
+                    .arg(view.waves().totalWaves, 2, 10, QChar('0')),
                 Base::Ink, {GameConfig::ScreenWidth / 2.0f, 25}, QStringLiteral("center"));
-    const int remaining = waves.remainingThreats();
-    const float progress = 1.0f - float(remaining) / std::max(1, waves.totalEnemies());
+    const int remaining = view.waves().remainingThreats;
+    const float progress = 1.0f - float(remaining) / std::max(1, view.waves().totalEnemies);
     Base::bar(painter, QRectF(GameConfig::ScreenWidth / 2.0f - 128.0f, 51, 256, 6),
                progress, Base::Cyan, -1.0f, QColor(17, 30, 43));
     Base::text(painter, Base::tinyFont(),
@@ -427,17 +424,17 @@ void Renderer::drawHUD(QPainter &painter, const Arena &arena, const games::Waves
                 {GameConfig::ScreenWidth - 30.0f, 17}, QStringLiteral("topright"), 220);
     static const QLocale english(QLocale::English);
     Base::text(painter, Base::largeFont(),
-                english.toString(arena.score()), Base::White,
+                english.toString(view.score()), Base::White,
                 {GameConfig::ScreenWidth - 30.0f, 35}, QStringLiteral("topright"));
     Base::text(painter, Base::tinyFont(),
-                QStringLiteral("击破  %1").arg(arena.kills(), 3, 10, QChar('0')),
+                QStringLiteral("击破  %1").arg(view.kills(), 3, 10, QChar('0')),
                 Base::Muted, {GameConfig::ScreenWidth - 30.0f, 75},
                 QStringLiteral("topright"), 205);
 }
 
-void Renderer::drawBossBar(QPainter &painter, const Arena &arena)
+void Renderer::drawBossBar(QPainter &painter, const client::GameView &view)
 {
-    const Arena::BossInfo boss = arena.bossInfo();
+    const arena::BossInfo boss = view.bossInfo();
     if (!boss.active) {
         return;
     }
@@ -538,29 +535,29 @@ int Renderer::upgradeIndexAt(const Math::Vec2 &pos) const
     return -1;
 }
 
-void Renderer::drawUpgradeOverlay(QPainter &painter, const games::Upgrades &upgrades,
-                                  const games::Waves &waves)
+void Renderer::drawUpgradeOverlay(QPainter &painter, const client::GameView &view)
 {
     painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
                      QColor(2, 5, 12, 208));
     Base::text(painter, Base::techSmallFont(),
                 QStringLiteral("WAVE %1 CLEARED  //  LOADOUT")
-                    .arg(waves.currentWave(), 2, 10, QChar('0')),
+                    .arg(view.waves().currentWave, 2, 10, QChar('0')),
                 Base::Green, {GameConfig::ScreenWidth / 2.0f, 92},
                 QStringLiteral("center"), 235);
     Base::text(painter, Base::bigFont(), QStringLiteral("强化协议"), Base::White,
                 {GameConfig::ScreenWidth / 2.0f, 140}, QStringLiteral("center"));
     Base::text(painter, Base::smallFont(),
                 QStringLiteral("选择一项强化，准备迎接第 %1 波")
-                    .arg(waves.currentWave() + 1),
+                    .arg(view.waves().currentWave + 1),
                 Base::Muted,
                 {GameConfig::ScreenWidth / 2.0f, 184}, QStringLiteral("center"), 225);
 
     const Math::Vec2 mouse = BaseService.mousePosition();
-    for (int i = 0; i < 3 && i < int(upgrades.offers().size()); ++i) {
+    const std::vector<games::Upgrades::Offer> &offers = view.upgrades();
+    for (int i = 0; i < 3 && i < int(offers.size()); ++i) {
         const QRectF rect = cardRect(i);
         const bool hovered = rect.contains(QPointF(mouse.x, mouse.y));
-        drawUpgradeCard(painter, i, upgrades.offers().at(size_t(i)), rect, hovered);
+        drawUpgradeCard(painter, i, offers.at(size_t(i)), rect, hovered);
     }
 
     Base::text(painter, Base::tinyFont(),
@@ -659,9 +656,8 @@ void Renderer::drawUpgradeCard(QPainter &painter, int index,
                 QStringLiteral("center"), 235);
 }
 
-void Renderer::drawPauseOverlay(QPainter &painter, const Arena &arena, const games::Waves &waves)
+void Renderer::drawPauseOverlay(QPainter &painter, const client::GameView &view)
 {
-    Q_UNUSED(arena);
     painter.fillRect(QRectF(0, 0, GameConfig::ScreenWidth, GameConfig::ScreenHeight),
                      QColor(2, 5, 11, 172));
     const QRectF panel(GameConfig::ScreenWidth / 2.0f - 280.0f,
@@ -675,8 +671,8 @@ void Renderer::drawPauseOverlay(QPainter &painter, const Arena &arena, const gam
                 QStringLiteral("center"));
     Base::text(painter, Base::bodyFont(),
                 QStringLiteral("第 %1 波  ·  剩余威胁 %2")
-                    .arg(waves.currentWave())
-                    .arg(waves.remainingThreats()),
+                    .arg(view.waves().currentWave)
+                    .arg(view.waves().remainingThreats),
                 Base::Muted,
                 {GameConfig::ScreenWidth / 2.0f, float(panel.top()) + 143.0f},
                 QStringLiteral("center"));

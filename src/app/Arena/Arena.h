@@ -12,6 +12,10 @@
 #include <QPainter>
 #include <QString>
 
+namespace net {
+struct Snapshot;
+}
+
 // Arena 是全局模块类，由 5 个组件构成——但用的是**私有继承**：
 //   arena::Host / Bullets / Combatants / Entities / Events / State
 //
@@ -77,6 +81,11 @@ public:
     void celebrateUpgrade();
     void celebrateVictory();
     Feedback takeFeedback();
+
+    // ----- 网络快照（阶段 2） -----
+    // 提取只读世界数据；应用把快照重建成可绘制的世界（不推进模拟）。
+    void writeSnapshot(net::Snapshot &out) const;
+    void applySnapshot(const net::Snapshot &snapshot);
 
 private:
     friend class SelfTest;

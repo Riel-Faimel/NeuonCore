@@ -5,7 +5,11 @@
 
 #include "Menu/Menu.h"
 #include "Base/Base.h"
+#include "Client/GameView.h"
 #include "Data/GameData.h"
+#include "Net/Protocol.h"
+#include "Net/Snapshot.h"
+#include "Random.h"
 #include "Arena/Bullets/StandardBullet.h"
 #include "Arena/Combatants/Enemies/EnemyTypes.h"
 #include "Arena/Combatants/Enemies/BossEnemy.h"
@@ -786,6 +790,173 @@ public:
                                && game->waves_.queue_.size() == 3,
                            QStringLiteral("submitted script drives the run"));
         menu.returnToMenu();
+
+        log(QStringLiteral("Snapshot roundtrip and GameView"));
+        menu.startLevel(0);
+        game = menu.match_.game();
+        success &= require(game != nullptr, QStringLiteral("snapshot test starts a run"));
+        if (game != nullptr) {
+            const int savedWallet = ShopService.score().total();
+            const int savedKills = ShopService.score().kills();
+            ShopService.score().total_ = 2840;
+            ShopService.score().kills_ = 31;
+            game->state_ = Games::State::Upgrade;
+            game->runTime_ = 42.5f;
+            game->waves_.start(3);
+            game->waves_.queue_ = {
+                arena::EnemyType(typeid(arena::DroneEnemy)),
+                arena::EnemyType(typeid(arena::SpitterEnemy))};
+            game->waves_.waveTotal_ = 12;
+            game->arena_.enemies().clear();
+            game->arena_.portals().clear();
+            game->arena_.playerBullets().clear();
+            game->arena_.clearEnemy();
+            game->arena_.particles().clear();
+            game->arena_.floatingTexts().clear();
+            game->arena_.shockwaves().clear();
+            game->arena_.pickups().clear();
+            game->arena_.mines().clear();
+
+            const arena::Context snapshotCtx = game->arena_.context();
+            game->arena_.playerState().pos = {475.0f, 430.0f};
+            game->arena_.playerState().hp = 74.0f;
+            game->arena_.playerState().hpDisplay = 84.0f;
+            game->arena_.playerState().aim = -0.55f;
+            game->arena_.playerState().multishot = 2;
+            game->arena_.spawnEnemy(snapshotCtx, QStringLiteral("drone"), {820.0f, 285.0f}, 3);
+            game->arena_.spawnEnemy(snapshotCtx, QStringLiteral("amplifier"),
+                                    {860.0f, 340.0f}, 3);
+            game->arena_.spawnEnemy(snapshotCtx, QStringLiteral("boss"),
+                                    {870.0f, 365.0f}, 3);
+            if (game->arena_.boss() != nullptr) {
+                game->arena_.boss()->hp = game->arena_.boss()->maxHp * 0.63f;
+                game->arena_.boss()->hpDisplay = game->arena_.boss()->maxHp * 0.74f;
+            }
+            game->arena_.enemies().front()->damageBuffTimer = 0.4f;
+            game->arena_.enemies().front()->damageBuffBonus = 0.3f;
+            game->arena_.portals().emplace_back(
+                arena::EnemyType(typeid(arena::SpitterEnemy)), Math::Vec2(1160, 615), 3);
+            game->arena_.spawnPickup(snapshotCtx, {360.0f, 315.0f}, 16);
+            game->arena_.placeMine(Math::Vec2(520.0f, 430.0f));
+            game->arena_.spawnBurst(snapshotCtx, {860.0f, 290.0f}, Base::Coral,
+                                    14, 130.0f, 0.7f);
+            game->arena_.addShockwave({860.0f, 290.0f}, 48.0f, Base::Coral, 0.6f, 2);
+            game->arena_.floatingTexts().push_back(arena::FloatingText{
+                {700.0f, 300.0f}, QStringLiteral("-17"), Base::Red,
+                0.62f, 0.62f, 15, true});
+            game->arena_.spawnStandard({650.0f, 360.0f}, {900.0f, -250.0f}, 12.5f,
+                                       Base::Cyan, Bullet::Standpoint::Player, 3.2f);
+            game->arena_.spawnStandard({850.0f, 300.0f}, {-420.0f, 150.0f}, 11.0f,
+                                       Base::Magenta, Bullet::Standpoint::Enemy, 4.0f);
+            game->upgrades_.open();
+
+            const net::Snapshot original = game->snapshot();
+            success &= require(original.state == net::RunState::Upgrade
+                                   && original.runTime == game->runTime()
+                                   && original.score == 2840 && original.kills == 31,
+                               QStringLiteral("snapshot carries match state, time and score"));
+            success &= require(original.enemies.size() == 3
+                                   && original.enemies.front().dataKey
+                                          == QStringLiteral("drone")
+                                   && original.bullets.size() == 2
+                                   && original.portals.size() == 1
+                                   && original.pickups.size() == 1
+                                   && original.mines.size() == 1
+                                   && !original.particles.empty()
+                                   && original.floatingTexts.size() == 1
+                                   && original.shockwaves.size() == 1,
+                               QStringLiteral("snapshot includes enemies, bullets and entities"));
+            success &= require(original.waves.currentWave == 3
+                                   && original.waves.totalWaves == 8
+                                   && original.waves.remainingThreats > 0
+                                   && original.upgrades.size() == 3
+                                   && original.boss.active,
+                               QStringLiteral("snapshot includes waves, upgrade offers and boss"));
+
+            const QByteArray payload = net::serializeSnapshot(original);
+            net::Snapshot decoded;
+            QString snapshotError;
+            const bool decodedOk =
+                net::deserializeSnapshot(payload, &decoded, &snapshotError);
+            success &= require(decodedOk,
+                               QStringLiteral("snapshot deserializes (%1)").arg(snapshotError));
+            success &= require(decodedOk && decoded == original,
+                               QStringLiteral("snapshot roundtrip is field-exact"));
+            net::Snapshot mutated = decoded;
+            if (!mutated.enemies.empty()) {
+                mutated.enemies.front().hp += 1.0f;
+            }
+            success &= require(!(mutated == decoded),
+                               QStringLiteral("snapshot comparison notices field changes"));
+
+            const QByteArray frame = net::encodeSnapshotMessage(original);
+            net::Snapshot framed;
+            snapshotError.clear();
+            const bool framedOk =
+                net::decodeSnapshotMessage(frame, &framed, &snapshotError);
+            success &= require(framedOk && framed == original,
+                               QStringLiteral("snapshot message roundtrips with framing"));
+            const QByteArray wrongVersion = net::frameMessage(
+                net::MessageType::Snapshot, net::serializeSnapshot(original),
+                quint16(net::kProtocolVersion + 1));
+            net::Snapshot rejected;
+            snapshotError.clear();
+            success &= require(!net::decodeSnapshotMessage(wrongVersion, &rejected,
+                                                          &snapshotError)
+                                   && !snapshotError.isEmpty(),
+                               QStringLiteral("protocol version mismatch is rejected"));
+
+            client::GameView view;
+            const Random::EngineState rngBeforeView = RandomService.engineState();
+            view.apply(decoded);
+            success &= require(RandomService.engineState() == rngBeforeView,
+                               QStringLiteral("view rebuild leaves the simulation RNG untouched"));
+            success &= require(view.state() == original.state
+                                   && view.runTime() == original.runTime
+                                   && view.score() == original.score
+                                   && view.kills() == original.kills,
+                               QStringLiteral("view restores match state and score"));
+            success &= require(view.playerState().hp == original.player.hp
+                                   && view.playerState().pos == original.player.pos
+                                   && view.world().aliveEnemyCount()
+                                          == int(original.enemies.size()),
+                               QStringLiteral("view restores player and enemies from snapshot"));
+            success &= require(view.waves().currentWave == original.waves.currentWave
+                                   && view.waves().remainingThreats
+                                          == original.waves.remainingThreats
+                                   && view.upgrades().size() == original.upgrades.size()
+                                   && view.bossInfo().active == original.boss.active,
+                               QStringLiteral("view restores HUD, offers and boss bar"));
+            success &= require(view.world().portals().size() == original.portals.size()
+                                   && view.world().pickups().size() == original.pickups.size()
+                                   && view.world().mines().size() == original.mines.size()
+                                   && view.world().particles().size()
+                                          == original.particles.size()
+                                   && view.world().floatingTexts().size()
+                                          == original.floatingTexts.size()
+                                   && view.world().shockwaves().size()
+                                          == original.shockwaves.size(),
+                               QStringLiteral("view restores portals, pickups, mines and effects"));
+
+            games::Renderer viewRenderer;
+            viewRenderer.initialize();
+            viewRenderer.render(view);
+            success &= require(viewRenderer.frame().size()
+                                   == QSize(GameConfig::ScreenWidth,
+                                            GameConfig::ScreenHeight),
+                               QStringLiteral("snapshot-built GameView renders a frame"));
+
+            game->render();
+            success &= require(game->view().playerState().pos
+                                   == game->arena_.playerState().pos
+                                   && game->view().world().aliveEnemyCount()
+                                          == game->arena_.aliveEnemyCount()
+                                   && game->view().score() == 2840,
+                               QStringLiteral("local render path goes Simulation -> Snapshot -> View"));
+            ShopService.score().total_ = savedWallet;
+            ShopService.score().kills_ = savedKills;
+            menu.returnToMenu();
+        }
 
         log(success ? QStringLiteral("ALL C++ SMOKE TESTS PASSED")
                     : QStringLiteral("SMOKE TESTS FAILED"));

@@ -13,28 +13,23 @@
 #include <array>
 #include <vector>
 
-class Arena;
-class Games;
+namespace client {
+class GameView;
+}
 
 namespace games {
 
-class Waves;
-
-// Renderer 组件：Games 的局内画面表现（一局一个实例，由 Games 持有）。
+// Renderer 组件：局内画面表现（一局一个实例，由 Games 持有）。
 // 它不画标题和结算——那些是 menu::*；也不跨局保存状态，切局即重建。
-// 工具：BaseService（绘制原语/输入）、RandomService（抖动/粒子）、
-//       Arena / Waves / Upgrades 的只读状态。
-// 封装：背景、星空、发光合成、屏幕震动/闪屏、波次横幅、HUD、Boss 血条、
-//       强化三选一、暂停遮罩、胜利彩带。
-// 暴露：渲染一帧、frame、表现反馈（shake/flash/banner）、强化卡命中测试。
+// 它只读一份 client::GameView（快照重建的只读世界），不再直接读 Games / Arena /
+// Waves / Upgrades 的模拟对象；震屏/闪屏/横幅等表现状态仍由它自己持有。
 class Renderer {
 public:
     Renderer();
 
     void initialize();
     void update(float dt);
-    void render(const Games &game, const Arena &arena, const Waves &waves,
-                const Upgrades &upgrades);
+    void render(const client::GameView &view);
     const QImage &frame() const { return frame_; }
 
     void shake(float amount);
@@ -74,21 +69,19 @@ private:
     void drawStars(QPainter &world, QPainter &glow) const;
     void drawSparks(QPainter &world, QPainter &glow) const;
     // 世界通道（背景/星空/实体/粒子，不含字体）与辉光通道写不同目标，可并行。
-    void drawWorldPass(const Arena &arena, int offsetX, int offsetY);
-    void drawCombinedPass(const Arena &arena, int offsetX, int offsetY);
-    void drawGlowPass(const Arena &arena);
-    void drawUi(QPainter &painter, const Games &game, const Arena &arena,
-                const Waves &waves, const Upgrades &upgrades);
+    void drawWorldPass(const client::GameView &view, int offsetX, int offsetY);
+    void drawCombinedPass(const client::GameView &view, int offsetX, int offsetY);
+    void drawGlowPass(const client::GameView &view);
+    void drawUi(QPainter &painter, const client::GameView &view);
     void compositeFrame(int offsetX, int offsetY);
-    void drawHUD(QPainter &painter, const Arena &arena, const Waves &waves);
-    void drawBossBar(QPainter &painter, const Arena &arena);
+    void drawHUD(QPainter &painter, const client::GameView &view);
+    void drawBossBar(QPainter &painter, const client::GameView &view);
     void drawWaveBanner(QPainter &painter);
     void drawPlayHints(QPainter &painter);
-    void drawUpgradeOverlay(QPainter &painter, const Upgrades &upgrades,
-                            const Waves &waves);
+    void drawUpgradeOverlay(QPainter &painter, const client::GameView &view);
     void drawUpgradeCard(QPainter &painter, int index,
                          const Upgrades::Offer &offer, const QRectF &rect, bool hovered);
-    void drawPauseOverlay(QPainter &painter, const Arena &arena, const Waves &waves);
+    void drawPauseOverlay(QPainter &painter, const client::GameView &view);
     QRectF cardRect(int index) const;
 
     QImage background_;

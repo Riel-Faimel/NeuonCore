@@ -175,7 +175,10 @@ cpp/
 │  │  │  ├─ Simulation/GameSimulation.h/.cpp 组件：Arena / Waves / Upgrades、状态、计时、输入
 │  │  │  ├─ Waves/Waves.h/.cpp    组件：按提交的台本出生敌人
 │  │  │  ├─ Upgrades/Upgrades.h/.cpp 组件：强化池、抽取与应用
-│  │  │  └─ Renderer/Renderer.h/.cpp 组件：局内背景、发光、HUD、卡片、暂停
+│  │  │  └─ Renderer/Renderer.h/.cpp 组件：局内背景、发光、HUD、卡片、暂停（只读 GameView）
+│  │  ├─ Client/GameView.h/.cpp     客户端视图：快照 → 可绘制的 Arena 只读镜像
+│  │  ├─ Net/Protocol.cpp           协议帧打包/拆包实现（无 socket）
+│  │  ├─ Net/Snapshot.cpp           快照 QDataStream 序列化实现
 │  │  ├─ Menu/Menu.h/.cpp          模块入口：屏幕状态机、输入路由、关卡表
 │  │  ├─ Menu/Main/Main.h/.cpp     组件：标题页与关卡卡
 │  │  ├─ Menu/Map/Map.h/.cpp       组件：标准协议星区地图
@@ -200,7 +203,10 @@ cpp/
 │  │  ├─ Data/Settings.h          配置存储（Windows 注册表 / 其他平台 ini）
 │  │  ├─ GameConfig.h             全局尺寸常量
 │  │  ├─ Fighter.h                Player/Enemy 的公共虚接口
-│  │  └─ Bullet.h                 子弹的全局纯虚接口（池只认这一层）
+│  │  ├─ Bullet.h                 子弹的全局纯虚接口（池只认这一层）
+│  │  └─ Net/
+│  │     ├─ Protocol.h            协议版本 / 消息 id / 长度前缀帧
+│  │     └─ Snapshot.h            只读世界快照模型与序列化接口
 │  ├─ json/
 │  │  ├─ player.json              玩家基础数值
 │  │  ├─ enemies.json             敌人基础数值
@@ -227,7 +233,7 @@ cpp/
 
 `src/app/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Music`、`Pointer`、`Paint`、`ThreadPool` 六个 `namespace base` 组件。`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），Menu / Games / Arena / Renderer / Shop 都直接调用 `BaseService`，不再通过构造函数传递 `Base&`。`Base.h` 仍只暴露 Base 的输入/音频/指针/并行/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Music` 的 QMediaPlayer、`Pointer` 的位置/时钟/准星、`Paint` 的 QFontDatabase 细节、`ThreadPool` 的线程管理都在各自组件内。字体与工作线程由 `main()` 在 `QApplication` 之后调 `Base::initialize()` 初始化；音频由 `BaseService.initAudio()` 按需初始化，`main()` 退出前调 `BaseService.shutdown()`（先停线程池，再释放 Qt 音频对象）。窗口通过 `BaseService.pointerMoveTo/pointerSetVisible/pointerUpdate/pointerDraw` 驱动全局指针。
 
-`src/app/Games/` 是模块目录：`Games` 是单机适配器，公开继承 `games::GameSimulation`（持有 `Arena / Waves / Upgrades`、一局状态、运行时间和输入），自己只拥有 `games::Renderer` 并实现模拟的表现钩子。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。`GameSimulation` 只推进模拟，不依赖 Renderer；`Games::update()` 每帧先从 `BaseService` 采集 `arena::InputState`（移动/鼠标/射击），再调用模拟，并通过 `on*` 钩子调用渲染器的震屏/闪屏/横幅/彩带和音效。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化，`Renderer` 只负责这一局的画面与特效（标题/结算在 `menu::*`，鼠标指针在 `BaseService` 的 `base::Pointer`）。`Renderer` 把世界层放到 `ThreadPool` 工作线程、辉光层留在主线程并行绘制，字体仍在主线程。随机数走全局 `RandomService`，不再作为构造参数传入。四个关卡分别使用 `waves/level-01..04.json`，`GameSimulation::Level.enemyLevel` 为 1–4，作为隐藏的敌人成长等级乘在血量/伤害/速度上；关卡越靠后波次越长、敌人组成越重。
+`src/app/Games/` 是模块目录：`Games` 是单机适配器，公开继承 `games::GameSimulation`（持有 `Arena / Waves / Upgrades`、一局状态、运行时间和输入），自己只拥有 `games::Renderer` 并实现模拟的表现钩子。一局游戏就是一个 `Games` 实例：`menu::Match` 在开局时把这一局的安排（`Games::Level`，含运行时提交的台本 `games::Script`）交给它，回到主菜单即销毁。`GameSimulation` 只推进模拟，不依赖 Renderer；`Games::update()` 每帧先从 `BaseService` 采集 `arena::InputState`（移动/鼠标/射击），再调用模拟，并通过 `on*` 钩子调用渲染器的震屏/闪屏/横幅/彩带和音效。没有内置波次表：`Waves` 只按提交的台本生成出生队列，`Upgrades` 只管理强化。`Games::render()` 先 `writeSnapshot()` 提取 `net::Snapshot`，再让 `client::GameView::apply()` 重建只读世界，最后交给 `Renderer` 绘制——单机和以后的 TCP 客户端共用同一条表现路径（标题/结算在 `menu::*`，鼠标指针在 `BaseService` 的 `base::Pointer`）。`Renderer` 把世界层放到 `ThreadPool` 工作线程、辉光层留在主线程并行绘制，字体仍在主线程。随机数走全局 `RandomService`，不再作为构造参数传入。四个关卡分别使用 `waves/level-01..04.json`，`GameSimulation::Level.enemyLevel` 为 1–4，作为隐藏的敌人成长等级乘在血量/伤害/速度上；关卡越靠后波次越长、敌人组成越重。
 
 积分和库存由进程级单例 `ShopService` 持有（`extern Shop ShopService;`）：`Shop` 组合 `shop::Score`（跨局钱包，键 `score/total`）和 `shop::Inventory`（地雷库存，键 `inventory/mines`），Windows 写注册表、其他平台写 `settings.ini`。`main()` 启动时调 `ShopService.load()`、退出前调 `ShopService.save()`；`arena::Events::handleKill()` 击杀上报积分；HUD 显示全局钱包，结算显示本局获得（`runScore()`）；`Shop::buyMine()` 负责扣款入库。
 
@@ -317,6 +323,9 @@ mingw32-make -j12 test
 - 战备：标题页入口、发射器装备、玩家伤害/射速随发射器变化
 - 敌人等级：升级后血量/伤害提高，战斗界面不显示等级
 - 支援敌人：增伤光环、伤害分担、群体治疗、高速突进、概率复活、召唤进度
+- 快照：完整场景提取 → QDataStream 序列化 → 反序列化，逐字段相等；帧长度/协议版本不匹配被拒绝
+- GameView：快照重建后的玩家/敌人/子弹/实体/HUD/强化卡/Boss 条正确，并能用现有 `Renderer` 画出完整一帧
+- 单机路径：`GameSimulation -> Snapshot -> GameView -> Renderer` 的视图与模拟状态一致
 - 输出到当前目录的 `smoke.log`
 
 重新生成离屏截图：

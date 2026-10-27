@@ -1,7 +1,9 @@
 #include "Games/Games.h"
 
 #include "Base/Base.h"
+#include "Client/GameView.h"
 #include "GameConfig.h"
+#include "Net/Snapshot.h"
 #include "Shop/Shop.h"
 
 #include <Qt>
@@ -12,7 +14,7 @@
 // 新的一局就是一个新对象，因此不存在需要手工清空的跨局状态。
 // Base / Random / Shop 都是进程级单例（BaseService / RandomService / ShopService）。
 Games::Games(const Level &level)
-    : GameSimulation(level), renderer_()
+    : GameSimulation(level), renderer_(), view_()
 {
     ShopService.score().beginRun();
     renderer_.initialize();
@@ -35,7 +37,11 @@ void Games::update(float dt)
 
 void Games::render()
 {
-    renderer_.render(*this, arena_, waves_, upgrades_);
+    // 单机与将来的 TCP 客户端走同一条表现路径：
+    // GameSimulation（权威模拟）-> Snapshot（只读数据）-> GameView（可绘制镜像）-> Renderer。
+    writeSnapshot(snapshot_);
+    view_.apply(snapshot_);
+    renderer_.render(view_);
 }
 
 arena::InputState Games::localInput() const

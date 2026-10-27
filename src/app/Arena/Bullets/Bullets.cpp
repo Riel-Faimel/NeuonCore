@@ -1,6 +1,7 @@
 #include "Arena/Bullets/Bullets.h"
 
 #include "Arena/Bullets/StandardBullet.h"
+#include "Net/Snapshot.h"
 
 #include <QPainter>
 
@@ -116,6 +117,50 @@ void Bullets::clear()
 void Bullets::clearEnemy()
 {
     recycle(enemy_, free_);
+}
+
+void Bullets::writeSnapshot(net::Snapshot &out) const
+{
+    out.bullets.clear();
+    out.bullets.reserve(player_.size() + enemy_.size());
+    auto append = [&out](const std::vector<std::unique_ptr<Bullet>> &bullets) {
+        for (const auto &bullet : bullets) {
+            if (!bullet->alive()) {
+                continue;
+            }
+            // 目前只有标准弹；新弹种需要自己的协议 key 和重建路径。
+            const auto *standard = dynamic_cast<const StandardBullet *>(bullet.get());
+            if (standard == nullptr) {
+                continue;
+            }
+            net::BulletSnapshot data;
+            data.pos = standard->position();
+            data.prev = standard->prev();
+            data.vel = standard->velocity();
+            data.color = standard->color();
+            data.damage = standard->damage();
+            data.radius = standard->radius();
+            data.side = standard->standpoint() == Bullet::Standpoint::Player
+                            ? net::BulletSide::Player
+                            : net::BulletSide::Enemy;
+            data.alive = true;
+            out.bullets.push_back(data);
+        }
+    };
+    append(player_);
+    append(enemy_);
+}
+
+void Bullets::applySnapshot(const net::Snapshot &snapshot)
+{
+    clear();
+    for (const net::BulletSnapshot &data : snapshot.bullets) {
+        spawnStandard(data.pos, data.vel, data.damage, data.color,
+                      data.side == net::BulletSide::Player
+                          ? Bullet::Standpoint::Player
+                          : Bullet::Standpoint::Enemy,
+                      data.radius);
+    }
 }
 
 } // namespace arena

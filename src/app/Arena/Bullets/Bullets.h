@@ -9,6 +9,10 @@
 
 class QPainter;
 
+namespace net {
+struct Snapshot;
+}
+
 namespace arena {
 
 // Bullets 组件：局内唯一的子弹池。shoot() 只负责把对象提交进来，
@@ -29,6 +33,10 @@ public:
 
     void clear();
     void clearEnemy();
+
+    // ----- 网络快照（阶段 2） -----
+    void writeSnapshot(net::Snapshot &out) const;
+    void applySnapshot(const net::Snapshot &snapshot);
 
     int pooledBulletCount() const { return int(free_.size()); }
 

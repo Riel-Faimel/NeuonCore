@@ -80,6 +80,12 @@ std::optional<EnemyType> Enemy::typeForKey(const QString &dataKey)
     return it.value();
 }
 
+QString Enemy::dataKeyFor(Type type)
+{
+    const EnemyDef *def = defFor(type);
+    return def != nullptr ? toQString(def->dataKey) : QString();
+}
+
 bool Enemy::isBoss(Type type)
 {
     return type == Type(typeid(BossEnemy));

@@ -112,6 +112,8 @@ public:
     static const EnemyStats &statsFor(Type type);
     static const EnemyStats &statsFor(const QString &dataKey);
     static std::optional<Type> typeForKey(const QString &dataKey);
+    // 数据边界：类型 → JSON/协议使用的数据 key（未注册返回空字符串）。
+    static QString dataKeyFor(Type type);
     static bool isBoss(Type type);
     void setLevel(int level);
     Type type() const { return type_; }

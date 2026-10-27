@@ -12,6 +12,10 @@
 
 #include <vector>
 
+namespace net {
+struct Snapshot;
+}
+
 namespace arena {
 
 struct Context;
@@ -42,6 +46,10 @@ public:
     void addShockwave(const Math::Vec2 &pos, float radius, const QColor &color,
                       float duration = 0.4f, int width = 2);
 
+    // ----- 网络快照（阶段 2） -----
+    void writeSnapshot(net::Snapshot &out) const;
+    void applySnapshot(const net::Snapshot &snapshot);
+
     int portalCount() const { return int(portals_.size()); }
     int mineCount() const { return int(mines_.size()); }
     float &effectsTimer() { return effectsTimer_; }
@@ -52,6 +60,13 @@ public:
     std::vector<Particle> &particles() { return particles_; }
     std::vector<FloatingText> &floatingTexts() { return floatingTexts_; }
     std::vector<Shockwave> &shockwaves() { return shockwaves_; }
+
+    const std::vector<Portal> &portals() const { return portals_; }
+    const std::vector<Pickup> &pickups() const { return pickups_; }
+    const std::vector<Mine> &mines() const { return mines_; }
+    const std::vector<Particle> &particles() const { return particles_; }
+    const std::vector<FloatingText> &floatingTexts() const { return floatingTexts_; }
+    const std::vector<Shockwave> &shockwaves() const { return shockwaves_; }
 
 private:
     Math::Vec2 randomSpawnPosition(const Context &ctx) const;

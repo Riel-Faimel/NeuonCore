@@ -9,6 +9,10 @@
 #include <memory>
 #include <vector>
 
+namespace net {
+struct Snapshot;
+}
+
 namespace arena {
 
 struct Context;
@@ -44,6 +48,12 @@ public:
 
     int aliveEnemyCount() const;
     BossInfo bossInfo() const;
+
+    // ----- 网络快照（阶段 2） -----
+    // 提取：只写数据，不传 RTTI；类型在数据边界转成注册表的 dataKey。
+    void writeSnapshot(net::Snapshot &out) const;
+    // 应用：按 dataKey 重建具体敌人类型，再填充绘制字段（客户端视图不推进模拟）。
+    void applySnapshot(const net::Snapshot &snapshot);
 
     Player &player() { return player_; }
     const Player &player() const { return player_; }

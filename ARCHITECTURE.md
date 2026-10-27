@@ -9,6 +9,7 @@
    - 强化池、可选性和强化效果由 `games::Upgrades` 决定。
    - 敌人 AI、碰撞、Boss 阶段、分数由 `Arena` 及其组件决定。
    - 一局的模拟（`Arena / Waves / Upgrades`、状态、计时、输入）由 `games::GameSimulation` 决定。
+   - 模拟通过 `net::Snapshot` 交给表现层：`games::GameSimulation::snapshot()` 提取只读数据，`client::GameView` 按快照重建可绘制世界；`Renderer` 只读 `GameView`，不读模拟对象。
    - 画面布局和局内表现反馈由 `Games` 的 `Renderer` 组件决定。
    - 主菜单、关卡选择和对局结算由 `Menu` 决定。
    - 输入、音频、字体和绘制原语由 `Base` 及其组件提供；`Base` 是进程级单例 `BaseService`，任何模块直接使用，不通过构造参数传递。
@@ -82,7 +83,12 @@ cpp/src/
 │  │  ├─ Simulation/GameSimulation.h/.cpp 组件：Arena / Waves / Upgrades、状态、计时、输入
 │  │  ├─ Waves/Waves.h/.cpp       组件：按台本出生敌人
 │  │  ├─ Upgrades/Upgrades.h/.cpp 组件：强化池、抽取与应用
-│  │  └─ Renderer/Renderer.h/.cpp 组件：局内画面与特效
+│  │  └─ Renderer/Renderer.h/.cpp 组件：局内画面与特效（只读 GameView）
+│  ├─ Client/
+│  │  └─ GameView.h/.cpp          客户端视图：Snapshot → 可绘制的 Arena 只读镜像
+│  ├─ Net/
+│  │  ├─ Protocol.cpp             协议帧打包/拆包（无 socket）
+│  │  └─ Snapshot.cpp             快照 QDataStream 序列化
 │  ├─ Menu/Menu.h / Menu.cpp
 │  │  ├─ Main/Main.h/.cpp         标题页组件
 │  │  ├─ Map/Map.h/.cpp           星区地图组件
@@ -107,7 +113,10 @@ cpp/src/
 │  ├─ Data/Settings.h              配置存储（注册表 / ini）
 │  ├─ GameConfig.h
 │  ├─ Bullet.h
-│  └─ Fighter.h
+│  ├─ Fighter.h
+│  └─ Net/
+│     ├─ Protocol.h                协议版本、消息 id、长度前缀与帧解码
+│     └─ Snapshot.h                服务端 → 客户端的只读世界快照 + QDataStream 序列化
 ├─ json/
 │  ├─ player.json                   玩家基础数值
 │  ├─ enemies.json                  敌人基础数值
@@ -152,10 +161,10 @@ cpp/src/
 
 | 组件 | 职责 |
 | --- | --- |
-| `GameSimulation` | 持有 `Arena / Waves / Upgrades`、一局状态、运行时间、胜负/清波计时；只推进模拟，不依赖 Renderer |
+| `GameSimulation` | 持有 `Arena / Waves / Upgrades`、一局状态、运行时间、胜负/清波计时；只推进模拟，不依赖 Renderer，可提取 `net::Snapshot` |
 | `Waves` | 按运行时提交的台本生成出生队列、Boss 波判定、出生间隔 |
 | `Upgrades` | 强化定义、可选性、三选一、叠加、效果应用 |
-| `Renderer` | 局内画面与特效：背景/星空/发光合成、震屏闪屏、HUD、Boss 条、强化卡、暂停遮罩 |
+| `Renderer` | 局内画面与特效：背景/星空/发光合成、震屏闪屏、HUD、Boss 条、强化卡、暂停遮罩；只读 `client::GameView` |
 
 `GameSimulation` 构造时只接收 `Level`（台本在里面），负责：
 
@@ -165,7 +174,7 @@ cpp/src/
 - 波次清空后打开 `games::Upgrades`；
 - 把 `Arena::Feedback`、胜负、Boss 击破、清波等事件通过 `on*` 虚函数钩子交给适配器。
 
-`Games` 只负责单机表现：每帧从 `BaseService` 采集 `arena::InputState` 再调用 `GameSimulation::update()`，实现钩子调用 `renderer_.shake/flash/showBanner/burstConfetti` 和 `BaseService.playSound()`，并继续把胜负结果交给 `Menu`。`Renderer` 仍只读 `Games / Arena / Waves / Upgrades`；`GameSimulation` 可以脱离 `Renderer` 单独构造和 update。
+`Games` 只负责单机表现：每帧从 `BaseService` 采集 `arena::InputState` 再调用 `GameSimulation::update()`，实现钩子调用 `renderer_.shake/flash/showBanner/burstConfetti` 和 `BaseService.playSound()`，并继续把胜负结果交给 `Menu`。`Games::render()` 不再把模拟对象直接交给 `Renderer`：先 `writeSnapshot()` 提取 `net::Snapshot`，再用 `client::GameView::apply()` 重建视图，最后 `Renderer` 只读这份视图。单机和将来的 TCP 客户端因此共用同一条表现路径；`GameSimulation` 可以脱离 `Renderer` 单独构造和 update。
 
 积分由全局 `ShopService.score()`（`shop::Score`，`src/app/Shop/Score/`）统一持有：`Games` 构造时调用 `beginRun()`（只重置本局统计），`arena::Events::handleKill()` 击杀时调用 `addKill(enemy.score)`。全局余额跨局累计并写入配置存储（Windows 注册表 `HKCU\Software\NeonCore\NeonCore`，其他平台 exe 同级 `settings.ini`；键 `score/total`），HUD 显示钱包，结算显示本局获得（`Games::runScore()`）；`Score::spend()` 供商店使用。
 
@@ -265,7 +274,7 @@ public:
 
 ### Renderer
 
-`games::Renderer` 是 `Games` 的**局内组件**（一局一个实例，随 `Games` 构造/销毁），只读 `Games` / `Arena` / `games::Waves` / `games::Upgrades`，随机抖动取自全局 `RandomService`，负责：
+`games::Renderer` 是 `Games` 的**局内组件**（一局一个实例，随 `Games` 构造/销毁），只读 `client::GameView`（快照重建的玩家/敌人/子弹/实体 + HUD 状态），随机抖动取自全局 `RandomService`，负责：
 
 - 局内背景、星空、发光合成；
 - 局内 HUD、Boss 血条、波次横幅；
@@ -284,6 +293,20 @@ public:
 两条通道遍历同一批绘制调用，`base::Paint::Pass`（`World` / `Glow`）让每条通道只执行属于自己的原语：世界通道忽略 `glow`，辉光通道忽略世界图形。通道写不同 `QImage`，字体永远在主线程，因此不需要锁。并行结束后主线程把 `glow_` 以 `Plus` 叠到 `frame_`，再画暗角/闪屏/UI。单线程环境（或 `NEON_SINGLE_THREAD=1`）会自动退回一遍合并绘制。
 
 标题、失败/胜利结算、对局统计不在 Renderer 中，由 `Menu` 绘制；跨屏幕的鼠标指针在 `BaseService` 的 `base::Pointer` 组件里。`Renderer` 每局重建（`initialize()` 重新生成背景图和星空），所以切局时视觉动画从头开始。
+
+### Client / Net
+
+阶段 2 把模拟和表现之间的耦合换成一份只读快照：
+
+| 角色 | 位置 | 职责 |
+| --- | --- | --- |
+| `net::Protocol` | `src/include/Net/Protocol.h` | 协议版本、消息 id、`[u32 length][u16 type][u16 version][payload]` 帧的打包/拆包 |
+| `net::Snapshot` | `src/include/Net/Snapshot.h` | 玩家、敌人（dataKey + 绘制字段）、子弹、传送门/掉落/地雷/粒子/飘字/冲击波、波次 HUD、强化卡、状态/时间/分数/击杀/Boss |
+| 提取 | `GameSimulation::snapshot()` | `Arena / Combatants / Bullets / Entities` 各自把只读数据写进快照，RTTI 在边界转 `Enemy::dataKeyFor()` |
+| `client::GameView` | `src/app/Client/GameView.*` | 把快照应用回一个只读 `Arena` 镜像：按 dataKey 重建敌人/传送门，填充绘制字段；不推进模拟 |
+| `games::Renderer` | `src/app/Games/Renderer/*` | 只读 `GameView` 画世界层/HUD/强化卡/暂停；世界绘制仍走 `Arena::draw()`，没有第二套画法 |
+
+`net::Snapshot` 的全部结构默认生成 `operator==`，roundtrip 测试逐字段比较；`serializeSnapshot / encodeSnapshotMessage` 用 `QDataStream`（小端、Qt 6 版本），长度字段和版本字段都由 `Protocol.h` 的辅助函数校验。阶段 2 不建立连接：单机在 `Games::render()` 里进程内调用提取/应用，阶段 3 只需把同一份 payload 交给 socket。
 
 ### lib / include / tests
 
@@ -423,7 +446,9 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
                │     │  │              （组件回调模块反馈走 arena::Host 虚接口）
                │     │  ├─ games::Waves ─────► Arena, RandomService
                │     │  └─ games::Upgrades ──► Arena, RandomService（音效走 BaseService）
-               │     └─ games::Renderer ──► Games/Arena/Waves/Upgrades(只读), RandomService
+               │     ├─ games::GameSimulation ──► net::Snapshot（提取只读世界）
+               │     ├─ client::GameView ──────► net::Snapshot（重建）, Arena(只读镜像)
+               │     └─ games::Renderer ──► client::GameView(只读), RandomService
                ├─ menu::Result ───────► 只读 Summary
                ├─ menu::Editor ───────► games::Script（自己持有）
                ├─ menu::Depot ────────► ShopService（buyMine）+ 只读钱包/库存
@@ -437,8 +462,9 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
 - `base::Pointer` 只依赖 `base::Paint` 的准星画法，不知道游戏业务。
 - `Menu` 只做状态机、输入路由和关卡表；界面在 `menu::*` 组件里，`Games` 由 `menu::Match` 持有。
 - `Games` 是单机适配器：只负责输入采集与表现，模拟在 `GameSimulation`；它不知道 `Menu`，一局的安排由构造参数进入，之后不再外泄。
-- `GameSimulation` 只通过 `Arena` 公共接口访问战斗世界，不依赖 `Renderer` / `BaseService` 的键鼠状态。
-- `games::Renderer` 只读局内业务状态，不再画标题和结算。
+- `GameSimulation` 只通过 `Arena` 公共接口访问战斗世界，不依赖 `Renderer` / `BaseService` 的键鼠状态；它只向外提供 `net::Snapshot`。
+- `client::GameView` 只消费 `net::Snapshot`，不推进模拟、不读输入；`games::Renderer` 只读 `GameView`，不再画标题和结算。
+- `net` 只依赖 Qt 和 `Math`，不依赖 Arena / Games / Renderer；阶段 3 的 socket 层只负责收发 `net` 帧。
 - `Waves` / `Upgrades` 不知道 UI。
 - `menu::Result` 只拿一份 `Summary`，不依赖 `Games`。
 - `Base` 不知道游戏业务。
@@ -468,7 +494,8 @@ GameWindow::tick()
 │  ├─ Editor:  menu::Editor 绘制台本表格
 │  ├─ Shop:    menu::Depot  绘制补给站
 │  ├─ Settings: menu::Settings 绘制设置页
-│  ├─ Match:  menu::Match → Games::render() → games::Renderer
+│  ├─ Match:  menu::Match → Games::render()
+│  │          └─ GameSimulation::writeSnapshot → client::GameView::apply → games::Renderer
 │  └─ Result: menu::Match 画面 + menu::Result 结算覆盖层
 └─ QWidget::update()
 
@@ -620,7 +647,9 @@ GPU 加速没有采用：当前是 `QImage` + `QPainter` 光栅管线，走 GPU 
 - 敌人/强化/音效仍用字符串 ID。
 - 一局一个 `Games`：`Base`（输入/音频/字体）、`Random`、`Shop` 都是进程级单例，否则切局会重复初始化音频/随机源/钱包。
 - 一局的安排只经构造参数进入 `GameSimulation`；`Games` 不提供任何读回安排的接口，`Menu` 只保留展示用的关卡表。
-- 模拟阶段 1：`Games` 继承 `GameSimulation`，表现钩子仍是虚函数；TCP / 快照 / `GameView` 尚未实现，单机仍走本地直连，不经过网络。
+- 模拟阶段 2：`Games` 继承 `GameSimulation`，表现钩子仍是虚函数；单机已经走 `GameSimulation -> net::Snapshot -> client::GameView -> Renderer`，为阶段 3 的 TCP 复用同一条表现路径。TCP / socket / `Input.h` 消息尚未实现（阶段 3 单独做）。
+- `net::Snapshot` 只含数据：敌人/传送门类型用注册表的 `dataKey` 字符串，`std::type_index` 不出现在协议里；帧格式是 `[u32 length][u16 type][u16 version][payload]`，序列化用 `QDataStream`。
+- 单机快照目前是进程内传递（`Games::render()` 直接调用 `writeSnapshot/apply`）；`serializeSnapshot / encodeSnapshotMessage` 已实现并由测试覆盖，阶段 3 只需把它接到 socket 上。
 - `Player` 只读 `InputState`（`moveAxis / mouseActive / mousePosition / shooting / dashRequested`），`BaseService` 只在 `Games` 单机适配器里采集输入。
 - `Arena` 的玩家状态对 `games::Upgrades` 开放写权限（`Arena::playerState()`），不再需要模块间 friend。
 - `Arena` 的 5 个组件是它的私有基类：外部只看到 `Arena` 的公共接口；组件之间通过 `arena::Context` 注入的兄弟引用协作，组件 → 模块的反馈走 `arena::Host` 虚函数。

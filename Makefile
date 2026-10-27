@@ -38,6 +38,10 @@ LIBS := -L$(QTDIR)/lib \
 GAMES_COMPONENTS := Games Waves/Waves Upgrades/Upgrades Renderer/Renderer \
                     Simulation/GameSimulation
 GAMES_OBJS := $(addprefix $(BUILD)/app/Games/,$(addsuffix .o,$(GAMES_COMPONENTS)))
+CLIENT_COMPONENTS := Client/GameView
+CLIENT_OBJS := $(addprefix $(BUILD)/app/,$(addsuffix .o,$(CLIENT_COMPONENTS)))
+NET_COMPONENTS := Net/Protocol Net/Snapshot
+NET_OBJS := $(addprefix $(BUILD)/app/,$(addsuffix .o,$(NET_COMPONENTS)))
 MENU_COMPONENTS := Menu Main/Main Map/Map Match/Match Result/Result Editor/Editor Depot/Depot Armory/Armory Settings/Settings
 MENU_OBJS := $(addprefix $(BUILD)/app/Menu/,$(addsuffix .o,$(MENU_COMPONENTS)))
 LIB_SRC := Math Random
@@ -72,7 +76,8 @@ ARENA_COMPONENTS := Arena Bullets/Bullets Bullets/StandardBullet \
                     Entities/Particle Entities/FloatingText Entities/Shockwave
 ARENA_OBJS := $(addprefix $(BUILD)/app/Arena/,$(addsuffix .o,$(ARENA_COMPONENTS)))
 
-SHARED_OBJS := $(BASE_OBJS) $(LIB_OBJS) $(GAMES_OBJS) $(MENU_OBJS) $(SHOP_OBJS) $(LOADOUT_OBJS) $(ARENA_OBJS)
+SHARED_OBJS := $(BASE_OBJS) $(LIB_OBJS) $(GAMES_OBJS) $(CLIENT_OBJS) $(NET_OBJS) \
+               $(MENU_OBJS) $(SHOP_OBJS) $(LOADOUT_OBJS) $(ARENA_OBJS)
 RELEASE_OBJS := $(SHARED_OBJS) $(MAIN_RELEASE_OBJ) $(ICON_RES_OBJ)
 TEST_OBJS := $(SHARED_OBJS) $(MAIN_TEST_OBJ)
 DEPS := $(RELEASE_OBJS:.o=.d) $(TEST_OBJS:.o=.d)
@@ -105,6 +110,8 @@ $(BUILD):
 	@if not exist "$(BUILD_WIN)\app\Games\Upgrades" mkdir "$(BUILD_WIN)\app\Games\Upgrades"
 	@if not exist "$(BUILD_WIN)\app\Games\Renderer" mkdir "$(BUILD_WIN)\app\Games\Renderer"
 	@if not exist "$(BUILD_WIN)\app\Games\Simulation" mkdir "$(BUILD_WIN)\app\Games\Simulation"
+	@if not exist "$(BUILD_WIN)\app\Client" mkdir "$(BUILD_WIN)\app\Client"
+	@if not exist "$(BUILD_WIN)\app\Net" mkdir "$(BUILD_WIN)\app\Net"
 	@if not exist "$(BUILD_WIN)\app\Menu" mkdir "$(BUILD_WIN)\app\Menu"
 	@if not exist "$(BUILD_WIN)\app\Shop" mkdir "$(BUILD_WIN)\app\Shop"
 	@if not exist "$(BUILD_WIN)\app\Shop\Score" mkdir "$(BUILD_WIN)\app\Shop\Score"
@@ -136,6 +143,16 @@ $(GAMES_OBJS): $(BUILD)/app/Games/%.o: src/app/Games/%.cpp | $(BUILD)
 	@echo [CXX] $<
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
+$(CLIENT_OBJS): $(BUILD)/app/Client/%.o: src/app/Client/%.cpp | $(BUILD)
+	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
+	@echo [CXX] $<
+	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
+
+$(NET_OBJS): $(BUILD)/app/Net/%.o: src/app/Net/%.cpp | $(BUILD)
+	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
+	@echo [CXX] $<
+	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
+
 $(SHOP_OBJS): $(BUILD)/app/Shop/%.o: src/app/Shop/%.cpp | $(BUILD)
 	@if not exist "$(subst /,\,$(@D))" mkdir "$(subst /,\,$(@D))"
 	@echo [CXX] $<
@@ -156,14 +173,17 @@ $(ARENA_OBJS): $(BUILD)/app/Arena/%.o: src/app/Arena/%.cpp | $(BUILD)
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
 $(MAIN_RELEASE_OBJ): src/app/main.cpp | $(BUILD)
+	@if not exist "$(BUILD_WIN)\app" mkdir "$(BUILD_WIN)\app"
 	@echo [CXX] $< (release)
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
 $(MAIN_TEST_OBJ): src/app/main.cpp | $(BUILD)
+	@if not exist "$(BUILD_WIN)\app" mkdir "$(BUILD_WIN)\app"
 	@echo [CXX] $< (debug/tests)
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -DDEBUG -c $< -o $@
 
 $(ICON_RES_OBJ): src/app/app.rc assets/icon.ico | $(BUILD)
+	@if not exist "$(BUILD_WIN)\app" mkdir "$(BUILD_WIN)\app"
 	@echo [RC] $<
 	@$(RC) -I assets -i $< -o $@
 

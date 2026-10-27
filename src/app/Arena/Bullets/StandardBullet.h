@@ -30,6 +30,11 @@ public:
     float radius() const override { return radius_; }
     Standpoint standpoint() const override { return standpoint_; }
 
+    // 快照提取用的只读字段（Bullet 接口保持最小，不把样式塞进去）。
+    const Math::Vec2 &velocity() const { return vel_; }
+    const QColor &color() const { return color_; }
+    float damage() const { return damage_; }
+
 private:
     // 穿透上限 5 级 ⇒ 一颗弹最多命中 6 个目标；固定数组避免每颗弹都分配哈希表。
     static constexpr int MaxHitTargets = 8;

@@ -4,6 +4,7 @@
 #include "Arena/Combatants/Player.h"
 #include "Games/Upgrades/Upgrades.h"
 #include "Games/Waves/Waves.h"
+#include "Net/Snapshot.h"
 
 #include <QColor>
 #include <QString>
@@ -61,6 +62,12 @@ public:
     float runTime() const { return runTime_; }
     int currentWave() const { return waves_.currentWave(); }
     int totalWaves() const { return waves_.totalWaves(); }
+
+    // ----- 网络快照（阶段 2） -----
+    // 服务端边界：把一局模拟提取成只读数据；不传任何对象指针/RTTI。
+    net::Snapshot snapshot() const;
+    // 复用 out 的 vector 容量，单机每帧调用不反复分配。
+    void writeSnapshot(net::Snapshot &out) const;
 
 protected:
     friend class ::SelfTest;

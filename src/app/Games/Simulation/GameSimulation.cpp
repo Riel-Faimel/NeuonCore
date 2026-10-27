@@ -1,8 +1,31 @@
 #include "Games/Simulation/GameSimulation.h"
 
+#include "Net/Snapshot.h"
+
 #include <algorithm>
 
 namespace games {
+
+namespace {
+
+net::RunState toRunState(GameSimulation::State state)
+{
+    switch (state) {
+    case GameSimulation::State::Playing:
+        return net::RunState::Playing;
+    case GameSimulation::State::Upgrade:
+        return net::RunState::Upgrade;
+    case GameSimulation::State::Paused:
+        return net::RunState::Paused;
+    case GameSimulation::State::Victory:
+        return net::RunState::Victory;
+    case GameSimulation::State::Defeat:
+        return net::RunState::Defeat;
+    }
+    return net::RunState::Playing;
+}
+
+} // namespace
 
 GameSimulation::GameSimulation(const Level &level)
     : level_(level), input_(), arena_(),
@@ -158,6 +181,47 @@ void GameSimulation::triggerDefeat()
     state_ = State::Defeat;
     victoryPending_ = false;
     onDefeat();
+}
+
+net::Snapshot GameSimulation::snapshot() const
+{
+    net::Snapshot out;
+    writeSnapshot(out);
+    return out;
+}
+
+void GameSimulation::writeSnapshot(net::Snapshot &out) const
+{
+    out.clear();
+    out.state = toRunState(state_);
+    out.runTime = runTime_;
+    out.score = arena_.score();
+    out.kills = arena_.kills();
+
+    arena_.writeSnapshot(out);
+
+    out.waves.currentWave = waves_.currentWave();
+    out.waves.totalWaves = waves_.totalWaves();
+    out.waves.totalEnemies = waves_.totalEnemies();
+    out.waves.remainingThreats = waves_.remainingThreats();
+    out.waves.bossWave = waves_.isBossWave();
+    out.waves.finalWave = waves_.isFinalWave();
+    out.waves.cleared = waves_.isCleared();
+
+    out.upgrades.clear();
+    out.upgrades.reserve(upgrades_.offers().size());
+    for (const Upgrades::Offer &offer : upgrades_.offers()) {
+        net::UpgradeOfferSnapshot data;
+        data.key = offer.key;
+        data.name = offer.name;
+        data.tag = offer.tag;
+        data.desc = offer.desc;
+        data.valueText = offer.valueText;
+        data.color = offer.color;
+        data.level = offer.level;
+        data.value = offer.value;
+        out.upgrades.push_back(std::move(data));
+    }
 }
 
 } // namespace games

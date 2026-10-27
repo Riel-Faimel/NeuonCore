@@ -1,8 +1,10 @@
 #pragma once
 
 #include "Arena/Arena.h"
+#include "Client/GameView.h"
 #include "Games/Renderer/Renderer.h"
 #include "Games/Simulation/GameSimulation.h"
+#include "Net/Snapshot.h"
 #include "Shop/Shop.h"
 
 #include <QImage>
@@ -32,6 +34,9 @@ public:
     int kills() const { return ShopService.score().kills(); }
     const QImage &frame() const { return renderer_.frame(); }
 
+    // 单机也走 GameSimulation -> Snapshot -> GameView；测试可检查重建后的视图。
+    const client::GameView &view() const { return view_; }
+
     void keyPress(int key, bool autoRepeat = false);
     void keyRelease(int key);
     void mouseMove(const Math::Vec2 &position);
@@ -58,4 +63,6 @@ private:
     void onFeedback(const Arena::Feedback &feedback) override;
 
     games::Renderer renderer_;
+    client::GameView view_;
+    net::Snapshot snapshot_;
 };
