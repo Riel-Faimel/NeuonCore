@@ -66,7 +66,11 @@ CLIENT_COMPONENTS := Base/Base Base/Input/Input Base/Audio/Audio Base/Audio/Musi
                      Net/Client \
                      Menu/Menu Menu/Main/Main Menu/Map/Map Menu/Match/Match \
                      Menu/Room/Room Menu/Failure/Failure \
-                     Menu/Result/Result Menu/Editor/Editor Menu/Depot/Depot \
+                     Menu/Result/Result Menu/Depot/Depot \
+                     Menu/Editor/Theme Menu/Editor/Tabs Menu/Editor/WaveTable \
+                     Menu/Editor/Palette Menu/Editor/ServerRow \
+                     Menu/Editor/JoinPanel Menu/Editor/Inspector \
+                     Menu/Editor/Actions Menu/Editor/Editor \
                      Menu/Armory/Armory \
                      Menu/Settings/Settings
 CLIENT_OBJS := $(addprefix $(BUILD)/app/client/,$(addsuffix .o,$(CLIENT_COMPONENTS)))
