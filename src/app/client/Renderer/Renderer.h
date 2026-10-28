@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Debug.h"
+
 #include "GameConfig.h"
 #include "Math.h"
 #include "Simulation/Upgrades/Upgrades.h"
@@ -41,7 +43,7 @@ public:
     int upgradeIndexAt(const Math::Vec2 &pos) const;
 
 private:
-    friend class ::SelfTest;
+    DebugInfo(friend class ::SelfTest;)
 
     struct Star {
         Math::Vec2 pos;

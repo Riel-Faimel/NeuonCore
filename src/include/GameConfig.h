@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Debug.h"
+
 // 游戏级常量。所有模块共享的屏幕/战场尺寸只在这里定义一次。
 class GameConfig {
 public:

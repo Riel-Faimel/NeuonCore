@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Debug.h"
+
 #include "Arena/Arena.h"
 #include "View/GameView.h"
 #include "Renderer/Renderer.h"
@@ -10,7 +12,7 @@
 #include <QImage>
 #include <QString>
 
-class SelfTest;
+DebugInfo(class SelfTest;)
 
 // Games 模块：单机适配器。
 // 它继承 GameSimulation（Arena / Waves / Upgrades、状态、计时、输入），
@@ -45,7 +47,7 @@ public:
     void mouseReleaseLeft();
 
 private:
-    friend class SelfTest;
+    DebugInfo(friend class SelfTest;)
 
     // 单机输入采集：BaseService -> arena::InputState -> GameSimulation。
     arena::InputState localInput() const;

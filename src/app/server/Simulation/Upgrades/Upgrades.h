@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Debug.h"
+
 #include <QColor>
 #include <QHash>
 #include <QString>
@@ -8,7 +10,7 @@
 #include <vector>
 
 class Arena;
-class SelfTest;
+DebugInfo(class SelfTest;)
 
 namespace games {
 
@@ -36,7 +38,7 @@ public:
     const std::vector<Offer> &offers() const { return offers_; }
 
 private:
-    friend class ::SelfTest;
+    DebugInfo(friend class ::SelfTest;)
 
     struct Definition {
         std::string_view key;

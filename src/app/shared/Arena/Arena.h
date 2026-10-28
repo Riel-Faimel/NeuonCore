@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Debug.h"
+
 #include "Arena/Context.h"
 #include "Arena/Bullets/Bullets.h"
 #include "Arena/Combatants/Combatants.h"
@@ -106,7 +108,7 @@ public:
     void applySnapshot(const net::Snapshot &snapshot);
 
 private:
-    friend class SelfTest;
+    DebugInfo(friend class SelfTest;)
 
     // arena::Host：组件请求模块级画面反馈。
     void addFeedback(const QColor &color, int alpha, float shake) override;

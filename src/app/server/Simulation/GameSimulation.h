@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Debug.h"
+
 #include "Arena/Arena.h"
 #include "Arena/Combatants/Player.h"
 #include "Simulation/Upgrades/Upgrades.h"
@@ -11,7 +13,7 @@
 
 #include <vector>
 
-class SelfTest;
+DebugInfo(class SelfTest;)
 
 namespace games {
 
@@ -89,7 +91,7 @@ public:
     void writeSnapshot(net::Snapshot &out) const;
 
 protected:
-    friend class ::SelfTest;
+    DebugInfo(friend class ::SelfTest;)
 
     // ----- 表现钩子（默认空实现，模拟层不依赖任何表现代码） -----
     virtual void onWaveStarted(int wave, bool boss, bool finalWave) {

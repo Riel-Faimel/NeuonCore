@@ -1,12 +1,14 @@
 #pragma once
 
+#include "Debug.h"
+
 #include "Arena/Arena.h"
 #include "Simulation/Upgrades/Upgrades.h"
 #include "Net/Snapshot.h"
 
 #include <vector>
 
-class SelfTest;
+DebugInfo(class SelfTest;)
 
 namespace client {
 
@@ -49,7 +51,7 @@ public:
     const std::vector<games::Upgrades::Offer> &upgrades() const { return upgrades_; }
 
 private:
-    friend class ::SelfTest;
+    DebugInfo(friend class ::SelfTest;)
 
     Arena world_;
     arena::BossInfo boss_;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Debug.h"
+
 #include "Games/Games.h"
 
 #include <QImage>
@@ -8,7 +10,7 @@
 
 #include <memory>
 
-class SelfTest;
+DebugInfo(class SelfTest;)
 
 namespace client {
 class GameClient;
@@ -106,7 +108,7 @@ public:
     server::GameServer *localServer() { return server_.get(); }
 
 private:
-    friend class ::SelfTest;
+    DebugInfo(friend class ::SelfTest;)
 
     void startLocal(const Games::Level &level);
     void startNetwork(const Games::Level &level);

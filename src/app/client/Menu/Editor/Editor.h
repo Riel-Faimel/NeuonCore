@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Debug.h"
+
 #include "Games/Games.h"
 #include "Math.h"
 #include "Menu/Editor/Actions.h"
@@ -80,7 +82,7 @@ public:
     QRectF rowRect(int row) const;
 
 private:
-    friend class ::SelfTest;
+    DebugInfo(friend class ::SelfTest;)
 
     static constexpr float RepeatDelay = 0.24f;
     static constexpr float RepeatInterval = 0.05f;

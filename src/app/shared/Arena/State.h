@@ -1,6 +1,8 @@
 #pragma once
 
-class SelfTest;
+#include "Debug.h"
+
+DebugInfo(class SelfTest;)
 
 namespace arena {
 
@@ -20,7 +22,7 @@ public:
     bool playerDefeated() const { return playerDefeated_; }
 
 private:
-    friend class ::SelfTest;
+    DebugInfo(friend class ::SelfTest;)
 
     bool phase2_ = false;
     bool phase3_ = false;

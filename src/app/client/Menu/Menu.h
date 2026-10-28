@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Debug.h"
+
 #include "Base/Base.h"
 #include "Games/Games.h"
 
@@ -18,7 +20,7 @@
 
 #include <vector>
 
-class SelfTest;
+DebugInfo(class SelfTest;)
 
 // Menu 模块：只组合 8 个界面组件和进程级资源（Shop、Loadout、关卡表），
 // 负责屏幕状态机、输入路由和组件之间的数据传递。
@@ -67,7 +69,7 @@ public:
     Screen screen() const { return screen_; }
 
 private:
-    friend class SelfTest;
+    DebugInfo(friend class SelfTest;)
 
     static constexpr int CustomLevelIndex = 1;
 

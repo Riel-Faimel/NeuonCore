@@ -228,7 +228,7 @@ int main(int argc, char *argv[])
     quint16 connectPort = net::kDefaultPort;
     QString argumentError;
 
-#ifdef DEBUG
+    DebugInfo(
     bool headless = false;
     bool smoke = false;
     bool capture = false;
@@ -236,7 +236,7 @@ int main(int argc, char *argv[])
     bool bench = false;
     QString captureDirectory = QStringLiteral("screenshots");
     QString windowShot = QStringLiteral("screenshots/window.png");
-#endif
+    )
 
     for (int i = 1; i < argc; ++i) {
         const QString argument = QString::fromLocal8Bit(argv[i]);

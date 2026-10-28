@@ -1,8 +1,10 @@
 #pragma once
 
+#include "Debug.h"
+
 #include <QString>
 
-class SelfTest;
+DebugInfo(class SelfTest;)
 
 namespace shop {
 
@@ -18,7 +20,7 @@ public:
     bool takeMine();
 
 private:
-    friend class ::SelfTest;
+    DebugInfo(friend class ::SelfTest;)
 
 
     int mines_ = 0;

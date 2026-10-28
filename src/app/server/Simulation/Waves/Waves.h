@@ -1,11 +1,13 @@
 #pragma once
 
+#include "Debug.h"
+
 #include "Arena/Combatants/EnemyType.h"
 
 #include <vector>
 
 class Arena;
-class SelfTest;
+DebugInfo(class SelfTest;)
 
 namespace games {
 
@@ -43,7 +45,7 @@ public:
     bool isBossWave() const;
 
 private:
-    friend class ::SelfTest;
+    DebugInfo(friend class ::SelfTest;)
 
     std::vector<arena::EnemyType> buildQueue(int wave) const;
     bool waveHasBoss(int wave) const;

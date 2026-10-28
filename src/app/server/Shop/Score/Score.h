@@ -1,8 +1,10 @@
 #pragma once
 
+#include "Debug.h"
+
 #include <QString>
 
-class SelfTest;
+DebugInfo(class SelfTest;)
 
 namespace shop {
 
@@ -23,7 +25,7 @@ public:
     int kills() const { return kills_; }             // 本局击杀
 
 private:
-    friend class ::SelfTest;
+    DebugInfo(friend class ::SelfTest;)
 
 
     int total_ = 0;
