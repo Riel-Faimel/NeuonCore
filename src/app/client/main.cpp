@@ -51,12 +51,17 @@ public:
         : QWidget(parent), menu_(true, offline, host, port)
     {
         setWindowTitle(QStringLiteral("星核协议 · NEON CORE"));
-        qreal pixelRatio = 1.0;
+        // QWidget/QML 使用逻辑像素；不要再按 devicePixelRatio 缩小窗口。
+        // 只在屏幕逻辑可用区域不足 1280x720 时整体等比缩放。
+        qreal uiScale = 1.0;
         if (QScreen *primary = QGuiApplication::primaryScreen()) {
-            pixelRatio = primary->devicePixelRatio();
+            const QRect available = primary->availableGeometry();
+            uiScale = std::min({1.0,
+                                double(available.width()) / GameConfig::ScreenWidth,
+                                double(available.height()) / GameConfig::ScreenHeight});
         }
-        setFixedSize(qRound(GameConfig::ScreenWidth / pixelRatio),
-                     qRound(GameConfig::ScreenHeight / pixelRatio));
+        setFixedSize(qRound(GameConfig::ScreenWidth * uiScale),
+                     qRound(GameConfig::ScreenHeight * uiScale));
         setFocusPolicy(Qt::StrongFocus);
         setMouseTracking(true);
         setAttribute(Qt::WA_OpaquePaintEvent);

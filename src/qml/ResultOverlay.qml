@@ -16,6 +16,7 @@ Item {
     property bool retryRequested: false
     property bool backRequested: false
 
+
     readonly property color accent: victory ? "#53e8ff" : "#ff4858"
     readonly property color titleColor: victory ? "#97ffdc" : "#ff7785"
     readonly property color textColor: "#cfe2f2"
@@ -33,6 +34,15 @@ Item {
     function scoreText() {
         return root.score.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
     }
+    Item {
+        id: stage
+        width: 1280
+        height: 720
+        scale: Math.min(root.width / 1280, root.height / 720)
+        transformOrigin: Item.TopLeft
+        x: (root.width - width * scale) / 2
+        y: (root.height - height * scale) / 2
+
 
     // 与旧 Result 覆盖层一致：直接压在局内帧上，而不是另起一张卡片。
     Rectangle {
@@ -210,5 +220,6 @@ Item {
                 onClicked: root.backRequested = true
             }
         }
+    }
     }
 }

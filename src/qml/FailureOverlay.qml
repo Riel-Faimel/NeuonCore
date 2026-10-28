@@ -13,10 +13,21 @@ Item {
     property bool retryRequested: false
     property bool backRequested: false
 
+
+
     readonly property color accent: "#ff4858"
     readonly property color titleColor: "#ff8b96"
     readonly property color ink: "#e9f6ff"
     readonly property color muted: "#7792ab"
+    Item {
+        id: stage
+        width: 1280
+        height: 720
+        scale: Math.min(root.width / 1280, root.height / 720)
+        transformOrigin: Item.TopLeft
+        x: (root.width - width * scale) / 2
+        y: (root.height - height * scale) / 2
+
 
     Rectangle {
         anchors.fill: parent
@@ -218,5 +229,6 @@ Item {
         font.family: "Microsoft YaHei"
         font.pixelSize: 13
         opacity: 0.9
+    }
     }
 }
