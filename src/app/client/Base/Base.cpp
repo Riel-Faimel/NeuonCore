@@ -107,6 +107,21 @@ void Base::pointerDraw(QPainter &painter) const
     impl_->pointer.draw(painter);
 }
 
+const Math::Vec2 &Base::pointerPosition() const
+{
+    return impl_->pointer.position();
+}
+
+float Base::pointerTime() const
+{
+    return impl_->pointer.time();
+}
+
+bool Base::pointerVisible() const
+{
+    return impl_->pointer.visible();
+}
+
 bool Base::parallelEnabled() const
 {
     return impl_->threads.enabled();

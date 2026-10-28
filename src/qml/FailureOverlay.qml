@@ -12,6 +12,10 @@ Item {
     property bool retryable: true
     property bool retryRequested: false
     property bool backRequested: false
+    property real pointerX: 640
+    property real pointerY: 360
+    property real pointerTime: 0
+    property bool pointerVisible: false
 
 
 
@@ -230,5 +234,12 @@ Item {
         font.pixelSize: 13
         opacity: 0.9
     }
+        Reticle {
+            anchors.fill: parent
+            pointerX: root.pointerX
+            pointerY: root.pointerY
+            pointerTime: root.pointerTime
+            pointerVisible: root.pointerVisible
+        }
     }
 }

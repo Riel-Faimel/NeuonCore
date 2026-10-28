@@ -18,6 +18,9 @@ public:
 
     void update(float dt) { time_ += dt; }
     void draw(QPainter &painter) const;
+    const Math::Vec2 &position() const { return position_; }
+    float time() const { return time_; }
+    bool visible() const { return visible_; }
 
 private:
     Math::Vec2 position_{GameConfig::ScreenWidth / 2.0f, GameConfig::ScreenHeight / 2.0f};

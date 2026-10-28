@@ -204,6 +204,7 @@ deploy: release server
 	@copy /Y "THIRD_PARTY.txt" "$(DIST_WIN)\THIRD_PARTY.txt" >nul
 	@copy /Y "src\qml\ResultOverlay.qml" "$(DIST_WIN)\qml\ResultOverlay.qml" >nul
 	@copy /Y "src\qml\FailureOverlay.qml" "$(DIST_WIN)\qml\FailureOverlay.qml" >nul
+	@copy /Y "src\qml\Reticle.qml" "$(DIST_WIN)\qml\Reticle.qml" >nul
 	@xcopy /E /I /Y "$(QTDIR_WIN)\qml\QtQuick" "$(DIST_WIN)\qml\QtQuick" >nul
 	@xcopy /E /I /Y "$(QTDIR_WIN)\qml\QtQml" "$(DIST_WIN)\qml\QtQml" >nul
 	@xcopy /E /I /Y "$(QTDIR_WIN)\qml\QtCore" "$(DIST_WIN)\qml\QtCore" >nul

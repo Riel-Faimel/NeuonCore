@@ -47,6 +47,9 @@ public:
     void pointerSetVisible(bool visible);
     void pointerUpdate(float dt);
     void pointerDraw(QPainter &painter) const;
+    const Math::Vec2 &pointerPosition() const;
+    float pointerTime() const;
+    bool pointerVisible() const;
 
     // ----- 帧内并行（转发 base::ThreadPool） -----
     // 渲染层用它把互不重叠的图层分给工作线程；主线程也参与执行。

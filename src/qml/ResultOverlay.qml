@@ -15,6 +15,10 @@ Item {
     property real runTime: 0
     property bool retryRequested: false
     property bool backRequested: false
+    property real pointerX: 640
+    property real pointerY: 360
+    property real pointerTime: 0
+    property bool pointerVisible: false
 
 
     readonly property color accent: victory ? "#53e8ff" : "#ff4858"
@@ -248,5 +252,12 @@ Item {
             }
         }
     }
+        Reticle {
+            anchors.fill: parent
+            pointerX: root.pointerX
+            pointerY: root.pointerY
+            pointerTime: root.pointerTime
+            pointerVisible: root.pointerVisible
+        }
     }
 }

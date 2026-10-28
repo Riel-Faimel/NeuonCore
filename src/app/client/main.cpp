@@ -92,8 +92,10 @@ protected:
         painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
         painter.drawImage(rect(), menu_.frame());
 
-        // 指针是全局元素：每一帧都叠在画面最上层，不参与任何画面自己的绘制。
-        if (width() > 0 && height() > 0) {
+        // QML Result/Failure 自己画准星，避免 Widgets 准星透出来形成双层。
+        const bool qmlScreen = menu_.screen() == Menu::Screen::Result
+                               || menu_.screen() == Menu::Screen::Failure;
+        if (!qmlScreen && width() > 0 && height() > 0) {
             painter.save();
             painter.scale(float(width()) / float(GameConfig::ScreenWidth),
                           float(height()) / float(GameConfig::ScreenHeight));
@@ -154,6 +156,7 @@ protected:
         const Math::Vec2 position = toGamePos(event->position());
         menu_.mouseMove(position);
         BaseService.pointerMoveTo(position);
+        BaseService.pointerSetVisible(true);
         QWidget::enterEvent(event);
     }
 
@@ -228,6 +231,17 @@ private:
         resultOverlay_->hide();
     }
 
+    void syncQmlPointer(QQuickItem *root)
+    {
+        if (root == nullptr) {
+            return;
+        }
+        const Math::Vec2 position = BaseService.pointerPosition();
+        root->setProperty("pointerX", double(position.x));
+        root->setProperty("pointerY", double(position.y));
+        root->setProperty("pointerTime", double(BaseService.pointerTime()));
+        root->setProperty("pointerVisible", BaseService.pointerVisible());
+    }
     void syncResultOverlay()
     {
         if (resultOverlay_ == nullptr || resultQmlRoot_ == nullptr) {
@@ -237,6 +251,7 @@ private:
             resultOverlay_->hide();
             return;
         }
+        syncQmlPointer(resultQmlRoot_);
         const menu::ResultSummary summary = menu_.resultSummary();
         resultQmlRoot_->setProperty("victory", summary.victory);
         resultQmlRoot_->setProperty("levelName", summary.levelName);
@@ -294,6 +309,7 @@ private:
             failureOverlay_->hide();
             return;
         }
+        syncQmlPointer(failureQmlRoot_);
         const menu::FailureView view = menu_.failureSummary();
         failureQmlRoot_->setProperty("title", view.title);
         failureQmlRoot_->setProperty("detail", view.detail);
