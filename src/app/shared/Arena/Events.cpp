@@ -31,32 +31,31 @@ namespace arena {
 
 void Events::resolvePlayerBullets(const Context &ctx)
 {
-    const auto &enemies = ctx.combatants.enemies();
+    // 敌人多了以后“每颗子弹 × 全部敌人”是 O(B×E)：改用空间网格只查附近格子。
+    const float maxEnemyRadius = ctx.combatants.enemyGrid().maxRadius();
     for (auto &owned : ctx.bullets.playerBullets()) {
         Bullet &bullet = *owned;
         if (!bullet.alive()) {
             continue;
         }
-        const size_t count = enemies.size();
-        for (size_t i = 0; i < count; ++i) {
-            if (i >= enemies.size()) {
-                break;
+        // 扫掠半径要覆盖本帧位移，否则高速弹会在格子边界漏判。
+        const float reach = bullet.radius() + maxEnemyRadius
+                            + (bullet.position() - bullet.prev()).length();
+        ctx.combatants.forEachEnemyNear(bullet.position(), reach, [&](Enemy &enemy) {
+            if (!bullet.alive()) {
+                return false;
             }
-            Enemy *enemy = enemies[i].get();
-            Fighter &fighter = *enemy;
-            if (!fighter.isAlive()) {
-                continue;
+            if (!enemy.isAlive()) {
+                return true;
             }
             if (!Math::segmentCircle(bullet.prev(), bullet.position(),
-                                     fighter.position(),
-                                     fighter.collisionRadius() + bullet.radius())) {
-                continue;
+                                     enemy.position(),
+                                     enemy.collisionRadius() + bullet.radius())) {
+                return true;
             }
             // 命中结算（伤害/暴击/穿透）由子弹自己处理；返回 false 表示这颗弹结束。
-            if (!bullet.hit(ctx, fighter)) {
-                break;
-            }
-        }
+            return bullet.hit(ctx, enemy);
+        });
         if (ctx.state.playerDefeated()) {
             break;
         }
@@ -101,19 +100,28 @@ void Events::resolveEnemyBullets(const Context &ctx)
 
 void Events::resolveMines(const Context &ctx)
 {
+    const float maxEnemyRadius = ctx.combatants.enemyGrid().maxRadius();
     for (Mine &mine : ctx.entities.mines()) {
         if (!mine.alive || mine.age < mine.armTime) {
             continue;
         }
-        for (const auto &enemy : ctx.combatants.enemies()) {
-            if (!enemy->alive) {
-                continue;
+        const float reach = mine.triggerRadius + maxEnemyRadius;
+        bool triggered = false;
+        ctx.combatants.forEachEnemyNear(mine.pos, reach, [&](Enemy &enemy) {
+            if (!mine.alive) {
+                return false;
             }
-            if (mine.pos.distanceTo(enemy->pos) > mine.triggerRadius + enemy->radius) {
-                continue;
+            if (!enemy.isAlive()) {
+                return true;
             }
+            if (mine.pos.distanceTo(enemy.pos) <= mine.triggerRadius + enemy.radius) {
+                triggered = true;
+                return false;
+            }
+            return true;
+        });
+        if (triggered) {
             detonateMine(ctx, mine);
-            break;
         }
     }
     ctx.entities.cleanup();
@@ -122,15 +130,17 @@ void Events::resolveMines(const Context &ctx)
 void Events::detonateMine(const Context &ctx, Mine &mine)
 {
     mine.alive = false;
-    for (const auto &enemy : ctx.combatants.enemies()) {
-        if (!enemy->alive) {
-            continue;
+    const float reach = mine.blastRadius + ctx.combatants.enemyGrid().maxRadius();
+    ctx.combatants.forEachEnemyNear(mine.pos, reach, [&](Enemy &enemy) {
+        if (!enemy.isAlive()) {
+            return true;
         }
-        if (mine.pos.distanceTo(enemy->pos) > mine.blastRadius + enemy->radius) {
-            continue;
+        if (mine.pos.distanceTo(enemy.pos) > mine.blastRadius + enemy.radius) {
+            return true;
         }
-        enemy->takeDamage(ctx, Damage{data::kMine.damage, false, DamageSource::Shock});
-    }
+        enemy.takeDamage(ctx, Damage{data::kMine.damage, false, DamageSource::Shock});
+        return true;
+    });
     ctx.entities.spawnBurst(ctx, mine.pos, Base::Amber, 30, 230.0f, 0.7f);
     ctx.entities.addShockwave(mine.pos, mine.blastRadius, Base::Amber, 0.5f, 3);
     ctx.host.addFeedback(Base::Amber, 42, 8.0f);
@@ -139,76 +149,83 @@ void Events::detonateMine(const Context &ctx, Mine &mine)
 
 void Events::separateEnemies(const Context &ctx)
 {
+    // 分离是 O(n²) 的重灾区：只处理同一/相邻格子里的敌人对，并按 eid 去重。
+    const float maxEnemyRadius = ctx.combatants.enemyGrid().maxRadius();
     auto &enemies = ctx.combatants.enemies();
-    for (size_t i = 0; i < enemies.size(); ++i) {
-        Enemy *first = enemies[i].get();
+    for (auto &owned : enemies) {
+        Enemy *first = owned.get();
         if (!first->isAlive()) {
             continue;
         }
-        for (size_t j = i + 1; j < enemies.size(); ++j) {
-            Enemy *second = enemies[j].get();
-            if (!second->isAlive()) {
-                continue;
+        ctx.combatants.forEachEnemyNear(first->pos, first->radius + maxEnemyRadius,
+                                        [first](Enemy &second) {
+            if (&second == first || !second.isAlive()
+                || second.eid < first->eid) {
+                return true;
             }
-            const Math::Vec2 delta = first->pos - second->pos;
-            const float minimum = first->radius + second->radius;
+            const Math::Vec2 delta = first->pos - second.pos;
+            const float minimum = first->radius + second.radius;
             const float distanceSquared = delta.lengthSquared();
             if (distanceSquared <= 0.001f || distanceSquared >= minimum * minimum) {
-                continue;
+                return true;
             }
             const float distance = std::sqrt(distanceSquared);
             const Math::Vec2 push = delta / distance * ((minimum - distance) * 0.48f);
             if (!first->boss) {
                 first->pos += push;
             }
-            if (!second->boss) {
-                second->pos -= push;
+            if (!second.boss) {
+                second.pos -= push;
             }
             first->pos.x = Math::clamp(first->pos.x, GameConfig::FieldLeft + first->radius,
                                        GameConfig::FieldRight - first->radius);
             first->pos.y = Math::clamp(first->pos.y,
                                        GameConfig::FieldTop + first->radius + 4.0f,
                                        GameConfig::FieldBottom - first->radius - 4.0f);
-            second->pos.x = Math::clamp(second->pos.x, GameConfig::FieldLeft + second->radius,
-                                        GameConfig::FieldRight - second->radius);
-            second->pos.y = Math::clamp(second->pos.y,
-                                        GameConfig::FieldTop + second->radius + 4.0f,
-                                        GameConfig::FieldBottom - second->radius - 4.0f);
-        }
+            second.pos.x = Math::clamp(second.pos.x, GameConfig::FieldLeft + second.radius,
+                                       GameConfig::FieldRight - second.radius);
+            second.pos.y = Math::clamp(second.pos.y,
+                                       GameConfig::FieldTop + second.radius + 4.0f,
+                                       GameConfig::FieldBottom - second.radius - 4.0f);
+            return true;
+        });
     }
 }
 
 void Events::contactDamage(const Context &ctx)
 {
+    const float maxEnemyRadius = ctx.combatants.enemyGrid().maxRadius();
     for (Player &player : ctx.combatants.players()) {
         if (!player.state.active || !player.isAlive()
             || player.state.invuln > 0.0f) {
             continue;
         }
-        for (const auto &enemy : ctx.combatants.enemies()) {
-            if (!enemy->isAlive()) {
-                continue;
+        const float reach = player.state.radius + maxEnemyRadius + 4.0f;
+        ctx.combatants.forEachEnemyNear(player.position(), reach, [&](Enemy &enemy) {
+            if (!enemy.isAlive()) {
+                return true;
             }
-            const Fighter &fighter = *enemy;
+            const Fighter &fighter = enemy;
             const Math::Vec2 delta = player.position() - fighter.position();
             const float minimum = player.state.radius + fighter.collisionRadius();
-            if (delta.lengthSquared() <= minimum * minimum) {
-                player.takeDamage(ctx, Damage{fighter.contactDamage(), false,
-                                              DamageSource::Contact});
-                if (delta.lengthSquared() > 0.001f) {
-                    const Math::Vec2 direction = delta.normalized();
-                    player.state.pos += direction * 22.0f;
-                    enemy->pos -= direction * 12.0f;
-                    player.state.pos.x = Math::clamp(player.state.pos.x,
-                                                     GameConfig::FieldLeft + 2.0f,
-                                                     GameConfig::FieldRight - 2.0f);
-                    player.state.pos.y = Math::clamp(player.state.pos.y,
-                                                     GameConfig::FieldTop + 2.0f,
-                                                     GameConfig::FieldBottom - 2.0f);
-                }
-                break;
+            if (delta.lengthSquared() > minimum * minimum) {
+                return true;
             }
-        }
+            player.takeDamage(ctx, Damage{fighter.contactDamage(), false,
+                                          DamageSource::Contact});
+            if (delta.lengthSquared() > 0.001f) {
+                const Math::Vec2 direction = delta.normalized();
+                player.state.pos += direction * 22.0f;
+                enemy.pos -= direction * 12.0f;
+                player.state.pos.x = Math::clamp(player.state.pos.x,
+                                                 GameConfig::FieldLeft + 2.0f,
+                                                 GameConfig::FieldRight - 2.0f);
+                player.state.pos.y = Math::clamp(player.state.pos.y,
+                                                 GameConfig::FieldTop + 2.0f,
+                                                 GameConfig::FieldBottom - 2.0f);
+            }
+            return false;
+        });
     }
 }
 
@@ -229,11 +246,13 @@ void Events::handleKill(const Context &ctx, Enemy &enemy)
     enemy.onKilled(ctx);
 
     if (!enemy.boss) {
-        // 通知所有存活友军：有人阵亡；复活/召唤进度由具体敌人类实现。
+        // 只有关心“友军阵亡”的敌人（necromancer / summoner）需要回调；先收集再通知，
+        // 避免回调里往 enemies_ 里 push 造成迭代器失效。
         std::vector<Enemy *> listeners;
         for (const auto &other : ctx.combatants.enemies()) {
-            if (other->alive && other.get() != &enemy) {
-                listeners.push_back(other.get());
+            Enemy *listener = other.get();
+            if (listener != &enemy && listener->alive && listener->listensToAllyKills) {
+                listeners.push_back(listener);
             }
         }
         for (Enemy *listener : listeners) {

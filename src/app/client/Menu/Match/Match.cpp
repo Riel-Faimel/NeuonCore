@@ -511,6 +511,11 @@ Games::State Match::state() const
     if (failed()) {
         return Games::State::Defeat;
     }
+    // MatchEnd 是权威结果；最后一帧快照可能还是 Playing/Defeat（30Hz）。
+    if (client_->matchEnded()) {
+        return client_->matchEnd().victory ? Games::State::Victory
+                                            : Games::State::Defeat;
+    }
     return toGameState(client_->state());
 }
 

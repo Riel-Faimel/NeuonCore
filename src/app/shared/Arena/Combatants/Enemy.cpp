@@ -271,22 +271,22 @@ void Enemy::takeDamage(const Context &ctx, const Damage &damage)
     // linker：范围内的友军受伤时，按比例把伤害转给自己（只转一层）。
     if (!damage.shared) {
         std::vector<Enemy *> linkers;
-        for (const auto &other : ctx.combatants.enemies()) {
-            Enemy *linker = other.get();
-            if (linker == this || !linker->alive) {
-                continue;
+        // 用空间网格找附近的防御型敌人，而不是每发命中都遍历全场。
+        ctx.combatants.forEachEnemyNear(pos, 260.0f, [&](Enemy &other) {
+            if (&other == this || !other.alive) {
+                return true;
             }
             // 只有防御型（linker）会分担伤害，先按缓存类别过滤，避免每次命中的虚调用。
-            if (linker->archetype() != Archetype::Defensive) {
-                continue;
+            if (other.archetype() != Archetype::Defensive) {
+                return true;
             }
-            const float shareRadius = linker->damageShareRadius();
-            if (shareRadius <= 0.0f
-                || linker->pos.distanceTo(pos) > shareRadius) {
-                continue;
+            const float shareRadius = other.damageShareRadius();
+            if (shareRadius <= 0.0f || other.pos.distanceTo(pos) > shareRadius) {
+                return true;
             }
-            linkers.push_back(linker);
-        }
+            linkers.push_back(&other);
+            return true;
+        });
         if (!linkers.empty()) {
             const float ratio = std::clamp(linkers.front()->damageShareRatio(),
                                            0.0f, 0.9f);
@@ -330,13 +330,48 @@ void Enemy::die(const Context &ctx)
     ctx.events.handleKill(ctx, *this);
 }
 
+namespace {
+
+// “倾向 LOD”的类型（mini）在人群到这个规模时先简化外观；
+// 其他类型要等全场人数超过 Combatants::CrowdExtremeLimit 才降级。
+constexpr int kLowDetailPreferenceCount = 120;
+
+} // namespace
+
 void Enemy::draw(QPainter &world, QPainter &glow, const Context &ctx) const
 {
     if (!alive) {
         return;
     }
+
+    const int enemyCount = ctx.combatants.enemyCount();
+    // 倾向 LOD：mini 这类“数量多、体积小”的单位在人群中先降级成一个纯色圆，
+    // 但仍然是有条件的——人少的时候照常画完整机身。
+    if (prefersLowDetail && enemyCount > kLowDetailPreferenceCount) {
+        Base::fillCircle(world, pos, radius, Base::withAlpha(color, 225));
+        if (hitFlash > 0.0f) {
+            Base::fillCircle(world, pos, radius * 0.9f,
+                             Base::withAlpha(Base::White,
+                                             int(110.0f * (hitFlash / 0.09f))));
+        }
+        return;
+    }
+
     const Math::Vec2 toPlayer = ctx.combatants.nearestLivingPlayer(pos).state.pos - pos;
     const float facing = std::atan2(toPlayer.y, toPlayer.x);
+
+    // 其他敌人尽量保留完整机身；只有极端人群（保命档）才简化为一个色圈。
+    if (!boss && enemyCount > Combatants::CrowdExtremeLimit) {
+        Base::fillCircle(world, pos, radius * 0.78f, Base::shade(color, 0.32f));
+        Base::strokeCircle(world, pos, radius, Base::withAlpha(color, 225), 1.4f);
+        if (hitFlash > 0.0f) {
+            Base::fillCircle(world, pos, radius * 0.9f,
+                             Base::withAlpha(Base::White,
+                                             int(110.0f * (hitFlash / 0.09f))));
+        }
+        return;
+    }
+
     drawBody(world, glow, facing);
 
     if (hitFlash > 0.0f) {

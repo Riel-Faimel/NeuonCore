@@ -287,6 +287,9 @@ void GameClient::handleFrame(const QByteArray &frame)
     case net::MessageType::Snapshot:
         handleSnapshot(payload);
         break;
+    case net::MessageType::SnapshotCompressed:
+        handleCompressedSnapshot(payload);
+        break;
     case net::MessageType::Event:
         handleEvent(payload);
         break;
@@ -338,6 +341,29 @@ void GameClient::handleSnapshot(const QByteArray &payload)
     net::Snapshot snapshot;
     QString error;
     if (!net::deserializeSnapshot(payload, &snapshot, &error)) {
+        fail(error);
+        socket_.abort();
+        return;
+    }
+    lastSnapshot_ = std::move(snapshot);
+    view_.apply(lastSnapshot_);
+    ++snapshotCount_;
+    matchEnded_ = false;
+    matchEnd_.reason.clear();
+    inLobby_ = false;
+}
+
+void GameClient::handleCompressedSnapshot(const QByteArray &payload)
+{
+    const QByteArray raw = qUncompress(payload);
+    if (raw.isEmpty()) {
+        fail(QStringLiteral("cannot uncompress snapshot"));
+        socket_.abort();
+        return;
+    }
+    net::Snapshot snapshot;
+    QString error;
+    if (!net::deserializeSnapshot(raw, &snapshot, &error)) {
         fail(error);
         socket_.abort();
         return;

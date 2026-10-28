@@ -10,6 +10,10 @@ namespace arena {
 
 namespace {
 
+// 寻路只看邻域：这些半径把“最近防御者 / 最密友军”的搜索限制在一屏内，
+// 让每个支援型敌人的开销与周围敌人数量相关，而不是全场数量（O(n²)）。
+constexpr float kFormationRadius = 700.0f;
+
 bool isSelfDestruct(const Enemy *enemy)
 {
     return enemy->archetype() == Enemy::Archetype::SelfDestruct;
@@ -19,21 +23,21 @@ bool isSelfDestruct(const Enemy *enemy)
 const Enemy *nearestDefender(const Context &ctx, const Enemy &self)
 {
     const Enemy *best = nullptr;
-    float bestDistance = 1e9f;
-    for (const auto &owned : ctx.combatants.enemies()) {
-        Enemy *other = owned.get();
-        if (other == &self || !other->alive) {
-            continue;
+    float bestDistance = kFormationRadius;
+    ctx.combatants.forEachEnemyNear(self.pos, kFormationRadius, [&](Enemy &other) {
+        if (&other == &self || !other.alive) {
+            return true;
         }
-        if (other->archetype() != Enemy::Archetype::Defensive) {
-            continue;
+        if (other.archetype() != Enemy::Archetype::Defensive) {
+            return true;
         }
-        const float distance = self.pos.distanceTo(other->pos);
+        const float distance = self.pos.distanceTo(other.pos);
         if (distance < bestDistance) {
             bestDistance = distance;
-            best = other;
+            best = &other;
         }
-    }
+        return true;
+    });
     return best;
 }
 
@@ -50,45 +54,32 @@ Math::Vec2 behindDefender(const Enemy &defender, const Math::Vec2 &player)
 
 // 在“可跟随”的友军里找邻居最多的点。
 // 自毁型永远不计入；有防御线时只考虑防御线后方的友军。
+// 邻居数用每帧缓存的 localDensity（见 Combatants::refreshEnemyDensity），
+// 这里只做一次邻域候选扫描，不再对每个候选再套一层全场循环。
 const Enemy *densestAlly(const Context &ctx, const Enemy &self,
                          const Enemy *defender, const Math::Vec2 &forward)
 {
-    const auto &allies = ctx.combatants.enemies();
     const Enemy *best = nullptr;
     int bestNeighbors = -1;
     float bestDistance = 1e9f;
-    for (const auto &owned : allies) {
-        const Enemy *candidate = owned.get();
-        if (candidate == &self || !candidate->alive || isSelfDestruct(candidate)) {
-            continue;
+    ctx.combatants.forEachEnemyNear(self.pos, kFormationRadius, [&](Enemy &candidate) {
+        if (&candidate == &self || !candidate.alive || isSelfDestruct(&candidate)) {
+            return true;
         }
         if (defender != nullptr
-            && (candidate->pos - defender->pos).dot(forward) < -10.0f) {
-            continue;
+            && (candidate.pos - defender->pos).dot(forward) < -10.0f) {
+            return true;
         }
-        int neighbors = 0;
-        for (const auto &other : allies) {
-            const Enemy *neighbor = other.get();
-            if (neighbor == candidate || !neighbor->alive
-                || isSelfDestruct(neighbor)) {
-                continue;
-            }
-            if (defender != nullptr
-                && (neighbor->pos - defender->pos).dot(forward) < -10.0f) {
-                continue;
-            }
-            if (candidate->pos.distanceTo(neighbor->pos) <= 150.0f) {
-                ++neighbors;
-            }
-        }
-        const float distance = self.pos.distanceTo(candidate->pos);
+        const int neighbors = candidate.localDensity;
+        const float distance = self.pos.distanceTo(candidate.pos);
         if (neighbors > bestNeighbors
             || (neighbors == bestNeighbors && distance < bestDistance)) {
             bestNeighbors = neighbors;
             bestDistance = distance;
-            best = candidate;
+            best = &candidate;
         }
-    }
+        return true;
+    });
     return best;
 }
 
@@ -138,20 +129,20 @@ Math::Vec2 DefensiveEnemy::desiredVelocity(const Context &ctx, float dt)
     (void)dt;
     const Math::Vec2 player = ctx.combatants.nearestLivingPlayer(pos).state.pos;
 
-    // 站在“远程/辅助后排”和玩家之间。
+    // 站在“远程/辅助后排”和玩家之间（后排质心只在邻域里统计）。
     Math::Vec2 centroid;
     int count = 0;
-    for (const auto &owned : ctx.combatants.enemies()) {
-        const Enemy *ally = owned.get();
-        if (ally == this || !ally->alive) {
-            continue;
+    ctx.combatants.forEachEnemyNear(pos, kFormationRadius, [&](Enemy &ally) {
+        if (&ally == this || !ally.alive) {
+            return true;
         }
-        if (ally->archetype() == Enemy::Archetype::Ranged
-            || ally->archetype() == Enemy::Archetype::Support) {
-            centroid += ally->pos;
+        if (ally.archetype() == Enemy::Archetype::Ranged
+            || ally.archetype() == Enemy::Archetype::Support) {
+            centroid += ally.pos;
             ++count;
         }
-    }
+        return true;
+    });
     if (count == 0) {
         const Math::Vec2 toPlayer = player - pos;
         return toPlayer.normalized() * speed;
@@ -209,33 +200,33 @@ Math::Vec2 SupportEnemy::desiredVelocity(const Context &ctx, float dt)
 
 void SupportEnemy::applyDamageBuff(const Context &ctx)
 {
-    for (const auto &other : ctx.combatants.enemies()) {
-        Enemy *ally = other.get();
-        if (ally == this || !ally->alive) {
-            continue;
+    ctx.combatants.forEachEnemyNear(pos, supportRadius, [&](Enemy &ally) {
+        if (&ally == this || !ally.alive) {
+            return true;
         }
-        if (pos.distanceTo(ally->pos) > supportRadius) {
-            continue;
+        if (pos.distanceTo(ally.pos) > supportRadius) {
+            return true;
         }
-        ally->damageBuffBonus = std::max(ally->damageBuffBonus, supportValue);
-        ally->damageBuffTimer = 0.35f;
-    }
+        ally.damageBuffBonus = std::max(ally.damageBuffBonus, supportValue);
+        ally.damageBuffTimer = 0.35f;
+        return true;
+    });
 }
 
 void SupportEnemy::healAllies(const Context &ctx, float dt)
 {
     bool healed = false;
-    for (const auto &other : ctx.combatants.enemies()) {
-        Enemy *ally = other.get();
-        if (ally == this || !ally->alive || ally->hp >= ally->maxHp) {
-            continue;
+    ctx.combatants.forEachEnemyNear(pos, supportRadius + 40.0f, [&](Enemy &ally) {
+        if (&ally == this || !ally.alive || ally.hp >= ally.maxHp) {
+            return true;
         }
-        if (pos.distanceTo(ally->pos) > supportRadius + ally->radius) {
-            continue;
+        if (pos.distanceTo(ally.pos) > supportRadius + ally.radius) {
+            return true;
         }
-        ally->hp = std::min(ally->maxHp, ally->hp + supportValue * dt);
+        ally.hp = std::min(ally.maxHp, ally.hp + supportValue * dt);
         healed = true;
-    }
+        return true;
+    });
     healFxTimer -= dt;
     if (healed && healFxTimer <= 0.0f) {
         healFxTimer = 0.45f;

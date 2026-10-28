@@ -2,6 +2,10 @@
 
 这份文档只描述 **C++ / Qt 6 版** 的结构。目标是让后续加机制时，知道“这件事应该由谁决定”，而不是继续往中心类里堆分支。
 
+窗口事件、准星和缩放流程与 `main` 相同；本分支的所有界面都在 C++ 里用 `QPainter` 绘制，没有 QML 覆盖层。
+
+长期维护 `main`（QML）与 `widgets-only`（纯 Widgets）两条线，同步规则见 [`docs/BRANCHES.md`](docs/BRANCHES.md)。
+
 ## 设计原则
 
 1. **一个工作只做一次**
@@ -107,7 +111,7 @@ cpp/src/
 
 音频是进程级服务，拆成两个组件：`Audio` 在 `%TEMP%\neon_core_cpp_audio\<pid>` 下生成自己的 WAV（同时开两个实例不会互相覆盖），启动时设备还没就绪的话会在 `play()` 里节流重试初始化；`Music` 是独立的背景音乐管理器，只初始化一次、由主线程的定时器推进曲目，任何音频重试、界面切换、开局/结算都不会重建播放器。`QMediaPlayer` 自带解码线程，`Music` 只负责在主线程上做状态管理。
 
-指针是全局元素，不属于任何一局、也不属于任何画面，现在是 `Base` 的 `Pointer` 组件：`BaseService` 持有指针位置和独立时钟，`GameWindow` 每帧在 `paintEvent` 里通过 `BaseService.pointerDraw()` 把它叠在 `Menu::frame()` 之上（`pointerMoveTo` / `pointerSetVisible` 由窗口事件驱动）。所以主菜单、局内、强化、暂停、结算共用同一个指针，暂停时外弧也照常旋转。准星的画法只有一份，在 `base::Paint::reticle()`；窗口内隐藏系统光标，指针离开窗口时恢复系统箭头。
+指针是全局元素，不属于任何一局、也不属于任何画面，现在是 `Base` 的 `Pointer` 组件：`BaseService` 持有指针位置和独立时钟，`GameWindow` 在非 QML 屏幕用 `BaseService.pointerDraw()` 把它叠在 `Menu::frame()` 之上；Result/Failure 的 QML 覆盖层用 `Reticle.qml` 读取同一位置/时钟/可见性绘制。主菜单、局内、强化、暂停共用同一个指针，暂停时外弧也照常旋转。Widgets 准星画法在 `base::Paint::reticle()`；QML 准星是它的 Canvas 镜像。窗口内隐藏系统光标，指针离开窗口时恢复系统箭头。
 
 ### Games
 
@@ -142,16 +146,16 @@ cpp/src/
 
 | 组件 | 职责 |
 | --- | --- |
-| `Main` | 标题页：标题、关卡卡、商店/战备/设置入口；选中状态和命中测试 |
+| `Main` | Widgets 标题页：卡片数据、几何、输入逻辑和 `QPainter` 绘制都在 C++ |
 | `Map` | 星区地图：关卡节点、锁定状态、选择与进入 |
 | `Match` | 默认持有网络 `GameClient`（内嵌/远端 `GameServer`）+ `GameView`/`Renderer`；`--local`/测试时持有本地 `Games`。`Mode::Local` 直接开局、`Mode::Network` 单机立即开局/加入远端、`Mode::Host` 只开房等待 `startRoomMatch()`。负责开局、房间生命周期、输入转发、推进、渲染和失败信息 |
 | `Room` | 房间/大厅：显示服务端权威的房间名、人数、房主/你标记和等待状态；主机的 `ENTER` 开始、`X` 解散、`ESC` 离开，加入者只能 `ESC` 离开 |
-| `Failure` | 连接层失败页：无法连接服务器 / 房间已解散，提供 `ENTER` 重试与 `ESC` 返回；不读取战绩，不冒充对局失败 |
-| `Result` | 结算覆盖层：只接收一份只读 `Summary`，不读取 `Games` |
-| `Editor` | 自定义协议编辑：顶部单机/局域网主机/加入主机选项卡；单机与主机编辑台本，主机在波次下方追加端口，加入主机显示地址和端口 |
-| `Depot` | 补给站界面：展示钱包/库存，把购买意图转给全局 `Shop` |
-| `Armory` | 战备界面：展示/选择发射器，把装备意图转给全局 `Loadout` |
-| `Settings` | 音效 / 背景音乐音量，读写配置存储 |
+| `Failure` | 连接层失败页：Widgets 绘制重试/返回，C++ 提供 `FailureView` 只读数据 |
+| `Result` | 结算页：Widgets 绘制结算面板，C++ 提供只读 `ResultSummary` |
+| `Editor` | 自定义协议编辑：顶部单机/局域网主机/加入主机选项卡；单机与主机编辑台本，主机在波次下方追加端口，加入主机显示地址和端口。表格的列由“台本里用到的敌人”派生，**没有任何敌人的波次仍然画出整行**（列数为 0 时也一样），所以空波次始终可见、可点选、可拖入 |
+| `Depot` | Widgets 补给站：界面绘制 + 购买/返回逻辑都在 C++ |
+| `Armory` | Widgets 战备：界面绘制 + 选择/装备逻辑都在 C++ |
+| `Settings` | Widgets 音量设置：界面绘制 + 配置读写和键盘/鼠标逻辑都在 C++ |
 
 `Menu` 自己只负责：
 
@@ -217,8 +221,9 @@ public:
     enum class Standpoint { Player, Enemy };
 
     virtual void advance(float dt) = 0;                       // 位置推进 + 寿命
+    virtual void steer(const arena::Context &ctx, float dt);   // 吸附转向（默认空实现）
     virtual void draw(QPainter &world, QPainter &glow) const = 0;
-    virtual bool hit(Arena &arena, arena::Fighter &target) = 0;  // 命中多态；返回 false 结束自己
+    virtual bool hit(const arena::Context &ctx, arena::Fighter &target) = 0;  // 命中多态；返回 false 结束自己
     virtual bool alive() const = 0;                            // 池据此回收
     virtual const Math::Vec2 &prev() const = 0;                // 扫掠碰撞起点
     virtual const Math::Vec2 &position() const = 0;            // 扫掠碰撞终点
@@ -230,6 +235,7 @@ public:
 - 发射方只做 `ctx.bullets.spawnStandard(...)`（`Arena` 继承了 `arena::Bullets`；组件接口不对外），不自持子弹；
 - `arena::Bullets` 按 `standpoint()` 分流到玩家/敌方两组，用 `reserve` + 交换删除（swap-pop）回收；死亡的标准弹回到空闲池复用（`StandardBullet::reset`），稳态射击**不再产生堆分配**；
 - 碰撞仍由 `arena::Events` 做几何判定（`segmentCircle(bullet.prev(), bullet.position(), target, targetR + bullet.radius)`），命中后调 `bullet.hit(...)`，伤害、暴击、穿透全部由弹种自己结算；
+- **吸附**：`Bullets::update(ctx, dt)` 先 `steer()` 再 `advance()`，所以“转向”和“推进”仍然只有池一个驱动点。`StandardBullet` 自己实现 `steer()`：在 `homing_radius` 内找最近的**对面阵营**目标（玩家弹找 `Combatants::enemies()`，敌方弹找 `Combatants::players()`），把速度方向按 `homing_ratio * dt * 60` 的比例插值过去，速度大小不变（方向变、弹道弯）。吸附默认 **关闭**（`PlayerState::homingRadius/Ratio` 初始为 0，所有子弹直线飞行），只有强化「磁吸弹道」（`Upgrades::applyEffect` 的 `homing` 分支）把 170 像素半径和叠加的比例写进玩家状态，`Player::shoot()` 再把它们传给每颗弹；
 - 新弹种 = 在 `Arena/Bullets/` 加一个 `Bullet` 实现，提交即可，`Events`/`Renderer` 不用改；对象池目前只复用标准弹。
 
 ### Renderer
@@ -260,7 +266,7 @@ public:
 
 | 角色 | 位置 | 职责 |
 | --- | --- | --- |
-| `net::Protocol` | `src/app/shared/Net/Protocol.h` | 协议版本（v2）、消息 id、`[u32 length][u16 type][u16 version][payload]` 帧的打包/拆包、TCP 粘包缓冲 `FrameBuffer` |
+| `net::Protocol` | `src/app/shared/Net/Protocol.h` | 协议版本（v3）、消息 id、`[u32 length][u16 type][u16 version][payload]` 帧的打包/拆包、TCP 粘包缓冲 `FrameBuffer` |
 | `net::Input` | `src/app/shared/Net/Input.h` | `InputCommand`：移动轴、鼠标、射击、冲刺、暂停、布雷、强化选择；`playerId` 只用于 stdio 宿主选择目标，TCP 客户端必须为 0 |
 | `net::Messages` | `src/app/shared/Net/Messages.h` | `Hello / Welcome（sessionId + playerId/slot）/ StartMatch / Input / Snapshot / Event / MatchEnd / RoomList（含会话槽位）` 的 payload 与带帧头的编码/解码；加入当前房间由 Hello/Welcome 完成，没有 JoinRoom 消息 |
 | `net::Snapshot` | `src/app/shared/Net/Snapshot.h` | `players[]`（每个玩家 id/颜色/生命/冲刺/瞄准/复活倒计时）、`localPlayerId`（每个接收者自己的飞机）、敌人（dataKey + 绘制字段）、子弹、传送门/掉落/地雷/粒子/飘字/冲击波、波次 HUD、强化卡、状态/时间/分数/击杀/Boss；编码直接写入帧缓冲 |
@@ -348,7 +354,7 @@ public:
 | 虚基类 | 实现 |
 | --- | --- |
 | `OffensiveEnemy` | drone / mini / rusher |
-| `RangedEnemy` | spitter / summoner |
+| `RangedEnemy` | spitter / summoner / gunner |
 | `DefensiveEnemy` | tank / linker |
 | `SupportEnemy` | amplifier / mender / necromancer |
 | `SelfDestructEnemy` | splitter（死亡分裂） |
@@ -364,6 +370,7 @@ public:
 | `rusher` | 300 速度直冲，每 1.6s 以 2.3 倍速度突进 |
 | `necromancer` | 220 范围内友军阵亡时 30% 概率半血复活；复活体不再连锁复活，分数减半 |
 | `summoner` | 每个常规友军阵亡积累 +1 进度（mini 不计入），满 3 时在自身周围召唤 3 只 mini |
+| `gunner` | 持续连射型远程：每 0.10–0.15s 打一发，没有点射/长冷却分段；单发伤害低、瞄准 ±0.10rad 抖动 |
 
 支援型敌人的光环半径画在 `Enemy::draw()`，被增伤的敌人有一圈琥珀色提示；伤害分担通过 `Damage.shared` 防止递归。
 
@@ -375,7 +382,7 @@ public:
 | --- | --- | --- |
 | 进攻型 | drone / mini / rusher | 直冲玩家，以接触为目标（rusher 额外周期突进） |
 | 自毁型 | splitter | 直冲玩家，死亡时分裂（后续自毁敌人也在 `SelfDestructEnemy` 下直冲） |
-| 远程型 | spitter / summoner | 在没有防御线时保持射程；有防御者且防御者更靠前时，移动到防御者背后（玩家反方向 42px）；同时保留 0.12s 弹幕侧闪 |
+| 远程型 | spitter / summoner / gunner | 在没有防御线时保持射程；有防御者且防御者更靠前时，移动到防御者背后（玩家反方向 42px）；同时保留 0.12s 弹幕侧闪 |
 | 防御型 | tank / linker | 计算远程/辅助友军的质心，站到“质心与玩家之间”（45% 处），不主动贴玩家 |
 | 辅助型 | amplifier / mender / necromancer | 优先躲到最近防御者背后；朝“非自毁型”友军最密集点靠拢（150 半径邻居数），并只考虑防御线后方的友军；贴玩家过近时后退 |
 | Boss | boss | 独立走位：保持 185–265 距离、绕圈、定向弹幕 + 环形弹幕 |
@@ -396,7 +403,7 @@ const EnemyRegistrar<DroneEnemy> kRegistration("drone", Base::Coral);
 - `Enemy::create(EnemyType, pos, wave)` 按类型查表，未注册返回 `nullptr`；`Enemy::create(QString)` 只在数据/测试边界把 `dataKey` 解析成类型；
 - 台本在数据边界完成解析：`Menu::standardScript()` 和 `Editor` 把 JSON/编辑器键解析成 `EnemyType`，`games::EnemySpawn` 只存类型；`Waves::buildQueue()` 直接用类型排队，Boss 判定用 `Enemy::isBoss(type)`，传送门也不再保存 kind 字符串；
 - `Enemy.cpp` 不再有按 kind 的走位/绘制 `switch`，只保留基类逻辑、`statsFor(EnemyType)` 和注册表；
-- 新增敌人：`enemies.json` 加数值 → 在 `Enemies/` 新建 `XEnemy.h/.cpp`，继承对应虚基类并写走位/绘制 → 在 cpp 里放 `EnemyRegistrar` → Makefile 的 `ARENA_COMPONENTS` 加对象 → 编辑器敌人库（`Menu/Editor/Editor.cpp` 的 `kKeys/kLabels/kindColor`）加一项 → 波次里使用。
+- 新增敌人：`enemies.json` 加数值 → 在 `Enemies/` 新建 `XEnemy.h/.cpp`，继承对应虚基类并写走位/绘制 → 在 cpp 里放 `EnemyRegistrar` → Makefile 的 `SHARED_COMPONENTS` 加对象 → 编辑器敌人库（`Client/Menu/Editor/Palette.cpp` 的 `kKeys/kLabels/kindColor`，以及 `Menu/Editor/Types.h` 的 `kKindCount`）加一项 → 波次里使用（`src/json/waves/level-0N.json`）。
 
 ## 依赖方向
 
@@ -407,8 +414,8 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
             ├─ BaseService ────────► base::Input / Audio / Music / Pointer / Paint / ThreadPool（全局单例）
             ├─ RandomService ──────► 随机引擎（全局单例）
             ├─ ShopService ────────► shop::Score / Inventory（全局单例，注册表 / ini）
-            └─ Menu（持有四个关卡表，组合 10 个界面组件）
-               ├─ menu::Main ─────────► 关卡卡 / 商店与设置入口（数据由 Menu 提供）
+            └─ Menu（持有四个关卡表；全部界面都是 Widgets / QPainter 组件）
+               ├─ menu::Main ─────────► 标题/关卡卡 / 商店与设置入口
 ├─ menu::Map ──────────► 星区地图节点（levels.json），Start → 开局
                ├─ menu::Room ────────► 服务端权威房间（房主开始/解散、加入者等待）
                ├─ menu::Failure ─────► 无法连接服务器 / 房间已解散（重试/返回）
@@ -425,7 +432,7 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
                │     ├─ games::GameSimulation ──► net::Snapshot（提取只读世界）
                │     ├─ client::GameView ──────► net::Snapshot（重建）, Arena(只读镜像)
                │     └─ games::Renderer ──► client::GameView(只读), RandomService
-               ├─ menu::Result ───────► 只读 Summary
+               ├─ menu::Result ───────► 只读 ResultSummary，Widgets 绘制结算页
                ├─ menu::Editor ───────► games::Script（自己持有）
                ├─ menu::Depot ────────► ShopService（buyMine）+ 只读钱包/库存
                └─ menu::Settings ─────► BaseService 音量接口 + 配置存储
@@ -447,7 +454,7 @@ QCoreApplication ──► server::GameServer ──► games::GameSimulation �
 - `client::GameView` 只消费 `net::Snapshot`，不推进模拟、不读输入；`games::Renderer` 只读 `GameView`，不再画标题和结算。
 - `net::Protocol / Input / Messages / Snapshot` 只依赖 Qt 和 `Math`，不依赖 Arena / Games / Renderer；`Net/Server` 负责把模拟接到 socket，`Net/Client` 负责把 socket 接到 GameView/Renderer。
 - `Waves` / `Upgrades` 不知道 UI。
-- `menu::Result` 只拿一份 `Summary`，不依赖 `Games`。
+- QML `ResultOverlay` 只拿一份 `menu::ResultSummary`，不依赖 `Games`。
 - `Base` 不知道游戏业务。
 - `lib` 不依赖 `app`。
 
@@ -482,15 +489,15 @@ GameWindow::tick()
 │  ├─ Shop:    menu::Depot  绘制补给站
 │  ├─ Settings: menu::Settings 绘制设置页
 │  ├─ Room:   menu::Room 绘制服务端房间/等待状态
-│  ├─ Failure: menu::Failure 绘制无法连接/房间已解散
+│  ├─ Failure: menu::Failure 绘制失败页
 │  ├─ Match:  Network → GameClient::render() → Renderer::render(GameView)
 │  │          Local → GameSimulation::writeSnapshot → GameView::apply → Renderer
-│  └─ Result: menu::Match 画面 + menu::Result 结算覆盖层
+│  └─ Result: menu::Match 画面 + menu::Result 结算页
 └─ QWidget::update()
 
 GameWindow::paintEvent()
-├─ drawImage(Menu::frame())              ← 当前画面
-└─ BaseService.pointerDraw()             ← 全局指针叠在最上层
+├─ drawImage(Menu::frame())               ← 当前画面
+└─ BaseService.pointerDraw()              ← Widgets 准星
 ```
 
 ## 加机制应该改哪里
@@ -551,11 +558,11 @@ GameWindow::paintEvent()
 
 1. 组件自己持有 UI 状态、绘制和命中测试，用返回的 `Action` 表达意图；
 2. `Menu` 的 `Screen` 枚举加一项，`render()` 里调它的 `render()`，输入路由里处理它的 `Action`；
-3. 需要的数据由 `Menu` 组装后传入（如 `Main::Card`、`Result::Summary`），组件不反向依赖 `Menu`。
+3. 需要的数据由 `Menu` 组装后传入（如 `Main::Card`、`ResultSummary`），组件不反向依赖 `Menu`。
 
 ### 加一个结算字段
 
-只改 `menu::Result::Summary` 和 `menu::Result::render()`；数据由 `Menu::summary()` 从 `menu::Match` 的只读 getter 组装，`Renderer` 不参与结算。
+只改 `menu::ResultSummary` 和 `src/qml/ResultOverlay.qml`；数据由 `Menu::summary()` 从 `menu::Match` 的只读 getter 组装，`Renderer` 不参与结算。
 
 ### 加敌人 / 状态 / 事件
 
@@ -604,6 +611,13 @@ GameWindow::paintEvent()
 - `Combatants::draw` 排序缓冲改为线程内 `thread_local`，两个渲染通道各自复用；
 - `QLocale` 等每帧构造的对象改为 `static`。
 
+**敌人数量很大时**（自定义台本 / 召唤师海）：
+
+- `Combatants` 持有一个 `arena::EnemyGrid`（64px 格、20×12 覆盖全场），`Arena::update` 在“子弹结算前”和“敌人移动后”各重建一次（O(n)）。`Events` 的分离/子弹命中/接触/地雷、`Enemy::takeDamage` 的 linker 分担、`SupportEnemy` 的光环/治疗、`nearestDefender`/`densestAlly`/`DefensiveEnemy` 的质心统计全部改为 `forEachEnemyNear(pos, radius, fn)`，把原来的 O(n²) 降到与邻域相关；
+- `Combatants::refreshEnemyDensity()` 每帧一次 O(n) 扫描缓存每个敌人 150 半径内的友军数（`Enemy::localDensity`），辅助型敌人不再各自嵌套遍历全场；
+- `Enemy::listensToAllyKills` 让阵亡通知只发给 necromancer / summoner；
+- 绘制按类型降级：`mini` 的 `prefersLowDetail = true` 表示**倾向** LOD——全场敌人超过 120 时先简化成一个纯色圆（跳过朝向计算、辉光、血条），人少时仍画完整机身；其他敌人保留完整机身，只有全场敌人超过 `Combatants::CrowdLimit`（420）才关闭敌人辉光、超过 `CrowdExtremeLimit`（700）才简化机身并关闭抗锯齿。辉光关闭通过把 `Paint::Pass` 临时切成 `World` 实现，不需要改各敌人的绘制代码。
+
 并发调试开关：
 
 ```text
@@ -638,7 +652,7 @@ GPU 加速没有采用：当前是 `QImage` + `QPainter` 光栅管线，走 GPU 
 - 一局的安排只经构造参数进入 `GameSimulation`；`Games` 不提供任何读回安排的接口，`Menu` 只保留展示用的关卡表。
 - 模拟阶段 3：`Games` 仍保留为单机适配器（测试/`--local` 回退）；`menu::Match` 默认用 `GameClient` + 内嵌 `GameServer`，远端用 `--connect`。单机内嵌服务端与客户端在同一主线程的 Qt 事件循环里跑，真实 TCP 回环但不额外起线程。
 - `net::Snapshot` 只含数据：玩家列表（playerId/颜色/复活倒计时）与每个接收者自己的 `localPlayerId`、敌人/传送门类型用注册表的 `dataKey` 字符串，`std::type_index` 不出现在协议里；帧格式是 `[u32 length][u16 type][u16 version][payload]`，序列化用 `QDataStream`。协议版本与快照数据版本都是 2（players[]/localPlayerId/Welcome.playerId/RoomList.members）。
-- 服务端固定 60Hz tick 广播完整快照（目前不压缩、不插值）；单机回环会引入一个 tick/一帧左右的延迟，远端高延迟下的插值/预测留到阶段 4。
+- 服务端 60Hz tick，每 2 tick 广播一次 qCompress 后的完整 keyframe（30Hz）；没有插值/预测，远端高延迟下仍有 30Hz 的阶梯感。
 - `Player` 只读 `InputState`（`moveAxis / mouseActive / mousePosition / shooting / dashRequested`）；客户端把同样的字段封成 `net::InputCommand`，服务端校验后按会话的 playerId 写回 `GameSimulation::setInput(playerId, ...)`，冲刺/暂停/布雷/强化选择都是服务端权威动作。TCP 客户端不能指定 playerId；stdio 宿主可以用 `InputCommand.playerId` 选择飞机。
 - 多玩家目前是 1–4 人的合作对局：积分/击杀仍是全局 `ShopService`（不按玩家拆分），强化是全队共享，暂停/选强化只由 leader（最小 active playerId）决定；阵亡后 3.2s 重新部署（阵亡期间不切换成自由观战），全灭才判负。开局后加入的会话只能观战；重连会得到新的 session/playerId，不会自动接管原来的飞机（没有可恢复令牌）。
 - 房间目前是单房间模型（`RoomManager` 只保存一个 `Room`），没有准备/踢人/玩家昵称；`RoomList.members` 只是会话槽位（sessionId、playerId、是否房主、是否已进入对局）。人数直接由成员列表派生，统计所有 welcomed 会话（主机自己的回环客户端也算 1 人），第 5 个连接会被拒绝；对局开始后加入的会话仍计入房间人数，但没有飞机。`RoomManager` 在服务端记录房主会话，房主离开时会把 host 交给下一个 welcomed 会话。房主解散后 `Match` 直接销毁内嵌服务端，加入者靠 `MatchEnd("房间已解散")` 或断线兜底进入 `Failure`。

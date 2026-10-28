@@ -21,7 +21,7 @@ class QDataStream;
 // 单独的请求消息：服务器只有当前房间，Hello/Welcome 即完成加入。
 namespace net {
 
-inline constexpr quint16 kProtocolVersion = 2;
+inline constexpr quint16 kProtocolVersion = 3;
 inline constexpr quint16 kSnapshotDataVersion = 2;
 inline constexpr quint16 kDefaultPort = 7777;
 inline constexpr quint32 kFrameHeaderSize = 8;
@@ -41,6 +41,7 @@ enum class MessageType : quint16 {
     MatchEnd = 7,     // S→C：胜负、统计、可重试
     RoomList = 8,     // S→C：没有对局时，服务端展示房间而不是对局
     ClaimAdmin = 10,  // 宿主→S（stdio/本地）：把已分配的 sessionId 声明为管理员
+    SnapshotCompressed = 11, // S→C：压缩后的完整快照（30Hz keyframe）
 };
 
 struct MessageHeader {

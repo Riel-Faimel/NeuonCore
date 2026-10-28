@@ -19,14 +19,14 @@ const QString kKeys[kKindCount] = {
     QStringLiteral("boss"),        QStringLiteral("amplifier"),
     QStringLiteral("linker"),      QStringLiteral("mender"),
     QStringLiteral("rusher"),      QStringLiteral("necromancer"),
-    QStringLiteral("summoner")};
+    QStringLiteral("summoner"),    QStringLiteral("gunner")};
 const QString kLabels[kKindCount] = {
     QStringLiteral("DRONE"),       QStringLiteral("SPITTER"),
     QStringLiteral("TANK"),        QStringLiteral("SPLITTER"),
     QStringLiteral("BOSS"),        QStringLiteral("AMPLIFIER"),
     QStringLiteral("LINKER"),      QStringLiteral("MENDER"),
     QStringLiteral("RUSHER"),      QStringLiteral("NECRO"),
-    QStringLiteral("SUMMONER")};
+    QStringLiteral("SUMMONER"),    QStringLiteral("GUNNER")};
 } // namespace
 
 arena::EnemyType Palette::kindType(int kind)
@@ -65,8 +65,10 @@ QColor Palette::kindColor(int kind)
         return QColor(255, 140, 80);
     case 9:
         return QColor(190, 120, 255);
-    default:
+    case 10:
         return QColor(255, 200, 90);
+    default:
+        return QColor(255, 96, 120);
     }
 }
 

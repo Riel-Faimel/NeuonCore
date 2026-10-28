@@ -210,7 +210,11 @@ void Arena::update(float dt)
     }
 
     Entities::updatePortals(ctx, dt);
-    Bullets::update(dt);
+    // 网格：先把当前敌人分箱，子弹/碰撞查询只碰邻近格子（敌人数量大时是 O(n²) → O(n)）。
+    Combatants::refreshEnemyGrid();
+    Combatants::refreshEnemyDensity();
+    // 子弹推进由池统一做：先吸附转向，再前进（见 Bullets::update）。
+    Bullets::update(ctx, dt);
     Events::resolvePlayerBullets(ctx);
     if (allPlayersDefeated()) {
         State::markPlayerDefeated();
@@ -226,6 +230,8 @@ void Arena::update(float dt)
     }
 
     Combatants::updateEnemies(ctx, dt);
+    // 敌人这帧已经移动过：重建网格再处理分离/接触/地雷。
+    Combatants::refreshEnemyGrid();
     Events::separateEnemies(ctx);
     Events::contactDamage(ctx);
     if (allPlayersDefeated()) {

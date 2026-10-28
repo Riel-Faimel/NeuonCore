@@ -360,6 +360,7 @@ constexpr BulletSpec loadBullet(std::string_view key)
 inline constexpr BulletSpec kBossAimedBullet = loadBullet("boss_aimed");
 inline constexpr BulletSpec kBossRadialBullet = loadBullet("boss_radial");
 inline constexpr BulletSpec kSpitterBullet = loadBullet("spitter");
+inline constexpr BulletSpec kGunnerBullet = loadBullet("gunner");
 
 // ----- 商店道具（items.json） -----
 struct MineSpec {
@@ -463,6 +464,9 @@ inline const char *validationError()
     }
     if (!(kBossAimedBullet.speed > 0.0f)) {
         return "src/json/bullets.json: boss aimed bullet speed must be > 0";
+    }
+    if (!(kGunnerBullet.speed > 0.0f)) {
+        return "src/json/bullets.json: gunner bullet speed must be > 0";
     }
     if (kMine.price <= 0) {
         return "src/json/items.json: mine price must be > 0";

@@ -1,5 +1,6 @@
 #include "Arena/Bullets/StandardBullet.h"
 
+#include "Arena/Combatants/Combatants.h"
 #include "Arena/Context.h"
 #include "Base/Base.h"
 #include "Fighter.h"
@@ -13,27 +14,93 @@ namespace arena {
 StandardBullet::StandardBullet(const Math::Vec2 &position, const Math::Vec2 &velocity,
                                float damage, const QColor &color,
                                Standpoint standpoint, float radiusValue,
-                               int pierce, float critChance)
+                               int pierce, float critChance, float homingRadius,
+                               float homingRatio)
 {
-    reset(position, velocity, damage, color, standpoint, radiusValue, pierce, critChance);
+    reset(position, velocity, damage, color, standpoint, radiusValue, pierce, critChance,
+          homingRadius, homingRatio);
 }
 
 void StandardBullet::reset(const Math::Vec2 &position, const Math::Vec2 &velocity,
                            float damage, const QColor &color, Standpoint standpoint,
-                           float radiusValue, int pierce, float critChance)
+                           float radiusValue, int pierce, float critChance,
+                           float homingRadius, float homingRatio)
 {
     pos_ = position;
     prev_ = position;
     vel_ = velocity;
+    speed_ = velocity.length();
     damage_ = damage;
     color_ = color;
     standpoint_ = standpoint;
     radius_ = radiusValue;
     pierce_ = pierce;
     critChance_ = critChance;
+    homingRadius_ = std::max(0.0f, homingRadius);
+    homingRatio_ = std::clamp(homingRatio, 0.0f, 1.0f);
     life_ = standpoint == Standpoint::Player ? 1.6f : 4.5f;
     alive_ = true;
     hitTargetCount_ = 0;
+}
+
+// 吸附：找 homingRadius_ 内最近的对手，把当前飞行方向朝它转 homingRatio_。
+// 只改方向不改速度，所以弹道会拐弯但不会忽快忽慢；ratio 按 60Hz 归一，
+// 高/低帧率下的转向手感一致。
+void StandardBullet::steer(const Context &ctx, float dt)
+{
+    if (homingRadius_ <= 0.0f || homingRatio_ <= 0.0f || speed_ <= 0.0f
+        || !alive_) {
+        return;
+    }
+
+    Math::Vec2 target;
+    bool found = false;
+    float bestSquared = homingRadius_ * homingRadius_;
+    if (standpoint_ == Standpoint::Player) {
+        // 玩家弹吸附敌人（含 Boss）。
+        for (const auto &owned : ctx.combatants.enemies()) {
+            if (owned == nullptr || !owned->isAlive()) {
+                continue;
+            }
+            const float distance = (owned->pos - pos_).lengthSquared();
+            if (distance < bestSquared) {
+                bestSquared = distance;
+                target = owned->pos;
+                found = true;
+            }
+        }
+    } else {
+        // 敌方弹吸附玩家飞机（多玩家时各弹独立挑最近的）。
+        for (const Player &player : ctx.combatants.players()) {
+            if (!player.state.active || !player.state.alive) {
+                continue;
+            }
+            const float distance = (player.state.pos - pos_).lengthSquared();
+            if (distance < bestSquared) {
+                bestSquared = distance;
+                target = player.state.pos;
+                found = true;
+            }
+        }
+    }
+    if (!found) {
+        return;
+    }
+
+    const Math::Vec2 desired = target - pos_;
+    if (desired.lengthSquared() < 1.0f) {
+        return;
+    }
+    const Math::Vec2 direction = vel_.lengthSquared() > 0.0f
+                                     ? vel_.normalized()
+                                     : Math::Vec2(1.0f, 0.0f);
+    const float blend = std::clamp(homingRatio_ * dt * 60.0f, 0.0f, 1.0f);
+    const Math::Vec2 mixed = direction * (1.0f - blend)
+                             + desired.normalized() * blend;
+    if (mixed.lengthSquared() < 1e-4f) {
+        return;
+    }
+    vel_ = mixed.normalized() * speed_;
 }
 
 void StandardBullet::advance(float dt)

@@ -22,6 +22,11 @@ void Paint::setPass(Pass pass)
     tlsPass = pass;
 }
 
+Paint::Pass Paint::currentPass()
+{
+    return tlsPass;
+}
+
 bool Paint::sFontsReady = false;
 QFont Paint::sTiny;
 QFont Paint::sSmall;

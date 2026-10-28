@@ -74,11 +74,14 @@ public:
     const GameView &view() const { return view_; }
     const net::Snapshot &lastSnapshot() const { return lastSnapshot_; }
     int runScore() const { return matchEnd_.runScore; }
+    const net::MatchEndMessage &matchEnd() const { return matchEnd_; }
 
     // 启动内嵌服务端失败等由 menu::Match 注入；保持 GameClient 仍可渲染空画面。
     void setFatalError(const QString &reason);
 
 private:
+    DebugInfo(friend class ::SelfTest;)
+
     void onConnected();
     void onReadyRead();
     void onDisconnected();
@@ -90,6 +93,7 @@ private:
     void handleFrame(const QByteArray &frame);
     void handleWelcome(const QByteArray &payload);
     void handleSnapshot(const QByteArray &payload);
+    void handleCompressedSnapshot(const QByteArray &payload);
     void handleEvent(const QByteArray &payload);
     void handleMatchEnd(const QByteArray &payload);
     void handleRoomList(const QByteArray &payload);

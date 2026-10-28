@@ -518,7 +518,9 @@ public:
                                || before.multishot != game->arena_.playerState().multishot
                                || before.pierce != game->arena_.playerState().pierce
                                || before.critChance != game->arena_.playerState().critChance
-                               || before.shockLevel != game->arena_.playerState().shockLevel,
+                               || before.shockLevel != game->arena_.playerState().shockLevel
+                               || before.homingRadius != game->arena_.playerState().homingRadius
+                               || before.homingRatio != game->arena_.playerState().homingRatio,
                            QStringLiteral("upgrade changes a stat"));
 
         log(QStringLiteral("Support enemies"));
@@ -725,6 +727,18 @@ public:
                            QStringLiteral("menu enters victory result"));
         menu.render();
 
+        {
+            // 多人联机时最后一帧快照可能仍是 Playing/Defeat；结算必须信 MatchEnd。
+            menu::Match networkResult;
+            networkResult.client_ = std::make_unique<client::GameClient>();
+            net::MatchEndMessage end;
+            end.victory = true;
+            networkResult.client_->matchEnd_ = end;
+            networkResult.client_->matchEnded_ = true;
+            success &= require(networkResult.state() == Games::State::Victory,
+                               QStringLiteral("network result uses authoritative MatchEnd victory"));
+        }
+
         log(QStringLiteral("Mid-script boss"));
         games::Script bossMid;
         bossMid.push_back(games::Wave{{games::EnemySpawn{
@@ -908,6 +922,38 @@ public:
                            QStringLiteral("clicking the custom card opens the editor"));
         menu.keyPress(Qt::Key_Escape);
 
+        log(QStringLiteral("Empty wave in the editor"));
+        menu.keyPress(Qt::Key_2);
+        success &= require(menu.screen() == Menu::Screen::Editor,
+                           QStringLiteral("editor reopens for the empty wave check"));
+        // 列是由“台本里用到的敌人”派生的：清空所有波之后列数为 0。
+        // 波次行本身必须继续显示，否则空波次就再也选不中、改不回来了。
+        for (games::Wave &wave : menu.editor_.script_) {
+            wave.enemies.clear();
+        }
+        menu.editor_.prepare();
+        success &= require(menu.editor_.columnCount() == 0
+                               && menu.editor_.waveCount() > 0
+                               && menu.editor_.totalEnemies() == 0,
+                           QStringLiteral("script with no enemies keeps its waves"));
+        const QRectF emptyRow = menu.editor_.rowRect(menu.editor_.waveCount() - 1);
+        success &= require(!emptyRow.isEmpty(),
+                           QStringLiteral("empty wave still has a table row"));
+        menu.mousePressLeft({float(emptyRow.center().x()),
+                             float(emptyRow.center().y())});
+        menu.mouseReleaseLeft();
+        success &= require(menu.editor_.row() == menu.editor_.waveCount() - 1,
+                           QStringLiteral("clicking the empty wave selects it"));
+        const QRectF droneChip = menu.editor_.paletteChipRect(0);
+        menu.mousePressLeft({float(droneChip.center().x()),
+                             float(droneChip.center().y())});
+        menu.mouseMove({float(emptyRow.center().x()), float(emptyRow.center().y())});
+        menu.mouseReleaseLeft();
+        success &= require(menu.editor_.totalEnemies() == 1
+                               && menu.editor_.columnCount() == 1,
+                           QStringLiteral("empty wave accepts a dragged enemy"));
+        menu.keyPress(Qt::Key_Escape);
+
         log(QStringLiteral("Settings"));
         const QRectF gear = menu.main_.settingsButtonRect();
         menu.mousePressLeft({float(gear.center().x()), float(gear.center().y())});
@@ -1056,6 +1102,152 @@ public:
             menu.returnToMenu();
         }
 
+        log(QStringLiteral("Bullet homing"));
+        menu.startLevel(0);
+        game = menu.match_.game();
+        if (game != nullptr) {
+            game->arena_.clearProjectiles();
+            game->arena_.enemies().clear();
+            game->arena_.portals().clear();
+            auto &homingPlayer = game->arena_.playerState();
+            homingPlayer.pos = {640.0f, 420.0f};
+            homingPlayer.invuln = 999.0f;
+            const arena::Context homingCtx = game->arena_.context();
+            // 敌人在右上方；玩家弹原本朝正右飞，吸附后 vy 应该变负。
+            game->arena_.spawnEnemy(homingCtx, QStringLiteral("tank"), {900.0f, 300.0f}, 1);
+            game->arena_.spawnStandard({640.0f, 420.0f}, {900.0f, 0.0f}, 1.0f,
+                                       Base::Cyan, Bullet::Standpoint::Player, 3.0f,
+                                       0, 0.0f, 400.0f, 0.35f);
+            game->arena_.update(1.0f / 60.0f);
+            float homingVy = 0.0f;
+            for (const auto &bullet : game->arena_.playerBullets()) {
+                const auto *standard =
+                    dynamic_cast<const arena::StandardBullet *>(bullet.get());
+                if (standard != nullptr && standard->alive()) {
+                    homingVy = standard->velocity().y;
+                    break;
+                }
+            }
+            success &= require(homingVy < -5.0f,
+                               QStringLiteral("player bullets steer toward a nearby enemy"));
+
+            // 敌方弹朝正右飞，玩家在左下方：吸附后 vy 应该变正。
+            game->arena_.clearEnemy();
+            game->arena_.spawnStandard({900.0f, 300.0f}, {900.0f, 0.0f}, 1.0f,
+                                       Base::Magenta, Bullet::Standpoint::Enemy, 3.0f,
+                                       0, 0.0f, 400.0f, 0.35f);
+            game->arena_.update(1.0f / 60.0f);
+            float enemyVy = 0.0f;
+            for (const auto &bullet : game->arena_.enemyBullets()) {
+                const auto *standard =
+                    dynamic_cast<const arena::StandardBullet *>(bullet.get());
+                if (standard != nullptr && standard->alive()) {
+                    enemyVy = standard->velocity().y;
+                    break;
+                }
+            }
+            success &= require(enemyVy > 5.0f,
+                               QStringLiteral("enemy bullets steer toward a nearby player"));
+
+            // 吸附是 buff：开局两个值都是 0，抽到“磁吸弹道”之后玩家子弹才带吸附。
+            success &= require(game->arena_.playerState().homingRadius == 0.0f
+                                   && game->arena_.playerState().homingRatio == 0.0f,
+                               QStringLiteral("players start without bullet attraction"));
+            games::Upgrades::Offer homingOffer;
+            homingOffer.key = QStringLiteral("homing");
+            homingOffer.value = 0.10f;
+            game->upgrades_.applyEffect(homingOffer);
+            success &= require(game->arena_.playerState().homingRatio > 0.0f
+                                   && game->arena_.playerState().homingRadius > 0.0f,
+                               QStringLiteral("homing upgrade adds bullet attraction"));
+            game->arena_.clearProjectiles();
+            game->arena_.player().shoot(game->arena_.context());
+            float shotHoming = 0.0f;
+            for (const auto &bullet : game->arena_.playerBullets()) {
+                const auto *standard =
+                    dynamic_cast<const arena::StandardBullet *>(bullet.get());
+                if (standard != nullptr) {
+                    shotHoming = standard->homingRatio();
+                    break;
+                }
+            }
+            success &= require(shotHoming > 0.0f,
+                               QStringLiteral("buffed player bullets carry homing"));
+            menu.returnToMenu();
+        }
+
+        log(QStringLiteral("Rapid-fire gunner"));
+        menu.startLevel(0);
+        game = menu.match_.game();
+        if (game != nullptr) {
+            game->arena_.clearProjectiles();
+            game->arena_.enemies().clear();
+            game->arena_.portals().clear();
+            auto &gunnerPlayer = game->arena_.playerState();
+            gunnerPlayer.pos = {620.0f, 420.0f};
+            gunnerPlayer.invuln = 999.0f;
+            game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("gunner"),
+                                    {880.0f, 420.0f}, 1);
+            int shots = 0;
+            int gap = 0;
+            int maxGap = 0;
+            bool firing = false;
+            for (int tick = 0; tick < 180; ++tick) {   // 3 秒窗口
+                game->arena_.playerState().invuln = 999.0f;
+                game->arena_.update(1.0f / 60.0f);
+                const int fired = int(game->arena_.enemyBullets().size());
+                shots += fired;
+                if (fired > 0) {
+                    firing = true;
+                    gap = 0;
+                } else if (firing) {
+                    maxGap = std::max(maxGap, ++gap);
+                }
+                game->arena_.clearEnemy();   // 只统计这一 tick 新发射的子弹
+            }
+            success &= require(shots >= 18,
+                               QStringLiteral("gunner keeps a very high fire rate"));
+            success &= require(maxGap <= 18,
+                               QStringLiteral("gunner fires continuously without burst pauses"));
+            success &= require(data::kGunnerBullet.speed > 0.0f
+                                   && data::kGunnerBullet.damage > 0.0f,
+                               QStringLiteral("gunner bullet spec is loaded"));
+            menu.returnToMenu();
+        }
+
+        log(QStringLiteral("Mini object pool"));
+        menu.startLevel(0);
+        game = menu.match_.game();
+        if (game != nullptr) {
+            game->arena_.enemies().clear();
+            game->arena_.portals().clear();
+            game->arena_.clearEnemy();
+            game->arena_.playerState().pos = {640.0f, 420.0f};
+            game->arena_.playerState().invuln = 999.0f;
+            const arena::Context miniCtx = game->arena_.context();
+            for (int i = 0; i < 3; ++i) {
+                game->arena_.spawnEnemy(miniCtx, QStringLiteral("mini"),
+                                        {600.0f + float(i) * 20.0f, 400.0f}, 1);
+            }
+            success &= require(int(game->arena_.enemies().size()) == 3
+                                   && game->arena_.pooledMiniCount() == 0,
+                               QStringLiteral("summoned minis start with an empty pool"));
+            for (const auto &enemy : game->arena_.enemies()) {
+                enemy->alive = false;
+            }
+            game->arena_.update(1.0f / 60.0f);   // cleanup → 回收进池
+            success &= require(game->arena_.pooledMiniCount() == 3,
+                               QStringLiteral("dead minis return to the object pool"));
+            for (int i = 0; i < 3; ++i) {
+                game->arena_.spawnEnemy(miniCtx, QStringLiteral("mini"),
+                                        {620.0f + float(i) * 20.0f, 420.0f}, 1);
+            }
+            success &= require(game->arena_.pooledMiniCount() == 0
+                                   && int(game->arena_.enemies().size()) == 3,
+                               QStringLiteral("summoning reuses pooled minis"));
+            menu.returnToMenu();
+        }
+
         log(QStringLiteral("Submitted script"));
         games::Script shortScript;
         shortScript.push_back(games::Wave{{games::EnemySpawn{
@@ -1191,6 +1383,15 @@ public:
                                    && quint32(frame.size())
                                           == net::kFrameHeaderSize + frameHeader.length,
                                QStringLiteral("snapshot is written as one exact frame"));
+            const QByteArray compressed =
+                net::encodeCompressedSnapshotMessage(original);
+            net::Snapshot unzipped;
+            snapshotError.clear();
+            success &= require(!compressed.isEmpty()
+                                   && net::decodeCompressedSnapshotMessage(
+                                          compressed, &unzipped, &snapshotError)
+                                   && unzipped == original,
+                               QStringLiteral("compressed snapshot roundtrips"));
             const QByteArray wrongVersion = net::frameMessage(
                 net::MessageType::Snapshot, net::serializeSnapshot(original),
                 quint16(net::kProtocolVersion + 1));
@@ -2676,9 +2877,9 @@ public:
         return success ? 0 : 1;
     }
 
-    // 性能基准（--bench）：固定场景下测 render / update 的每帧耗时。
-    // 用于对比优化前后（配合 NEON_SINGLE_THREAD=1 做单线程对照）。
-    static int bench()
+    // 性能基准（--bench [敌人数量]）：固定场景下测 render / update 的每帧耗时。
+    // 传入数量时改跑“人群压力”场景（敌人挤在一起），用于对比优化前后。
+    static int bench(int crowd = 0)
     {
         Menu menu(false, true);
         menu.startLevel(0);
@@ -2723,6 +2924,32 @@ public:
         for (int i = 0; i < 12; ++i) {
             arena.spawnEnemy(ctx, QString::fromLatin1(kinds[size_t(i)]), spots[size_t(i)], 4);
         }
+
+        if (crowd > 0) {
+            // 人群压力场景：一大群敌人挤在玩家周围，配合支援型敌人的光环/AI，
+            // 复现“数量一多就卡”的现场。玩家不射击，敌人数量保持不变。
+            // 一半是召唤物 mini（数量多、始终 LOD），一半是完整绘制的常规敌人，
+            // 接近“召唤师海”的真实场景。
+            static const std::array<const char *, 8> crowdKinds = {
+                "mini", "mini", "mini", "mini",
+                "drone", "spitter", "tank", "mender"};
+            arena.enemies().clear();
+            arena.portals().clear();
+            for (int i = 0; i < crowd; ++i) {
+                const float angle = RandomService.real(0.0f, Math::Tau);
+                const float distance = std::sqrt(RandomService.real(0.0f, 1.0f)) * 250.0f;
+                const Math::Vec2 at{470.0f + std::cos(angle) * distance,
+                                    400.0f + std::sin(angle) * distance};
+                arena.spawnEnemy(ctx, QString::fromLatin1(crowdKinds[size_t(i) % crowdKinds.size()]),
+                                 at, 4);
+            }
+            game->waves_.queue_.clear();
+            game->waves_.waveTotal_ = crowd;
+            // 生成时每个敌人都会抛粒子；清掉，让基准只量敌人的 AI/碰撞/绘制。
+            arena.particles().clear();
+            arena.floatingTexts().clear();
+            arena.shockwaves().clear();
+        }
         arena.portals().emplace_back(arena::EnemyType(typeid(arena::SpitterEnemy)),
                                      Math::Vec2(1160, 615), 4);
         arena.spawnPickup(ctx, {360, 315}, 16);
@@ -2762,9 +2989,20 @@ public:
         const double updateMs = double(timer.nsecsElapsed()) / 1e6 / steps;
         BaseService.mouseReleaseLeft();
 
-        std::printf("BENCH frames=%d render=%.3f ms/frame update=%.3f ms/frame workers=%d pooled=%d\n",
-                    frames, renderMs, updateMs, BaseService.parallelWorkers(),
-                    arena.pooledBulletCount());
+        // 快照提取 + GameView 重建（单机每帧、联机每收到一帧快照都会做一次）。
+        net::Snapshot benchSnapshot;
+        client::GameView benchView;
+        constexpr int snapshotFrames = 60;
+        timer.restart();
+        for (int i = 0; i < snapshotFrames; ++i) {
+            game->writeSnapshot(benchSnapshot);
+            benchView.apply(benchSnapshot);
+        }
+        const double snapshotMs = double(timer.nsecsElapsed()) / 1e6 / snapshotFrames;
+
+        std::printf("BENCH crowd=%d frames=%d render=%.3f ms/frame snapshot=%.3f ms/frame update=%.3f ms/frame workers=%d pooled=%d\n",
+                    crowd, frames, renderMs, snapshotMs, updateMs,
+                    BaseService.parallelWorkers(), arena.pooledBulletCount());
         std::fflush(stdout);
         return 0;
     }
@@ -2802,7 +3040,6 @@ public:
             menu.update(1.0f / 60.0f);
         }
         movePointer({GameConfig::ScreenWidth / 2.0f, 454.0f});
-        save(QStringLiteral("title.png"));
 
         // 星区地图
         menu.keyPress(Qt::Key_Return);
@@ -2818,7 +3055,6 @@ public:
         movePointer({float(shopEntry.center().x()), float(shopEntry.center().y())});
         menu.mousePressLeft({float(shopEntry.center().x()),
                              float(shopEntry.center().y())});
-        save(QStringLiteral("shop.png"));
         menu.keyPress(Qt::Key_Escape);
 
         // 战备
@@ -2829,7 +3065,6 @@ public:
         menu.mousePressLeft({float(armoryEntry.center().x()),
                              float(armoryEntry.center().y())});
         menu.mouseReleaseLeft();
-        save(QStringLiteral("armory.png"));
         menu.keyPress(Qt::Key_Escape);
         LoadoutService.select(0);
 
@@ -2839,7 +3074,6 @@ public:
         menu.mousePressLeft({float(settingsEntry.center().x()),
                              float(settingsEntry.center().y())});
         menu.mouseReleaseLeft();
-        save(QStringLiteral("settings.png"));
         menu.keyPress(Qt::Key_Escape);
 
         const QRectF customCard = menu.main_.levelRect(Menu::CustomLevelIndex, int(menu.levels_.size()));
@@ -2871,6 +3105,14 @@ public:
         menu.editor_.setHost(QStringLiteral("192.168.1.9"));
         movePointer({640, 344});
         save(QStringLiteral("server_join.png"));
+        // 空波次展示：台本里一个敌人都没有时，表格仍然画出每一波。
+        menu.keyPress(Qt::Key_F1);
+        for (games::Wave &wave : menu.editor_.script_) {
+            wave.enemies.clear();
+        }
+        menu.editor_.prepare();
+        movePointer({640, 470});
+        save(QStringLiteral("editor_empty.png"));
         menu.keyPress(Qt::Key_Escape);
 
         menu.startLevel(0);
@@ -2913,6 +3155,7 @@ public:
         game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("rusher"), {1050, 250}, 4);
         game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("necromancer"), {1150, 560}, 4);
         game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("summoner"), {690, 300}, 4);
+        game->arena_.spawnEnemy(game->arena_.context(), QStringLiteral("gunner"), {1005, 385}, 4);
         int enemyIndex = 0;
         for (const auto &enemy : game->arena_.enemies()) {
             enemy->age = 2.0f + float(enemyIndex) * 0.3f;
@@ -3006,6 +3249,18 @@ public:
         game->waves_.queue_.clear();
         game->waves_.waveTotal_ = 15;
         game->enterUpgrade();
+        // 截图里固定展示一张「磁吸弹道」卡：三选一是随机的，不固定的话新卡不一定会出现。
+        if (!game->upgrades_.offers_.empty()) {
+            games::Upgrades::Offer homingCard;
+            homingCard.key = QStringLiteral("homing");
+            homingCard.name = QStringLiteral("磁吸弹道");
+            homingCard.tag = QStringLiteral("MAG");
+            homingCard.value = 0.08f;
+            homingCard.color = QColor(140, 240, 215);
+            homingCard.desc = games::Upgrades::describe("homing", homingCard.value);
+            homingCard.valueText = games::Upgrades::valueLabel("homing", homingCard.value);
+            game->upgrades_.offers_.front() = homingCard;
+        }
         movePointer({640, 390});
         save(QStringLiteral("upgrade.png"));
 
@@ -3067,7 +3322,7 @@ public:
             game->update(1.0f / 60.0f);
         }
         menu.update(0.0f);
-        save(QStringLiteral("victory.png"));
+        // 结算 UI 由 QML ResultOverlay 绘制；离屏 capture 不生成第二套 Widgets 结算图。
 
         menu.startLevel(0);
         game = menu.match_.game();
@@ -3086,7 +3341,7 @@ public:
             game->update(1.0f / 60.0f);
         }
         menu.update(0.0f);
-        save(QStringLiteral("game_over.png"));
+        // 失败结算同样只由 QML 绘制。
 
         // 房间/大厅与房间失败页：真实内嵌服务端 + 两个真实 TCP 客户端。
         QTcpServer captureProbe;
@@ -3147,7 +3402,7 @@ public:
             }, 4000);
             joinRoom.mouseMove({510.0f, 532.0f});
             BaseService.pointerMoveTo({510.0f, 532.0f});
-            saveMenu(joinRoom, QStringLiteral("room_failure.png"));
+            // 失败页 UI 只在 QML FailureOverlay；离屏 capture 不再生成第二套 Widgets 图。
         }
         return 0;
     }

@@ -1,5 +1,7 @@
 #include "NecromancerEnemy.h"
 
+#include "MiniEnemy.h"
+
 #include "Arena/Combatants/Combatants.h"
 #include "Arena/Combatants/Enemies/EnemyRegistry.h"
 #include "Arena/Context.h"
@@ -24,6 +26,7 @@ NecromancerEnemy::NecromancerEnemy(const Math::Vec2 &position, int wave)
     const EnemyStats &stats = statsFor(type());
     supportRadius = stats.reviveRadius;
     supportValue = stats.reviveChance;
+    listensToAllyKills = true;
 }
 
 void NecromancerEnemy::onAllyKilled(const Context &ctx, Enemy &dead)
@@ -37,7 +40,11 @@ void NecromancerEnemy::onAllyKilled(const Context &ctx, Enemy &dead)
     if (RandomService.real(0.0f, 1.0f) >= supportValue) {
         return;
     }
-    auto revived = Enemy::create(dead.type(), dead.pos, dead.wave);
+    // 复活的若是召唤物，同样走 mini 对象池，避免复活时重新分配。
+    std::unique_ptr<Enemy> revived =
+        dead.type() == EnemyType(typeid(MiniEnemy))
+            ? ctx.combatants.acquireMini(dead.pos, dead.wave)
+            : Enemy::create(dead.type(), dead.pos, dead.wave);
     if (!revived) {
         return;
     }

@@ -26,6 +26,7 @@ public:
         Glow,
     };
     static void setPass(Pass pass);
+    static Pass currentPass();
 
     static const QColor Ink;
     static const QColor Text;

@@ -55,6 +55,7 @@ SHARED_COMPONENTS := Arena/Arena Arena/Bullets/Bullets \
                      Arena/Combatants/Enemies/SummonerEnemy Arena/Combatants/Enemies/AmplifierEnemy \
                      Arena/Combatants/Enemies/MenderEnemy Arena/Combatants/Enemies/NecromancerEnemy \
                      Arena/Combatants/Enemies/LinkerEnemy Arena/Combatants/Enemies/BossEnemy \
+                     Arena/Combatants/Enemies/GunnerEnemy \
                      Arena/Entities/Mine Arena/Entities/Portal Arena/Entities/Pickup \
                      Arena/Entities/Particle Arena/Entities/FloatingText Arena/Entities/Shockwave \
                      Net/Protocol Net/Snapshot Net/Input Net/Messages

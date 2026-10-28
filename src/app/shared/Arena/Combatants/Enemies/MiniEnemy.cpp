@@ -17,6 +17,9 @@ const EnemyRegistrar<MiniEnemy> kRegistration(
 MiniEnemy::MiniEnemy(const Math::Vec2 &position, int wave)
     : OffensiveEnemy(typeid(MiniEnemy), Role::Melee, position, wave)
 {
+    // 召唤物可能一次出现几十只：倾向更早简化外观（人少时仍画完整机身），
+    // 具体门槛见 Enemy.cpp。
+    prefersLowDetail = true;
 }
 
 float MiniEnemy::weave() const

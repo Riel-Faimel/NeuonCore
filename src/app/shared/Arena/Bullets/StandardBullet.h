@@ -8,18 +8,23 @@
 
 namespace arena {
 
-// 标准弹：直线飞行，可带穿透和暴击；行为和旧的实体版一致。
+// 标准弹：直线飞行，可带穿透、暴击和吸附。
+// 吸附（homing）在 homingRadius 内找最近的对手方向，每 tick 把速度方向按
+// homingRatio 掰过去；速度大小不变，只改方向，所以射程/寿命不受影响。
 class StandardBullet : public Bullet {
 public:
     StandardBullet(const Math::Vec2 &position, const Math::Vec2 &velocity, float damage,
                    const QColor &color, Standpoint standpoint, float radius = 3.0f,
-                   int pierce = 0, float critChance = 0.0f);
+                   int pierce = 0, float critChance = 0.0f,
+                   float homingRadius = 0.0f, float homingRatio = 0.0f);
 
     // 对象池复用：重置全部状态，供 Bullets 回收后再发射。
     void reset(const Math::Vec2 &position, const Math::Vec2 &velocity, float damage,
                const QColor &color, Standpoint standpoint, float radius = 3.0f,
-               int pierce = 0, float critChance = 0.0f);
+               int pierce = 0, float critChance = 0.0f,
+               float homingRadius = 0.0f, float homingRatio = 0.0f);
 
+    void steer(const Context &ctx, float dt) override;
     void advance(float dt) override;
     void draw(QPainter &world, QPainter &glow) const override;
     bool hit(const Context &ctx, Fighter &target) override;
@@ -34,6 +39,8 @@ public:
     const Math::Vec2 &velocity() const { return vel_; }
     const QColor &color() const { return color_; }
     float damage() const { return damage_; }
+    float homingRadius() const { return homingRadius_; }
+    float homingRatio() const { return homingRatio_; }
 
 private:
     // 穿透上限 5 级 ⇒ 一颗弹最多命中 6 个目标；固定数组避免每颗弹都分配哈希表。
@@ -42,6 +49,7 @@ private:
     Math::Vec2 pos_;
     Math::Vec2 prev_;
     Math::Vec2 vel_;
+    float speed_ = 0.0f;
     float damage_ = 0.0f;
     QColor color_;
     Standpoint standpoint_ = Standpoint::Player;
@@ -49,6 +57,8 @@ private:
     float radius_ = 3.0f;
     int pierce_ = 0;
     float critChance_ = 0.0f;
+    float homingRadius_ = 0.0f;
+    float homingRatio_ = 0.0f;
     float life_ = 1.6f;
     std::array<int, MaxHitTargets> hitTargets_{};
     int hitTargetCount_ = 0;

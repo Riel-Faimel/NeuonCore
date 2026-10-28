@@ -209,26 +209,20 @@ void WaveTable::draw(QPainter &painter, const games::Script &script,
     }
 
     if (kinds.empty()) {
-        painter.fillRect(QRectF(Theme::Left, Theme::RowsTop,
-                                Theme::Right - Theme::Left, 66.0f),
-                         QColor(6, 14, 25, 190));
-        Base::text(painter, Theme::bodyFont(),
-                   QStringLiteral("还没有敌人列：把下方敌人库拖到某一波，或按 1–9 / 0 添加"),
-                   Base::Muted,
-                   {Theme::Left + Theme::WaveColumn + 12.0f,
-                    Theme::RowsTop + 34.0f},
-                   QStringLiteral("midleft"), 215);
+        // 没有任何敌人列时也照样画出每一波（下面继续走行循环）：
+        // 空波次必须是可见、可选中、可拖入的，整张表不能消失。
         Base::strokeLine(painter,
                          {Theme::Left + Theme::WaveColumn, Theme::RowsTop},
-                         {Theme::Left + Theme::WaveColumn, Theme::RowsTop + 66.0f},
+                         {Theme::Left + Theme::WaveColumn,
+                          Theme::RowsTop + float(waveCount) * Theme::RowHeight},
                          Base::withAlpha(tint, 80), 1.0f);
-        return;
     }
 
     for (int waveRow = 0; waveRow < waveCount; ++waveRow) {
         const QRectF rect = rowRect(waveRow);
         const bool activeRow = waveRow == row;
         const bool hoveredRow = pointer.hovering(rect) && dragKind < 0;
+        const int total = waveTotal(script, waveRow);
         QColor fill = activeRow ? QColor(9, 24, 38, 235)
                                 : (waveRow % 2 == 0 ? QColor(5, 13, 23, 205)
                                                     : QColor(7, 16, 28, 205));
@@ -250,12 +244,31 @@ void WaveTable::draw(QPainter &painter, const games::Script &script,
                    activeRow ? tint : Base::Muted,
                    {Theme::Left + 18.0f, float(rect.center().y())},
                    QStringLiteral("midleft"), activeRow ? 240 : 210);
+        // 空波次在波次号和总量之间打一个“空”标记，避免 0 被误读成“还没填”。
+        if (total == 0 && !kinds.empty()) {
+            Base::text(painter, Theme::techTinyFont(), QStringLiteral("空"),
+                       activeRow ? Base::withAlpha(tint, 220)
+                                 : Base::withAlpha(Base::Amber, 150),
+                       {Theme::Left + 42.0f, float(rect.center().y())},
+                       QStringLiteral("midleft"), 200);
+        }
         Base::text(painter, Theme::techTinyFont(),
-                   QStringLiteral("×%1").arg(waveTotal(script, waveRow)),
+                   QStringLiteral("×%1").arg(total),
                    activeRow ? tint : Base::Dim,
                    {Theme::Left + Theme::WaveColumn - 12.0f,
                     float(rect.center().y())},
                    QStringLiteral("midright"), activeRow ? 215 : 165);
+
+        if (kinds.empty()) {
+            // 没有列时，每一行自己说明状态：空波次仍然是一行可选中的波次。
+            Base::text(painter, Theme::bodyFont(),
+                       QStringLiteral("空波次 · 拖动敌人到这一波"),
+                       activeRow ? tint : Base::Muted,
+                       {Theme::Left + Theme::WaveColumn + 12.0f,
+                        float(rect.center().y())},
+                       QStringLiteral("midleft"), activeRow ? 235 : 185);
+            continue;
+        }
 
         for (int col = 0; col < int(kinds.size()); ++col) {
             const int kind = kinds[size_t(col)];
@@ -320,6 +333,16 @@ void WaveTable::draw(QPainter &painter, const games::Script &script,
                            QStringLiteral("center"), count > 0 ? 215 : 175);
             }
         }
+    }
+
+    if (kinds.empty()) {
+        // 表格下方补一句操作提示：表格本身已经把每一波画出来了，这里只说明怎么加列。
+        Base::text(painter, Theme::tinyFont(),
+                   QStringLiteral("还没有敌人列：把下方敌人库拖到某一波，或按 1–9 / 0 添加"),
+                   Base::Muted,
+                   {Theme::Left + 18.0f,
+                    Theme::RowsTop + float(waveCount) * Theme::RowHeight + 14.0f},
+                   QStringLiteral("midleft"), 190);
     }
 
     if (dragKind >= 0) {

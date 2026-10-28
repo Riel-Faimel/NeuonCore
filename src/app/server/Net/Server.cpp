@@ -207,6 +207,7 @@ bool GameServer::returnToRoom(QString *error)
     tickTimer_.stop();
     simulation_.reset();
     snapshot_.clear();
+    snapshotTick_ = 0;
     matchPlayers_.clear();
     for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
         it->inMatch = false;
@@ -229,6 +230,7 @@ void GameServer::dissolveRoom(const QString &reason)
     tickTimer_.stop();
     simulation_.reset();
     snapshot_.clear();
+    snapshotTick_ = 0;
     matchPlayers_.clear();
     matchEndSent_ = true;
     accumulator_ = 0.0;
@@ -474,6 +476,7 @@ void GameServer::handleFrame(QTcpSocket *socket, const QByteArray &frame)
     case net::MessageType::Event:
     case net::MessageType::MatchEnd:
     case net::MessageType::RoomList:
+    case net::MessageType::SnapshotCompressed:
     case net::MessageType::ClaimAdmin:
         reject(socket, QStringLiteral("server-only message type received from client"));
         break;
@@ -600,6 +603,7 @@ bool GameServer::startMatch(const games::GameSimulation::Level &level, QString *
 
     tickClock_.start();
     accumulator_ = 0.0;
+    snapshotTick_ = 0;
     simulation_->start();
     simulation_->writeSnapshot(snapshot_);
     broadcastSnapshot();
@@ -787,8 +791,11 @@ void GameServer::onTick()
         return;
     }
 
-    simulation_->writeSnapshot(snapshot_);
-    broadcastSnapshot();
+    // 30Hz keyframe；不再每个 60Hz tick 都编码/广播全量快照。
+    if ((snapshotTick_++ % 2) == 0) {
+        simulation_->writeSnapshot(snapshot_);
+        broadcastSnapshot();
+    }
 
     if (!matchEndSent_
         && (simulation_->state() == games::GameSimulation::State::Victory
@@ -953,7 +960,7 @@ void GameServer::broadcastSnapshot()
             continue;
         }
         snapshot_.localPlayerId = (it->inMatch && it->playerId > 0) ? it->playerId : 0;
-        const QByteArray frame = net::encodeSnapshotMessage(snapshot_);
+        const QByteArray frame = net::encodeCompressedSnapshotMessage(snapshot_);
         if (!frame.isEmpty()) {
             socket->write(frame);
         }

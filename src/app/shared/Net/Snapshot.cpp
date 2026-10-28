@@ -441,4 +441,43 @@ bool decodeSnapshotMessage(const QByteArray &frame, Snapshot *snapshot, QString 
     return deserializeSnapshot(payload, snapshot, error);
 }
 
+QByteArray encodeCompressedSnapshotMessage(const Snapshot &snapshot, quint16 version)
+{
+    const QByteArray payload = serializeSnapshot(snapshot);
+    if (payload.isEmpty()) {
+        return {};
+    }
+    const QByteArray compressed = qCompress(payload, 9);
+    if (compressed.isEmpty()) {
+        return {};
+    }
+    return frameMessage(MessageType::SnapshotCompressed, compressed, version);
+}
+
+bool decodeCompressedSnapshotMessage(const QByteArray &frame, Snapshot *snapshot,
+                                     QString *error)
+{
+    MessageHeader header;
+    QByteArray payload;
+    if (!decodeFrame(frame, &header, &payload, error)) {
+        return false;
+    }
+    if (header.type != MessageType::SnapshotCompressed) {
+        setError(error, QStringLiteral("message is not a compressed snapshot"));
+        return false;
+    }
+    if (header.version != kProtocolVersion) {
+        setError(error, QStringLiteral("protocol version mismatch: %1 != %2")
+                            .arg(header.version)
+                            .arg(kProtocolVersion));
+        return false;
+    }
+    const QByteArray raw = qUncompress(payload);
+    if (raw.isEmpty()) {
+        setError(error, QStringLiteral("cannot uncompress snapshot"));
+        return false;
+    }
+    return deserializeSnapshot(raw, snapshot, error);
+}
+
 } // namespace net

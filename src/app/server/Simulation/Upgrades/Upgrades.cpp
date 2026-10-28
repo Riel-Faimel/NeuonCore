@@ -10,6 +10,15 @@
 
 namespace games {
 
+namespace {
+
+// “磁吸弹道”的感知半径固定，随机的是每次抽取的吸附比例。
+// 吸附是 buff：玩家默认 homingRadius/homingRatio 都是 0，抽到这张卡才会 > 0。
+constexpr float kHomingRadius = 170.0f;
+constexpr float kHomingRatioCap = 0.45f;
+
+} // namespace
+
 Upgrades::Upgrades(Arena &arena)
     : arena_(arena)
 {
@@ -38,6 +47,8 @@ const std::vector<Upgrades::Definition> &Upgrades::catalog()
              Base::Magenta},
             {std::string_view{"crit"}, QStringLiteral("精准瞄具"), QStringLiteral("CRIT"),
              QColor(255, 224, 121)},
+            {std::string_view{"homing"}, QStringLiteral("磁吸弹道"), QStringLiteral("MAG"),
+             QColor(140, 240, 215)},
         };
         for (Definition &definition : list) {
             if (const data::UpgradeRange *range = data::findUpgrade(definition.key)) {
@@ -66,6 +77,9 @@ bool Upgrades::eligible(const Definition &definition) const
         return false;
     }
     if (definition.key == "heal" && player.hp >= player.maxHp * 0.90f) {
+        return false;
+    }
+    if (definition.key == "homing" && player.homingRatio >= kHomingRatioCap - 0.001f) {
         return false;
     }
     return true;
@@ -116,6 +130,11 @@ QString Upgrades::describe(std::string_view key, float value)
     if (key == "crit") {
         return QStringLiteral("暴击率 +%1%。暴击造成双倍伤害。").arg(percent);
     }
+    if (key == "homing") {
+        return QStringLiteral("子弹获得磁吸：%1 像素内出现敌人时，弹道每帧朝最近目标转 %2%。")
+            .arg(int(std::lround(kHomingRadius)))
+            .arg(percent);
+    }
     return QString();
 }
 
@@ -136,6 +155,9 @@ QString Upgrades::valueLabel(std::string_view key, float value)
     }
     if (key == "shock") {
         return QStringLiteral("+1 级");
+    }
+    if (key == "homing") {
+        return QStringLiteral("吸附 +%1%").arg(percent);
     }
     return QStringLiteral("+%1%").arg(percent);
 }
@@ -228,6 +250,11 @@ void Upgrades::applyEffect(const Offer &offer)
             player.shockLevel += 1;
         } else if (key == QStringLiteral("crit")) {
             player.critChance = std::min(0.60f, player.critChance + offer.value);
+        } else if (key == QStringLiteral("homing")) {
+            // 半径固定，比例叠加到上限；没抽过这张卡时两者都是 0（直线弹道）。
+            player.homingRadius = std::max(player.homingRadius, kHomingRadius);
+            player.homingRatio = std::min(kHomingRatioCap,
+                                          player.homingRatio + offer.value);
         }
     }
 }

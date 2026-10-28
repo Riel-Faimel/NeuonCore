@@ -24,10 +24,12 @@ public:
 
     void submit(std::unique_ptr<Bullet> bullet);
     // 发射标准弹：优先复用回收池里的对象。
+    // homingRadius / homingRatio 是吸附参数（0 表示不吸附），见 Bullet::steer()。
     void spawnStandard(const Math::Vec2 &position, const Math::Vec2 &velocity,
                        float damage, const QColor &color, Bullet::Standpoint standpoint,
-                       float radius = 3.0f, int pierce = 0, float critChance = 0.0f);
-    void update(float dt);
+                       float radius = 3.0f, int pierce = 0, float critChance = 0.0f,
+                       float homingRadius = 0.0f, float homingRatio = 0.0f);
+    void update(const Context &ctx, float dt);
     void cleanup();
     void draw(QPainter &world, QPainter &glow) const;
 

@@ -82,6 +82,15 @@ public:
     int strafe = 1;
     float phase = 0.0f;
     bool boss = false;
+    // 只有关心“友军阵亡”的敌人（necromancer / summoner）会收到 onAllyKilled；
+    // 用它把阵亡通知从 O(全部友军) 降到只看订阅者。
+    bool listensToAllyKills = false;
+    // 每帧由 Combatants 刷新：150 半径内的存活友军数（辅助型选“最密集点”用）。
+    // 缓存一次，避免每个支援型敌人各算一遍。
+    int localDensity = 0;
+    // 倾向于降低绘制：这类单位（mini）在人群还没那么大时就会先简化外观，
+    // 而其他类型要到最后关头才降级。阈值见 Enemy.cpp（不是无条件简化）。
+    bool prefersLowDetail = false;
 
     // 支援型敌人的光环与被支援状态
     float supportRadius = 0.0f;

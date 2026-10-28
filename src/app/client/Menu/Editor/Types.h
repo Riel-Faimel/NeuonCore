@@ -29,6 +29,6 @@ struct Pointer {
 
 inline constexpr int kMaxWaves = 12;
 inline constexpr int kMaxEnemyCount = 20;
-inline constexpr int kKindCount = 11;  // 基础 5 种 + 6 种支援/特殊敌人
+inline constexpr int kKindCount = 12;  // 基础 5 种 + 7 种支援/特殊敌人
 
 } // namespace menu::editor
