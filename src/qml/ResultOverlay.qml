@@ -19,6 +19,7 @@ Item {
 
     readonly property color accent: victory ? "#53e8ff" : "#ff4858"
     readonly property color titleColor: victory ? "#97ffdc" : "#ff7785"
+    readonly property color titleGlow: victory ? "#447263" : "#72353b"
     readonly property color textColor: "#cfe2f2"
     readonly property color muted: "#7792ab"
 
@@ -82,17 +83,43 @@ Item {
         opacity: 0.9
     }
 
-    Text {
+    // 与 Paint::glowText 相同的六向偏移，不用模糊，避免 QML effect 的矩形伪影。
+    Item {
+        id: titleLayer
         anchors.horizontalCenter: parent.horizontalCenter
-        y: 196
-        text: root.victory ? "星核已稳定" : "防线失守"
-        color: root.titleColor
-        font.family: "Microsoft YaHei"
-        font.pixelSize: 44
-        font.bold: true
-        style: Text.Outline
-        styleColor: root.victory ? "#4097ffdc" : "#40ff7785"
-        opacity: 0.98
+        y: 192
+        width: 1280
+        height: 60
+
+        Repeater {
+            model: [
+                Qt.point(-3, 0), Qt.point(3, 0), Qt.point(0, -3),
+                Qt.point(0, 3), Qt.point(-2, -2), Qt.point(2, 2)
+            ]
+
+            Text {
+                required property var modelData
+                anchors.centerIn: parent
+                anchors.horizontalCenterOffset: modelData.x
+                anchors.verticalCenterOffset: modelData.y
+                text: root.victory ? "星核已稳定" : "防线失守"
+                color: root.titleGlow
+                opacity: 0.42
+                font.family: "Microsoft YaHei"
+                font.pixelSize: 44
+                font.bold: true
+            }
+        }
+
+        Text {
+            anchors.centerIn: parent
+            text: root.victory ? "星核已稳定" : "防线失守"
+            color: root.titleColor
+            opacity: 1.0
+            font.family: "Microsoft YaHei"
+            font.pixelSize: 44
+            font.bold: true
+        }
     }
 
     Text {
