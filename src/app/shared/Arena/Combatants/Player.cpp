@@ -206,13 +206,20 @@ void Player::shoot(const Context &ctx)
     const Math::Vec2 forward(std::cos(state.aim), std::sin(state.aim));
     const Math::Vec2 side(-forward.y, forward.x);
     const data::LauncherDef &launcher = LoadoutService.launcher();
-    const float spread = 0.115f * launcher.spreadScale;
-    const int count = std::max(1, state.multishot + launcher.extraShots);
+    // 霰弹的 3 发算一波；分裂弹头每次增加一整波，而不是只加 1 枚弹丸，
+    // 因此相对收益和单发武器一致。多波在同一收紧的锥内随机分布，避免张角膨胀。
+    const int pellets = std::max(1, launcher.extraShots + 1);
+    const int count = pellets * std::max(1, state.multishot);
+    const float spread = (pellets > 1 ? 0.075f : 0.115f) * launcher.spreadScale;
     for (int index = 0; index < count; ++index) {
-        const float offset = (float(index) - (count - 1) / 2.0f) * spread;
+        const float offset = pellets > 1
+                                 ? RandomService.real(-spread, spread)
+                                 : ((float(index) - (count - 1) / 2.0f) * spread);
         const Math::Vec2 direction = forward.rotated(offset);
-        const Math::Vec2 origin = state.pos + forward * 20.0f
-                                  + side * ((float(index) - (count - 1) / 2.0f) * 4.0f);
+        const float sideOffset = pellets > 1
+                                     ? RandomService.real(-5.0f, 5.0f)
+                                     : ((float(index) - (count - 1) / 2.0f) * 4.0f);
+        const Math::Vec2 origin = state.pos + forward * 20.0f + side * sideOffset;
         ctx.bullets.spawnStandard(
             origin, direction * state.bulletSpeed, state.damage,
             LoadoutService.color(), Bullet::Standpoint::Player,
