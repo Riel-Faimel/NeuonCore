@@ -13,7 +13,7 @@
 97ee51a  refactor: gate test hooks behind DebugInfo
    │
    ├─ widgets-only
-   │    └─ 97ee51a + gameplay/docs cherry-picks（当前 9e1265a）
+   │    └─ 97ee51a + gameplay/docs cherry-picks（HEAD 以 `git log widgets-only -1` 为准）
    │
    └─ main
         └─ QML Result/Failure/Main/Settings/Shop/Armory
