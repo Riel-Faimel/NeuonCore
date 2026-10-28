@@ -93,7 +93,7 @@ QString Upgrades::describe(std::string_view key, float value)
         return QStringLiteral("射速 +%1%。让下一波弹幕再密一点。").arg(percent);
     }
     if (key == "multi") {
-        return QStringLiteral("每次射击额外发射 1 枚弹丸，弹道会轻微展开。");
+        return QStringLiteral("每次射击额外增加一波弹丸；霰弹的一波为 3 发，单发武器的一波为 1 发。");
     }
     if (key == "pierce") {
         return QStringLiteral("子弹额外穿透 1 个目标，适合对付成群的敌人。");
@@ -129,7 +129,7 @@ QString Upgrades::valueLabel(std::string_view key, float value)
         return QStringLiteral("+%1% HP").arg(percent);
     }
     if (key == "multi") {
-        return QStringLiteral("+1 弹");
+        return QStringLiteral("+1 波");
     }
     if (key == "pierce") {
         return QStringLiteral("+1 穿透");
