@@ -3088,7 +3088,7 @@ public:
             game->update(1.0f / 60.0f);
         }
         menu.update(0.0f);
-        save(QStringLiteral("victory.png"));
+        // 结算 UI 由 QML ResultOverlay 绘制；离屏 capture 不生成第二套 Widgets 结算图。
 
         menu.startLevel(0);
         game = menu.match_.game();
@@ -3107,7 +3107,7 @@ public:
             game->update(1.0f / 60.0f);
         }
         menu.update(0.0f);
-        save(QStringLiteral("game_over.png"));
+        // 失败结算同样只由 QML 绘制。
 
         // 房间/大厅与房间失败页：真实内嵌服务端 + 两个真实 TCP 客户端。
         QTcpServer captureProbe;
@@ -3168,7 +3168,7 @@ public:
             }, 4000);
             joinRoom.mouseMove({510.0f, 532.0f});
             BaseService.pointerMoveTo({510.0f, 532.0f});
-            saveMenu(joinRoom, QStringLiteral("room_failure.png"));
+            // 失败页 UI 只在 QML FailureOverlay；离屏 capture 不再生成第二套 Widgets 图。
         }
         return 0;
     }

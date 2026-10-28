@@ -76,6 +76,7 @@ public:
         connect(&timer_, &QTimer::timeout, this, [this] { tick(); });
         timer_.start();
         setupResultOverlay();
+        setupFailureOverlay();
     }
 
 protected:
@@ -207,7 +208,7 @@ private:
         const QString appQml = QCoreApplication::applicationDirPath()
                                + QStringLiteral("/qml/ResultOverlay.qml");
         const QString sourceQml = QDir::currentPath()
-                                  + QStringLiteral("/src/app/qml/ResultOverlay.qml");
+                                  + QStringLiteral("/src/qml/ResultOverlay.qml");
         const QString path = QFileInfo::exists(appQml) ? appQml : sourceQml;
         resultOverlay_->engine()->addImportPath(
             QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
@@ -231,7 +232,7 @@ private:
             resultOverlay_->hide();
             return;
         }
-        const menu::Result::Summary summary = menu_.resultSummary();
+        const menu::ResultSummary summary = menu_.resultSummary();
         resultQmlRoot_->setProperty("victory", summary.victory);
         resultQmlRoot_->setProperty("levelName", summary.levelName);
         resultQmlRoot_->setProperty("score", summary.score);
@@ -239,9 +240,73 @@ private:
         resultQmlRoot_->setProperty("wave", summary.wave);
         resultQmlRoot_->setProperty("totalWaves", summary.totalWaves);
         resultQmlRoot_->setProperty("runTime", double(summary.runTime));
+        if (resultQmlRoot_->property("retryRequested").toBool()) {
+            resultQmlRoot_->setProperty("retryRequested", false);
+            menu_.keyPress(Qt::Key_Return);
+            return;
+        }
+        if (resultQmlRoot_->property("backRequested").toBool()) {
+            resultQmlRoot_->setProperty("backRequested", false);
+            menu_.keyPress(Qt::Key_Escape);
+            return;
+        }
         resultOverlay_->setGeometry(rect());
         resultOverlay_->show();
         resultOverlay_->raise();
+    }
+
+    void setupFailureOverlay()
+    {
+        failureOverlay_ = new QQuickWidget(this);
+        failureOverlay_->setResizeMode(QQuickWidget::SizeRootObjectToView);
+        failureOverlay_->setClearColor(Qt::transparent);
+        failureOverlay_->setFocusPolicy(Qt::NoFocus);
+
+        const QString appQml = QCoreApplication::applicationDirPath()
+                               + QStringLiteral("/qml/FailureOverlay.qml");
+        const QString sourceQml = QDir::currentPath()
+                                  + QStringLiteral("/src/qml/FailureOverlay.qml");
+        const QString path = QFileInfo::exists(appQml) ? appQml : sourceQml;
+        failureOverlay_->engine()->addImportPath(
+            QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
+        failureOverlay_->setSource(QUrl::fromLocalFile(path));
+        if (failureOverlay_->status() != QQuickWidget::Ready) {
+            delete failureOverlay_;
+            failureOverlay_ = nullptr;
+            return;
+        }
+        failureQmlRoot_ = failureOverlay_->rootObject();
+        failureOverlay_->setGeometry(rect());
+        failureOverlay_->hide();
+    }
+
+    void syncFailureOverlay()
+    {
+        if (failureOverlay_ == nullptr || failureQmlRoot_ == nullptr) {
+            return;
+        }
+        if (menu_.screen() != Menu::Screen::Failure) {
+            failureOverlay_->hide();
+            return;
+        }
+        const menu::FailureView view = menu_.failureSummary();
+        failureQmlRoot_->setProperty("title", view.title);
+        failureQmlRoot_->setProperty("detail", view.detail);
+        failureQmlRoot_->setProperty("endpoint", view.endpoint);
+        failureQmlRoot_->setProperty("retryable", view.retryable);
+        if (failureQmlRoot_->property("retryRequested").toBool()) {
+            failureQmlRoot_->setProperty("retryRequested", false);
+            menu_.keyPress(Qt::Key_Return);
+            return;
+        }
+        if (failureQmlRoot_->property("backRequested").toBool()) {
+            failureQmlRoot_->setProperty("backRequested", false);
+            menu_.keyPress(Qt::Key_Escape);
+            return;
+        }
+        failureOverlay_->setGeometry(rect());
+        failureOverlay_->show();
+        failureOverlay_->raise();
     }
 
     void tick()
@@ -258,12 +323,15 @@ private:
         BaseService.pointerUpdate(dt);
         menu_.render();
         syncResultOverlay();
+        syncFailureOverlay();
         update();
     }
 
     Menu menu_;
     QQuickWidget *resultOverlay_ = nullptr;
     QQuickItem *resultQmlRoot_ = nullptr;
+    QQuickWidget *failureOverlay_ = nullptr;
+    QQuickItem *failureQmlRoot_ = nullptr;
     QTimer timer_;
     QElapsedTimer clock_;
     bool centered_ = false;

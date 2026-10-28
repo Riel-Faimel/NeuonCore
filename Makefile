@@ -70,8 +70,8 @@ CLIENT_COMPONENTS := Base/Base Base/Input/Input Base/Audio/Audio Base/Audio/Musi
                      Games/Games Renderer/Renderer View/GameView \
                      Net/Client \
                      Menu/Menu Menu/Main/Main Menu/Map/Map Menu/Match/Match \
-                     Menu/Room/Room Menu/Failure/Failure \
-                     Menu/Result/Result Menu/Depot/Depot \
+                     Menu/Room/Room \
+                     Menu/Depot/Depot \
                      Menu/Editor/Theme Menu/Editor/Tabs Menu/Editor/WaveTable \
                      Menu/Editor/Palette Menu/Editor/ServerRow \
                      Menu/Editor/JoinPanel Menu/Editor/Inspector \
@@ -202,7 +202,8 @@ deploy: release server
 	@copy /Y "$(BUILD_WIN)\NeonCoreServer.exe" "$(DIST_WIN)\NeonCoreServer.exe" >nul
 	@if exist "$(DIST_WIN)\NeonCoreConsole.exe" del /Q "$(DIST_WIN)\NeonCoreConsole.exe"
 	@copy /Y "THIRD_PARTY.txt" "$(DIST_WIN)\THIRD_PARTY.txt" >nul
-	@copy /Y "src\app\qml\ResultOverlay.qml" "$(DIST_WIN)\qml\ResultOverlay.qml" >nul
+	@copy /Y "src\qml\ResultOverlay.qml" "$(DIST_WIN)\qml\ResultOverlay.qml" >nul
+	@copy /Y "src\qml\FailureOverlay.qml" "$(DIST_WIN)\qml\FailureOverlay.qml" >nul
 	@xcopy /E /I /Y "$(QTDIR_WIN)\qml\QtQuick" "$(DIST_WIN)\qml\QtQuick" >nul
 	@xcopy /E /I /Y "$(QTDIR_WIN)\qml\QtQml" "$(DIST_WIN)\qml\QtQml" >nul
 	@xcopy /E /I /Y "$(QTDIR_WIN)\qml\QtCore" "$(DIST_WIN)\qml\QtCore" >nul

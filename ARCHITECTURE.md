@@ -146,8 +146,8 @@ cpp/src/
 | `Map` | 星区地图：关卡节点、锁定状态、选择与进入 |
 | `Match` | 默认持有网络 `GameClient`（内嵌/远端 `GameServer`）+ `GameView`/`Renderer`；`--local`/测试时持有本地 `Games`。`Mode::Local` 直接开局、`Mode::Network` 单机立即开局/加入远端、`Mode::Host` 只开房等待 `startRoomMatch()`。负责开局、房间生命周期、输入转发、推进、渲染和失败信息 |
 | `Room` | 房间/大厅：显示服务端权威的房间名、人数、房主/你标记和等待状态；主机的 `ENTER` 开始、`X` 解散、`ESC` 离开，加入者只能 `ESC` 离开 |
-| `Failure` | 连接层失败页：无法连接服务器 / 房间已解散，提供 `ENTER` 重试与 `ESC` 返回；不读取战绩，不冒充对局失败 |
-| `Result` | 结算覆盖层：只接收一份只读 `Summary`，不读取 `Games` |
+| `Failure` | 连接层失败页数据；UI 只在 QML `FailureOverlay` |
+| `Result` | 结算数据 + QML `ResultOverlay`；C++ 只提供只读 `ResultSummary` |
 | `Editor` | 自定义协议编辑：顶部单机/局域网主机/加入主机选项卡；单机与主机编辑台本，主机在波次下方追加端口，加入主机显示地址和端口 |
 | `Depot` | 补给站界面：展示钱包/库存，把购买意图转给全局 `Shop` |
 | `Armory` | 战备界面：展示/选择发射器，把装备意图转给全局 `Loadout` |
@@ -407,11 +407,11 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
             ├─ BaseService ────────► base::Input / Audio / Music / Pointer / Paint / ThreadPool（全局单例）
             ├─ RandomService ──────► 随机引擎（全局单例）
             ├─ ShopService ────────► shop::Score / Inventory（全局单例，注册表 / ini）
-            └─ Menu（持有四个关卡表，组合 10 个界面组件）
+            └─ Menu（持有四个关卡表；Widgets 组件 + QML 结算/失败覆盖层）
                ├─ menu::Main ─────────► 关卡卡 / 商店与设置入口（数据由 Menu 提供）
 ├─ menu::Map ──────────► 星区地图节点（levels.json），Start → 开局
                ├─ menu::Room ────────► 服务端权威房间（房主开始/解散、加入者等待）
-               ├─ menu::Failure ─────► 无法连接服务器 / 房间已解散（重试/返回）
+               ├─ QML FailureOverlay ─► 无法连接服务器 / 房间已解散（重试/返回）
                ├─ menu::Match ────────► Network: client::GameClient ──► net::Snapshot / Event
                │  │                    │  ├─ client::GameView ──► net::Snapshot（重建）, Arena(只读镜像)
                │  │                    │  └─ games::Renderer ──► client::GameView(只读), RandomService
@@ -425,7 +425,7 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
                │     ├─ games::GameSimulation ──► net::Snapshot（提取只读世界）
                │     ├─ client::GameView ──────► net::Snapshot（重建）, Arena(只读镜像)
                │     └─ games::Renderer ──► client::GameView(只读), RandomService
-               ├─ menu::Result ───────► 只读 Summary
+               ├─ QML ResultOverlay ──► 只读 ResultSummary
                ├─ menu::Editor ───────► games::Script（自己持有）
                ├─ menu::Depot ────────► ShopService（buyMine）+ 只读钱包/库存
                └─ menu::Settings ─────► BaseService 音量接口 + 配置存储
@@ -447,7 +447,7 @@ QCoreApplication ──► server::GameServer ──► games::GameSimulation �
 - `client::GameView` 只消费 `net::Snapshot`，不推进模拟、不读输入；`games::Renderer` 只读 `GameView`，不再画标题和结算。
 - `net::Protocol / Input / Messages / Snapshot` 只依赖 Qt 和 `Math`，不依赖 Arena / Games / Renderer；`Net/Server` 负责把模拟接到 socket，`Net/Client` 负责把 socket 接到 GameView/Renderer。
 - `Waves` / `Upgrades` 不知道 UI。
-- `menu::Result` 只拿一份 `Summary`，不依赖 `Games`。
+- QML `ResultOverlay` 只拿一份 `menu::ResultSummary`，不依赖 `Games`。
 - `Base` 不知道游戏业务。
 - `lib` 不依赖 `app`。
 
@@ -482,10 +482,10 @@ GameWindow::tick()
 │  ├─ Shop:    menu::Depot  绘制补给站
 │  ├─ Settings: menu::Settings 绘制设置页
 │  ├─ Room:   menu::Room 绘制服务端房间/等待状态
-│  ├─ Failure: menu::Failure 绘制无法连接/房间已解散
+│  ├─ Failure: QML FailureOverlay（C++ 只给 FailureView）
 │  ├─ Match:  Network → GameClient::render() → Renderer::render(GameView)
 │  │          Local → GameSimulation::writeSnapshot → GameView::apply → Renderer
-│  └─ Result: menu::Match 画面 + menu::Result 结算覆盖层
+│  └─ Result: menu::Match 画面 + QML ResultOverlay
 └─ QWidget::update()
 
 GameWindow::paintEvent()
@@ -551,11 +551,11 @@ GameWindow::paintEvent()
 
 1. 组件自己持有 UI 状态、绘制和命中测试，用返回的 `Action` 表达意图；
 2. `Menu` 的 `Screen` 枚举加一项，`render()` 里调它的 `render()`，输入路由里处理它的 `Action`；
-3. 需要的数据由 `Menu` 组装后传入（如 `Main::Card`、`Result::Summary`），组件不反向依赖 `Menu`。
+3. 需要的数据由 `Menu` 组装后传入（如 `Main::Card`、`ResultSummary`），组件不反向依赖 `Menu`。
 
 ### 加一个结算字段
 
-只改 `menu::Result::Summary` 和 `menu::Result::render()`；数据由 `Menu::summary()` 从 `menu::Match` 的只读 getter 组装，`Renderer` 不参与结算。
+只改 `menu::ResultSummary` 和 `src/qml/ResultOverlay.qml`；数据由 `Menu::summary()` 从 `menu::Match` 的只读 getter 组装，`Renderer` 不参与结算。
 
 ### 加敌人 / 状态 / 事件
 

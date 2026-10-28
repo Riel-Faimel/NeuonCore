@@ -94,9 +94,9 @@ std::vector<menu::Main::Card> Menu::cards() const
     return result;
 }
 
-menu::Result::Summary Menu::summary() const
+menu::ResultSummary Menu::summary() const
 {
-    menu::Result::Summary summary;
+    menu::ResultSummary summary;
     summary.victory = match_.state() == Games::State::Victory;
     summary.levelName =
         campaignActive_ && activeCampaign_ >= 0
@@ -185,9 +185,9 @@ menu::Room::View Menu::roomView() const
     return view;
 }
 
-menu::Failure::View Menu::failureView() const
+menu::FailureView Menu::failureView() const
 {
-    menu::Failure::View view;
+    menu::FailureView view;
     view.title = match_.failureTitle();
     view.detail = match_.failureDetail();
     view.endpoint = match_.failureEndpoint();
@@ -251,15 +251,12 @@ void Menu::render()
         return;
     }
     if (screen_ == Screen::Failure) {
-        QPainter painter(&frame_);
-        failure_.render(painter, failureView());
+        // 失败页 UI 由 GameWindow 的 QML FailureOverlay 负责。
         return;
     }
     if (screen_ == Screen::Result && match_.active()) {
+        // 结算 UI 由 GameWindow 的 QML ResultOverlay 负责；Widgets 只保留底层对局帧。
         match_.render();
-        frame_ = match_.frame().copy();
-        QPainter painter(&frame_);
-        result_.render(painter, summary());
         return;
     }
     QPainter painter(&frame_);
@@ -475,10 +472,10 @@ void Menu::keyPress(int key, bool autoRepeat)
         break;
     }
     case Screen::Failure: {
-        const menu::Failure::Action action = failure_.keyPress(key);
-        if (action == menu::Failure::Action::Retry) {
+        if ((key == Qt::Key_Return || key == Qt::Key_Enter)
+            && failureView().retryable) {
             retryFailure();
-        } else if (action == menu::Failure::Action::Back) {
+        } else if (key == Qt::Key_Escape || key == Qt::Key_Q) {
             returnToMenu();
         }
         break;
@@ -497,10 +494,9 @@ void Menu::keyPress(int key, bool autoRepeat)
         }
         break;
     case Screen::Result: {
-        const menu::Result::Action action = result_.keyPress(key);
-        if (action == menu::Result::Action::Retry) {
+        if (key == Qt::Key_Return || key == Qt::Key_Enter) {
             retry();
-        } else if (action == menu::Result::Action::Back) {
+        } else if (key == Qt::Key_Escape || key == Qt::Key_Q) {
             returnToMenu();
         }
         break;
@@ -629,15 +625,9 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
         }
         break;
     }
-    case Screen::Failure: {
-        const menu::Failure::Action action = failure_.mousePress(position);
-        if (action == menu::Failure::Action::Retry) {
-            retryFailure();
-        } else if (action == menu::Failure::Action::Back) {
-            returnToMenu();
-        }
+    case Screen::Failure:
+        // 失败页按钮只在 QML FailureOverlay 中。
         break;
-    }
     case Screen::Match:
         if (match_.lobby()) {
             screen_ = Screen::Room;
@@ -645,15 +635,9 @@ void Menu::mousePressLeft(const Math::Vec2 &position)
         }
         match_.mousePressLeft(position);
         break;
-    case Screen::Result: {
-        const menu::Result::Action action = result_.mousePress(position);
-        if (action == menu::Result::Action::Retry) {
-            retry();
-        } else if (action == menu::Result::Action::Back) {
-            returnToMenu();
-        }
+    case Screen::Result:
+        // 结算按钮只在 QML ResultOverlay 中；Widgets 不再维护第二套命中区域。
         break;
-    }
     case Screen::Editor: {
         const menu::Editor::Action action = editor_.mousePress(position);
         if (action == menu::Editor::Action::Deploy) {

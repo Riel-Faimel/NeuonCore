@@ -67,8 +67,9 @@ public:
     bool muted() const { return BaseService.muted(); }
     bool audioEnabled() const { return BaseService.audioEnabled(); }
     Screen screen() const { return screen_; }
-    // QML 结算覆盖层只读数据；C++ Result 仍是测试/无 QML 时的回退。
-    menu::Result::Summary resultSummary() const { return summary(); }
+    // 结算 UI 只在 QML ResultOverlay 中；C++ 只提供只读 Summary。
+    menu::ResultSummary resultSummary() const { return summary(); }
+    menu::FailureView failureSummary() const { return failureView(); }
 
 private:
     DebugInfo(friend class SelfTest;)
@@ -78,7 +79,7 @@ private:
     // 标准战役台本：运行时提交给 Games。
     static games::Script standardScript(int index);
     std::vector<menu::Main::Card> cards() const;
-    menu::Result::Summary summary() const;
+    menu::ResultSummary summary() const;
 
     void startLevel(int index);
     void startCampaign(int index);
@@ -90,7 +91,7 @@ private:
     void enterMatchScreen();
 
     menu::Room::View roomView() const;
-    menu::Failure::View failureView() const;
+    menu::FailureView failureView() const;
 
     std::vector<Games::Level> levels_;
     std::vector<Games::Level> campaignLevels_;
@@ -99,8 +100,6 @@ private:
     menu::Map map_;
     menu::Match match_;
     menu::Room room_;
-    menu::Failure failure_;
-    menu::Result result_;
     menu::Editor editor_;
     menu::Depot depot_;
     menu::Armory armory_;
