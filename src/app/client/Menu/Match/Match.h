@@ -51,6 +51,8 @@ public:
     bool restart();
     // 房间/内嵌服务端已存在时，直接在原地开下一局；不重建服务器和连接。
     bool restartInPlace();
+    // 房间宿主在结果页返回房间：服务端停止本局并广播进入房间，不重开对局。
+    bool returnToRoom();
     bool active() const { return games_ != nullptr || client_ != nullptr; }
     bool lobby() const;
     bool failed() const;
@@ -109,6 +111,7 @@ private:
     void startLocal(const Games::Level &level);
     void startNetwork(const Games::Level &level);
     void startHostRoom(const Games::Level &level);
+    void claimAdminIfNeeded();
     void renderLobby();
 
     Mode mode_ = Mode::Network;
@@ -117,6 +120,7 @@ private:
     QString error_;
     Games::Level level_;
     bool hasLevel_ = false;
+    bool adminClaimed_ = false;
 
     std::unique_ptr<Games> games_;
     std::unique_ptr<client::GameClient> client_;

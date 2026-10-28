@@ -254,10 +254,29 @@ bool deserializeMatchEnd(const QByteArray &payload, MatchEndMessage *message,
                        error);
 }
 
+QByteArray serializeClaimAdmin(const ClaimAdminMessage &message)
+{
+    return serialize([&](QDataStream &stream) { stream << message.sessionId; });
+}
+
+bool deserializeClaimAdmin(const QByteArray &payload, ClaimAdminMessage *message,
+                           QString *error)
+{
+    if (message == nullptr) {
+        setError(error, QStringLiteral("null claim-admin destination"));
+        return false;
+    }
+    return deserialize(payload,
+                       [&](QDataStream &stream) {
+                           stream >> message->sessionId;
+                           return stream.status() == QDataStream::Ok;
+                       },
+                       error);
+}
 QByteArray serializeRoomList(const RoomListMessage &message)
 {
     return serialize([&](QDataStream &stream) {
-        stream << quint32(message.rooms.size());
+        stream << quint32(message.rooms.size()) << message.enterRoom;
         for (const RoomInfo &room : message.rooms) {
             stream << room.name << qint32(room.players)
                    << qint32(room.maxPlayers) << room.playing;
@@ -284,6 +303,7 @@ bool deserializeRoomList(const QByteArray &payload, RoomListMessage *message,
             if (!readCount(stream, &count, kMaxSnapshotItems, error)) {
                 return false;
             }
+            stream >> message->enterRoom;
             message->rooms.clear();
             message->rooms.reserve(count);
             for (quint32 i = 0; i < count; ++i) {
@@ -370,6 +390,20 @@ bool decodeMatchEnd(const QByteArray &frame, MatchEndMessage *message, QString *
                          error);
 }
 
+QByteArray encodeClaimAdmin(const ClaimAdminMessage &message, quint16 version)
+{
+    const QByteArray payload = serializeClaimAdmin(message);
+    return payload.isEmpty() ? QByteArray()
+                             : frameMessage(MessageType::ClaimAdmin, payload, version);
+}
+
+bool decodeClaimAdmin(const QByteArray &frame, ClaimAdminMessage *message,
+                      QString *error)
+{
+    QByteArray payload;
+    return decodeMessageFrame(frame, MessageType::ClaimAdmin, &payload, error)
+           && deserializeClaimAdmin(payload, message, error);
+}
 QByteArray encodeRoomList(const RoomListMessage &message, quint16 version)
 {
     return encodeMessage(MessageType::RoomList, message, serializeRoomList, version);

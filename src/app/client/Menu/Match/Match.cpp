@@ -87,9 +87,29 @@ bool Match::restartInPlace()
     if (!hasLevel_ || server_ == nullptr || client_ == nullptr) {
         return false;
     }
+    claimAdminIfNeeded();
     QString startError;
     if (!server_->startMatch(level_, &startError)) {
         error_ = startError;
+        return false;
+    }
+    error_.clear();
+    return true;
+}
+
+bool Match::returnToRoom()
+{
+    if (server_ == nullptr || client_ == nullptr) {
+        return false;
+    }
+    claimAdminIfNeeded();
+    if (!adminClaimed_) {
+        error_ = QStringLiteral("admin session has not been claimed");
+        return false;
+    }
+    QString returnError;
+    if (!server_->returnToRoom(&returnError)) {
+        error_ = returnError;
         return false;
     }
     error_.clear();
@@ -177,6 +197,7 @@ void Match::stop()
     error_.clear();
     level_ = Games::Level{};
     hasLevel_ = false;
+    adminClaimed_ = false;
 }
 
 bool Match::failed() const
@@ -196,6 +217,9 @@ bool Match::inRoom() const
 {
     if (games_ != nullptr || client_ == nullptr || failed()) {
         return false;
+    }
+    if (client_->inLobby()) {
+        return true;
     }
     if (client_->snapshotCount() > 0 || client_->matchEnded()) {
         return false;
@@ -294,6 +318,11 @@ bool Match::startRoomMatch()
     if (server_->running()) {
         return true;   // 重复 ENTER 不重开对局
     }
+    claimAdminIfNeeded();
+    if (!adminClaimed_) {
+        error_ = QStringLiteral("admin session has not been claimed");
+        return false;
+    }
     QString startError;
     if (!server_->startMatch(level_, &startError)) {
         error_ = startError;
@@ -314,6 +343,7 @@ void Match::dissolveRoom()
     server_.reset();
     games_.reset();
     error_.clear();
+    adminClaimed_ = false;
 }
 
 QString Match::failureTitle() const
@@ -370,8 +400,25 @@ QString Match::failureEndpoint() const
     return QString();
 }
 
+void Match::claimAdminIfNeeded()
+{
+    if (adminClaimed_ || server_ == nullptr || client_ == nullptr) {
+        return;
+    }
+    if (!client_->welcomed() || client_->sessionId() == 0) {
+        return;
+    }
+    QString error;
+    if (server_->claimAdmin(client_->sessionId(), &error)) {
+        adminClaimed_ = true;
+    } else {
+        error_ = error;
+    }
+}
+
 void Match::update(float dt)
 {
+    claimAdminIfNeeded();
     if (games_) {
         games_->update(dt);
     } else if (client_) {

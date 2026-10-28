@@ -165,6 +165,59 @@ bool GameServer::openRoom(const QString &name, QString *error)
     return true;
 }
 
+bool GameServer::claimAdmin(quint32 sessionId, QString *error)
+{
+    for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+        if (it->id == sessionId && it->welcomed) {
+            adminSessionId_ = sessionId;
+            rooms_.setHostSession(sessionId);
+            broadcastRoomList();
+            return true;
+        }
+    }
+    if (error != nullptr) {
+        *error = QStringLiteral("admin session not found");
+    }
+    return false;
+}
+
+bool GameServer::returnToRoom(QString *error)
+{
+    if (simulation_ == nullptr && !rooms_.isOpen()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("no room or match to return from");
+        }
+        return false;
+    }
+    if (!sessions_.isEmpty()) {
+        bool adminPresent = false;
+        for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+            if (it->id == adminSessionId_) {
+                adminPresent = true;
+                break;
+            }
+        }
+        if (!adminPresent) {
+            if (error != nullptr) {
+                *error = QStringLiteral("only the admin can return the room");
+            }
+            return false;
+        }
+    }
+    tickTimer_.stop();
+    simulation_.reset();
+    snapshot_.clear();
+    matchPlayers_.clear();
+    for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+        it->inMatch = false;
+    }
+    matchEndSent_ = true;
+    accumulator_ = 0.0;
+    rooms_.setPlaying(false);
+    broadcastRoomList(true);
+    return true;
+}
+
 void GameServer::dissolveRoom(const QString &reason)
 {
     if (!rooms_.isOpen() && sessions_.isEmpty() && !tcpServer_.isListening()) {
@@ -182,6 +235,7 @@ void GameServer::dissolveRoom(const QString &reason)
     rooms_.reset();
     tcpServer_.close();
     controllerSocket_ = nullptr;
+    adminSessionId_ = 0;
     localHostRoom_ = false;
     const QList<QTcpSocket *> sockets = sessions_.keys();
     for (QTcpSocket *socket : sockets) {
@@ -420,6 +474,7 @@ void GameServer::handleFrame(QTcpSocket *socket, const QByteArray &frame)
     case net::MessageType::Event:
     case net::MessageType::MatchEnd:
     case net::MessageType::RoomList:
+    case net::MessageType::ClaimAdmin:
         reject(socket, QStringLiteral("server-only message type received from client"));
         break;
     default:
@@ -499,6 +554,25 @@ bool GameServer::startMatch(const games::GameSimulation::Level &level, QString *
         // 兼容直接调用 startMatch() 的宿主 / 测试：没有显式房间时补一个。
         rooms_.open(QStringLiteral("NEON CORE 房间"),
                     controllerSocket_ != nullptr ? sessions_.value(controllerSocket_).id : 0);
+    }
+
+    if (!sessions_.isEmpty()) {
+        bool adminPresent = adminSessionId_ != 0;
+        if (adminPresent) {
+            adminPresent = false;
+            for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
+                if (it->id == adminSessionId_ && it->welcomed) {
+                    adminPresent = true;
+                    break;
+                }
+            }
+        }
+        if (!adminPresent) {
+            if (error != nullptr) {
+                *error = QStringLiteral("admin must claim its session before starting");
+            }
+            return false;
+        }
     }
 
     // 这一局拿到飞机的会话：开局时已 welcomed 的会话，按 playerId 升序。
@@ -586,6 +660,16 @@ bool GameServer::handleControlFrame(const QByteArray &frame, QString *error)
         return false;
     }
     switch (header.type) {
+    case net::MessageType::ClaimAdmin: {
+        net::ClaimAdminMessage claim;
+        if (!net::deserializeClaimAdmin(payload, &claim, &decodeError)) {
+            if (error != nullptr) {
+                *error = decodeError;
+            }
+            return false;
+        }
+        return claimAdmin(claim.sessionId, error);
+    }
     case net::MessageType::StartMatch: {
         net::StartMatchMessage request;
         if (!net::deserializeStartMatch(payload, &request, &decodeError)) {
@@ -715,7 +799,7 @@ void GameServer::onTick()
     }
 }
 
-void GameServer::sendRoomList(QTcpSocket *socket)
+void GameServer::sendRoomList(QTcpSocket *socket, bool enterRoom)
 {
     auto it = sessions_.find(socket);
     if (it == sessions_.end() || !it->welcomed) {
@@ -732,6 +816,7 @@ void GameServer::sendRoomList(QTcpSocket *socket)
     }
     const Room &room = rooms_.room();
     net::RoomListMessage message;
+    message.enterRoom = enterRoom;
     message.rooms.reserve(1);
     net::RoomInfo info;
     info.name = room.name;
@@ -758,14 +843,14 @@ void GameServer::sendRoomList(QTcpSocket *socket)
     }
 }
 
-void GameServer::broadcastRoomList()
+void GameServer::broadcastRoomList(bool enterRoom)
 {
     if (!rooms_.isOpen()) {
         return;
     }
     for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
         if (it->welcomed && it.key() != nullptr) {
-            sendRoomList(it.key());
+            sendRoomList(it.key(), enterRoom);
         }
     }
 }

@@ -116,8 +116,15 @@ struct RoomInfo {
 };
 
 // 单房间模型：列表保留一个元素，便于以后扩展多房间而不改外层帧。
+struct ClaimAdminMessage {
+    quint32 sessionId = 0;
+    bool operator==(const ClaimAdminMessage &) const = default;
+};
+
 struct RoomListMessage {
     std::vector<RoomInfo> rooms;
+    // Host 从结果页“重新部署”时置 true：客户端从结算页回到房间。
+    bool enterRoom = false;
 
     bool operator==(const RoomListMessage &) const = default;
 };
@@ -142,6 +149,10 @@ bool deserializeEvent(const QByteArray &payload, EventMessage *message,
 QByteArray serializeMatchEnd(const MatchEndMessage &message);
 bool deserializeMatchEnd(const QByteArray &payload, MatchEndMessage *message,
                          QString *error = nullptr);
+
+QByteArray serializeClaimAdmin(const ClaimAdminMessage &message);
+bool deserializeClaimAdmin(const QByteArray &payload, ClaimAdminMessage *message,
+                           QString *error = nullptr);
 
 QByteArray serializeRoomList(const RoomListMessage &message);
 bool deserializeRoomList(const QByteArray &payload, RoomListMessage *message,
@@ -172,6 +183,11 @@ QByteArray encodeMatchEnd(const MatchEndMessage &message,
                           quint16 version = kProtocolVersion);
 bool decodeMatchEnd(const QByteArray &frame, MatchEndMessage *message,
                     QString *error = nullptr);
+
+QByteArray encodeClaimAdmin(const ClaimAdminMessage &message,
+                          quint16 version = kProtocolVersion);
+bool decodeClaimAdmin(const QByteArray &frame, ClaimAdminMessage *message,
+                      QString *error = nullptr);
 
 QByteArray encodeRoomList(const RoomListMessage &message,
                           quint16 version = kProtocolVersion);

@@ -220,6 +220,11 @@ void Menu::update(float dt)
     }
     if (screen_ == Screen::Result && match_.active()) {
         match_.update(dt);
+        if (match_.failed()) {
+            screen_ = Screen::Failure;
+        } else if (match_.inRoom()) {
+            screen_ = Screen::Room;
+        }
         return;
     }
     if (screen_ == Screen::Failure) {
@@ -350,8 +355,13 @@ void Menu::startLevel(int index)
 
 void Menu::retry()
 {
-    // 房间/内嵌服务端还活着时原地重开：客户端连接和房间都不重建，
-    // 其他玩家不会看到“房间已解散”。
+    // 房主在结果页“重新部署”先回到房间，由房主再次 ENTER 开局；
+    // 客户端收到 enterRoom 的 RoomList 后从结算页回到房间。
+    if (match_.roomHost() && match_.returnToRoom()) {
+        screen_ = Screen::Room;
+        BaseService.keyRelease(Qt::Key_Escape);
+        return;
+    }
     if (match_.restartInPlace()) {
         screen_ = Screen::Match;
         BaseService.keyRelease(Qt::Key_Escape);

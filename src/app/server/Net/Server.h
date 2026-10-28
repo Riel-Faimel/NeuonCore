@@ -57,6 +57,11 @@ public:
     // 房间的开/关与人数以服务端为准，客户端只收到 RoomList。
     bool openRoom(const QString &name, QString *error = nullptr);
     void dissolveRoom(const QString &reason = QStringLiteral("房间已解散"));
+    // 宿主连接拿到 Welcome 的 sessionId 后，通过控制通道声明管理员；
+    // 只有管理员能 startMatch / returnToRoom。
+    bool claimAdmin(quint32 sessionId, QString *error = nullptr);
+    bool returnToRoom(QString *error = nullptr);
+    quint32 adminSessionId() const { return adminSessionId_; }
     QString roomName() const;
     int roomPlayers() const;
     int roomMaxPlayers() const;
@@ -100,8 +105,8 @@ private:
     void sendRoomClosed(const QString &reason);
     void reject(QTcpSocket *socket, const QString &reason);
     void broadcastSnapshot();
-    void sendRoomList(QTcpSocket *socket);
-    void broadcastRoomList();
+    void sendRoomList(QTcpSocket *socket, bool enterRoom = false);
+    void broadcastRoomList(bool enterRoom = false);
     int welcomedCount() const;
     void broadcastEvent(const net::EventMessage &event);
     void broadcastToWelcomed(const QByteArray &frame);
@@ -120,6 +125,7 @@ private:
     quint32 nextSessionId_ = 1;
     int rejectedClients_ = 0;
     bool matchEndSent_ = false;
+    quint32 adminSessionId_ = 0;
     // openRoom() 由本地宿主调用：只有这种房间才把第一个会话标成房主。
     // 独立 NeonCoreServer 的 TCP 客户端都只是加入者，控制权在 stdio 宿主。
     bool localHostRoom_ = false;

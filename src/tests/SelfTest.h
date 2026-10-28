@@ -1230,6 +1230,10 @@ public:
                                           && !tcpClient.rooms().empty();
                                }, 3000),
                                QStringLiteral("server presents a room before any match"));
+            success &= require(tcpServer.claimAdmin(tcpClient.sessionId()),
+                               QStringLiteral("host claims admin with its session id"));
+            success &= require(tcpServer.adminSessionId() == tcpClient.sessionId(),
+                               QStringLiteral("server records the admin session"));
             success &= require(tcpServer.startMatch(tcpLevel),
                                QStringLiteral("host starts the authoritative match locally"));
             success &= require(pumpUntil([&] { return tcpClient.snapshotCount() > 0; }, 3000),
@@ -1429,6 +1433,8 @@ public:
                                        && alpha.playerId() != beta.playerId()
                                        && multiServer.roomPlayers() == 2,
                                    QStringLiteral("server assigns each session a stable slot"));
+                success &= require(multiServer.claimAdmin(alpha.sessionId()),
+                                   QStringLiteral("first session claims admin"));
                 success &= require(multiServer.startMatch(multiLevel),
                                    QStringLiteral("host starts a match with two sessions"));
                 success &= require(pumpUntil([&] {
@@ -1745,21 +1751,30 @@ public:
             joinMenu.match_.gameClient() != nullptr
                 ? joinMenu.match_.gameClient()->sessionId()
                 : 0;
-        const int joinSnapshotsBeforeRestart =
-            joinMenu.match_.gameClient() != nullptr
-                ? joinMenu.match_.gameClient()->snapshotCount()
-                : 0;
-        success &= require(hostMenu.match_.restartInPlace(),
-                           QStringLiteral("host can start the next match in place"));
+        hostMenu.retry();
+        success &= require(hostMenu.screen() == Menu::Screen::Room
+                               && hostMenu.match_.localServer() != nullptr
+                               && !hostMenu.match_.localServer()->running(),
+                           QStringLiteral("host retry returns to the room, not a new match"));
+        success &= require(pumpMenu(joinMenu, [&] {
+                               return joinMenu.screen() == Menu::Screen::Room
+                                      && joinMenu.match_.gameClient() != nullptr
+                                      && joinMenu.match_.gameClient()->sessionId()
+                                             == joinSessionBeforeRestart;
+                           }, 4000),
+                           QStringLiteral("joined client returns to the room on host retry"));
+
+        hostMenu.keyPress(Qt::Key_Return);
+        success &= require(hostMenu.match_.localServer()->running(),
+                           QStringLiteral("host starts the next match from the room"));
         success &= require(pumpMenu(joinMenu, [&] {
                                return joinMenu.screen() == Menu::Screen::Match
                                       && joinMenu.match_.gameClient() != nullptr
                                       && joinMenu.match_.gameClient()->sessionId()
                                              == joinSessionBeforeRestart
-                                      && joinMenu.match_.gameClient()->snapshotCount()
-                                             > joinSnapshotsBeforeRestart;
+                                      && joinMenu.match_.gameClient()->snapshotCount() > 0;
                            }, 4000),
-                           QStringLiteral("in-place host retry keeps the joined client connected"));
+                           QStringLiteral("joined client enters the restarted match"));
 
         hostMenu.returnToMenu();
         success &= require(hostMenu.match_.localServer() == nullptr,

@@ -358,6 +358,13 @@ void GameClient::handleRoomList(const QByteArray &payload)
         return;
     }
     rooms_ = std::move(message.rooms);
+    if (message.enterRoom) {
+        matchEnded_ = false;
+        matchEnd_.reason.clear();
+        inLobby_ = true;
+        hadRoom_ = true;
+        return;
+    }
     bool lobby = false;
     for (const net::RoomInfo &room : rooms_) {
         if (!room.playing) {

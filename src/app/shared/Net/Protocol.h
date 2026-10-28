@@ -40,6 +40,7 @@ enum class MessageType : quint16 {
     Event = 6,        // S→C：音效、横幅、震屏/闪屏等表现事件
     MatchEnd = 7,     // S→C：胜负、统计、可重试
     RoomList = 8,     // S→C：没有对局时，服务端展示房间而不是对局
+    ClaimAdmin = 10,  // 宿主→S（stdio/本地）：把已分配的 sessionId 声明为管理员
 };
 
 struct MessageHeader {
