@@ -71,7 +71,7 @@ Item {
 
         Canvas {
             anchors.fill: parent
-            opacity: 0.55
+            opacity: 1.0
             onPaint: {
                 const ctx = getContext("2d")
                 ctx.clearRect(0, 0, width, height)
@@ -116,7 +116,7 @@ Item {
         Text {
             renderType: Text.NativeRendering
             anchors.horizontalCenter: parent.horizontalCenter
-            y: 264
+            y: 267
             text: "N E O N   C O R E   P R O T O C O L"
             color: root.cyan
             opacity: 0.9
@@ -128,7 +128,7 @@ Item {
         Text {
             renderType: Text.NativeRendering
             anchors.horizontalCenter: parent.horizontalCenter
-            y: 322
+            y: 324
             text: "选择行动。每一次部署，都会改写星核的命运。"
             color: root.text
             opacity: 0.86
@@ -139,7 +139,7 @@ Item {
         Text {
             renderType: Text.NativeRendering
             anchors.horizontalCenter: parent.horizontalCenter
-            y: 362
+            y: 366
             text: "SELECT OPERATION"
             color: root.mutedColor
             opacity: 0.75
@@ -169,7 +169,7 @@ Item {
                         anchors.fill: parent
                         radius: 12
                         color: card.active ? "#081624" : "#060d18"
-                        opacity: card.active ? 0.94 : 0.82
+                        opacity: card.active ? 0.92 : 0.75
                         border.width: 1
                         border.color: card.active ? root.cyan : "#305b70"
                     }
@@ -188,7 +188,7 @@ Item {
                     Text {
                         renderType: Text.NativeRendering
                         x: 24
-                        y: 14
+                        y: 20
                         text: "0" + (index + 1)
                         color: card.active ? root.cyan : "#305b70"
                         font.family: "Bahnschrift"
@@ -198,7 +198,7 @@ Item {
                     Text {
                         renderType: Text.NativeRendering
                         x: 24
-                        y: 42
+                        y: 52
                         text: modelData.name
                         color: card.active ? root.ink : "#bfd8e6"
                         font.family: "Microsoft YaHei"
@@ -208,7 +208,7 @@ Item {
                     Text {
                         renderType: Text.NativeRendering
                         x: 24
-                        y: 78
+                        y: 86
                         text: modelData.subtitle
                         color: root.mutedColor
                         font.family: "Microsoft YaHei"
@@ -277,7 +277,7 @@ Item {
             label: "商店"
             icon: "crate"
             accent: "#ffab4e"
-            restColor: "#e8c98e"
+            restColor: "#c4b28c"
             onClicked: {
                 root.requestedAction = 3
                 root.requestedLevel = -1

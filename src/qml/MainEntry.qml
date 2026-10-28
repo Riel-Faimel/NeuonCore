@@ -15,7 +15,7 @@ Item {
         anchors.fill: parent
         radius: 10
         color: "#060e19"
-        opacity: 0.92
+        opacity: 0.78
         border.width: 1
         border.color: mouse.containsMouse ? root.accent : "#305b70"
     }

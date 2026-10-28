@@ -42,7 +42,7 @@ Item {
 
         Canvas {
             anchors.fill: parent
-            opacity: 0.55
+            opacity: 1.0
             onPaint: {
                 const ctx = getContext("2d")
                 ctx.clearRect(0, 0, width, height)
@@ -79,10 +79,10 @@ Item {
         }
 
         Canvas {
-            x: 516
-            y: 158
-            width: 44
-            height: 44
+            x: 508
+            y: 156
+            width: 40
+            height: 40
             onPaint: {
                 const ctx = getContext("2d")
                 ctx.clearRect(0, 0, width, height)
@@ -101,7 +101,7 @@ Item {
             renderType: Text.NativeRendering
             anchors.right: parent.right
             anchors.rightMargin: 34
-            y: 22
+            y: 30
             text: "积分  " + root.score
             color: root.amber
             font.family: "Bahnschrift"
@@ -116,7 +116,7 @@ Item {
             height: 290
             radius: 12
             color: "#081420"
-            opacity: 0.95
+            opacity: 0.88
             border.width: 1
             border.color: root.amber
 
@@ -179,14 +179,14 @@ Item {
             Text {
                 renderType: Text.NativeRendering
                 x: 40
-                y: 118
+                y: 128
                 width: 600
                 wrapMode: Text.WordWrap
                 text: "右键在光标处布置，敌人进入感应范围即引爆，对范围内敌人造成大量伤害。一次性消耗，购买后进入库存。"
                 color: root.text
                 opacity: 0.88
                 font.family: "Microsoft YaHei"
-                font.pixelSize: 18
+                font.pixelSize: 19
                 lineHeight: 1.35
             }
 
@@ -203,7 +203,7 @@ Item {
                 renderType: Text.NativeRendering
                 x: 40
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 56
+                anchors.bottomMargin: 49
                 text: "持有  ×" + root.mines
                 color: root.text
                 font.family: "Microsoft YaHei"

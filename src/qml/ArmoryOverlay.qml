@@ -42,7 +42,7 @@ Item {
 
         Canvas {
             anchors.fill: parent
-            opacity: 0.55
+            opacity: 1.0
             onPaint: {
                 const ctx = getContext("2d")
                 ctx.clearRect(0, 0, width, height)
@@ -111,7 +111,7 @@ Item {
                         anchors.fill: parent
                         radius: 12
                         color: card.active ? "#091826" : "#060e19"
-                        opacity: card.active ? 0.96 : 0.84
+                        opacity: card.active ? 0.94 : 0.75
                         border.width: 1
                         border.color: card.active ? card.accent : "#305b70"
                     }
@@ -119,7 +119,7 @@ Item {
                     Text {
                         renderType: Text.NativeRendering
                         x: 18
-                        y: 14
+                        y: 20
                         text: modelData.equipped ? "EQUIPPED" : "LAUNCHER"
                         color: modelData.equipped ? "#53e8ff" : root.muted
                         font.family: "Bahnschrift"
@@ -130,7 +130,7 @@ Item {
                     Text {
                         renderType: Text.NativeRendering
                         x: 18
-                        y: 42
+                        y: 54
                         text: modelData.name
                         color: root.ink
                         font.family: "Microsoft YaHei"
@@ -140,7 +140,7 @@ Item {
                     Text {
                         renderType: Text.NativeRendering
                         x: 18
-                        y: 82
+                        y: 86
                         text: modelData.subtitle
                         color: root.muted
                         opacity: 0.82

@@ -45,7 +45,7 @@ Item {
 
         Canvas {
             anchors.fill: parent
-            opacity: 0.55
+            opacity: 1.0
             onPaint: {
                 const ctx = getContext("2d")
                 ctx.clearRect(0, 0, width, height)
@@ -88,7 +88,7 @@ Item {
         }
 
         Canvas {
-            x: 536
+            x: 527
             y: 169
             width: 34
             height: 34
@@ -115,7 +115,7 @@ Item {
         Text {
             renderType: Text.NativeRendering
             anchors.horizontalCenter: parent.horizontalCenter
-            y: 222
+            y: 216
             text: "音量调整会立即生效并保存"
             color: root.muted
             opacity: 0.82
@@ -145,7 +145,7 @@ Item {
                     anchors.fill: parent
                     radius: 12
                     color: row.active ? "#081624" : "#060d18"
-                    opacity: row.active ? 0.94 : 0.82
+                    opacity: row.active ? 0.92 : 0.75
                     border.width: 1
                     border.color: row.active ? root.cyan : "#305b70"
                 }
