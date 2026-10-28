@@ -725,6 +725,18 @@ public:
                            QStringLiteral("menu enters victory result"));
         menu.render();
 
+        {
+            // 多人联机时最后一帧快照可能仍是 Playing/Defeat；结算必须信 MatchEnd。
+            menu::Match networkResult;
+            networkResult.client_ = std::make_unique<client::GameClient>();
+            net::MatchEndMessage end;
+            end.victory = true;
+            networkResult.client_->matchEnd_ = end;
+            networkResult.client_->matchEnded_ = true;
+            success &= require(networkResult.state() == Games::State::Victory,
+                               QStringLiteral("network result uses authoritative MatchEnd victory"));
+        }
+
         log(QStringLiteral("Mid-script boss"));
         games::Script bossMid;
         bossMid.push_back(games::Wave{{games::EnemySpawn{
