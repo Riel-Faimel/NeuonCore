@@ -7,8 +7,6 @@
 
 #include <vector>
 
-class QPainter;
-
 namespace menu {
 
 // Main 组件：标题页。绘制标题、关卡卡、商店和设置入口，只做导航与命中测试，
@@ -37,9 +35,6 @@ public:
 
     void update(float dt, const std::vector<Card> &cards,
                 const Math::Vec2 &mouse, bool mouseActive);
-    void render(QPainter &painter, const std::vector<Card> &cards,
-                const Math::Vec2 &mouse, bool mouseActive, bool muted,
-                bool audioUnavailable);
 
     Command keyPress(int key, const std::vector<Card> &cards);
     Command mousePress(const Math::Vec2 &position, const std::vector<Card> &cards);
@@ -48,6 +43,8 @@ public:
     QRectF settingsButtonRect() const;
     QRectF shopButtonRect() const;
     QRectF armoryButtonRect() const;
+    int selected() const { return selected_; }
+    void select(int index) { selected_ = index; }
 
 private:
     int selected_ = 0;

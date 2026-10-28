@@ -2823,7 +2823,6 @@ public:
             menu.update(1.0f / 60.0f);
         }
         movePointer({GameConfig::ScreenWidth / 2.0f, 454.0f});
-        save(QStringLiteral("title.png"));
 
         // 星区地图
         menu.keyPress(Qt::Key_Return);
@@ -2860,7 +2859,6 @@ public:
         menu.mousePressLeft({float(settingsEntry.center().x()),
                              float(settingsEntry.center().y())});
         menu.mouseReleaseLeft();
-        save(QStringLiteral("settings.png"));
         menu.keyPress(Qt::Key_Escape);
 
         const QRectF customCard = menu.main_.levelRect(Menu::CustomLevelIndex, int(menu.levels_.size()));

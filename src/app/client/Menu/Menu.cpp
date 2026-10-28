@@ -113,6 +113,79 @@ menu::ResultSummary Menu::summary() const
     return summary;
 }
 
+QVariantList Menu::mainCards() const
+{
+    QVariantList list;
+    for (const menu::Main::Card &card : cards()) {
+        QVariantMap item;
+        item.insert(QStringLiteral("name"), card.name);
+        item.insert(QStringLiteral("subtitle"), card.subtitle);
+        item.insert(QStringLiteral("custom"), card.custom);
+        list.push_back(item);
+    }
+    return list;
+}
+
+int Menu::mainSelected() const
+{
+    return main_.selected();
+}
+
+void Menu::mainSelect(int index)
+{
+    if (index >= 0 && index < int(cards().size())) {
+        main_.select(index);
+    }
+}
+
+void Menu::mainActivate(int action, int level)
+{
+    switch (static_cast<menu::Main::Action>(action)) {
+    case menu::Main::Action::OpenMap:
+        map_.reset();
+        screen_ = Screen::Map;
+        BaseService.playSound(QStringLiteral("ui"));
+        break;
+    case menu::Main::Action::OpenEditor:
+        openEditor();
+        break;
+    case menu::Main::Action::OpenShop:
+        screen_ = Screen::Shop;
+        BaseService.playSound(QStringLiteral("ui"));
+        break;
+    case menu::Main::Action::OpenArmory:
+        armory_.open();
+        screen_ = Screen::Armory;
+        BaseService.playSound(QStringLiteral("ui"));
+        break;
+    case menu::Main::Action::OpenSettings:
+        settings_.reset();
+        screen_ = Screen::Settings;
+        BaseService.playSound(QStringLiteral("ui"));
+        break;
+    case menu::Main::Action::None:
+        break;
+    }
+    if (level >= 0 && level < int(levels_.size())) {
+        level_ = level;
+    }
+}
+
+int Menu::settingsSelected() const
+{
+    return settings_.selected();
+}
+
+void Menu::settingsSelect(int row)
+{
+    settings_.select(row);
+}
+
+void Menu::settingsSetVolume(int row, float value)
+{
+    settings_.setVolume(row, value);
+}
+
 const QImage &Menu::frame() const
 {
     if (screen_ == Screen::Match && match_.active()) {
@@ -246,6 +319,10 @@ void Menu::render(const QSize &target, qreal pixelRatio)
                                                  GameConfig::ScreenHeight);
     const qreal sx = qreal(size.width()) / GameConfig::ScreenWidth;
     const qreal sy = qreal(size.height()) / GameConfig::ScreenHeight;
+    if (screen_ == Screen::Main || screen_ == Screen::Settings) {
+        // Main/Settings 由 QML 覆盖层绘制。
+        return;
+    }
     auto prepare = [&]() {
         if (frame_.size() != size) {
             frame_ = QImage(size, QImage::Format_ARGB32_Premultiplied);
@@ -291,11 +368,6 @@ void Menu::render(const QSize &target, qreal pixelRatio)
             depot_.render(painter);
         } else if (screen_ == Screen::Armory) {
             armory_.render(painter);
-        } else if (screen_ == Screen::Settings) {
-            settings_.render(painter);
-        } else {
-            main_.render(painter, cards(), mouse_, mouseActive_, BaseService.muted(),
-                         audioRequested_ && !BaseService.audioEnabled());
         }
     }
     finish();

@@ -70,6 +70,13 @@ public:
     // 结算 UI 只在 QML ResultOverlay 中；C++ 只提供只读 Summary。
     menu::ResultSummary resultSummary() const { return summary(); }
     menu::FailureView failureSummary() const { return failureView(); }
+    QVariantList mainCards() const;
+    int mainSelected() const;
+    void mainSelect(int index);
+    void mainActivate(int action, int level);
+    int settingsSelected() const;
+    void settingsSelect(int row);
+    void settingsSetVolume(int row, float value);
 
 private:
     DebugInfo(friend class SelfTest;)

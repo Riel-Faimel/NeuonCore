@@ -24,6 +24,7 @@
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QUrl>
+#include <QVariantList>
 #include <QPixmap>
 #include <QPolygonF>
 #include <QScreen>
@@ -77,6 +78,8 @@ public:
         timer_.start();
         setupResultOverlay();
         setupFailureOverlay();
+        setupMainOverlay();
+        setupSettingsOverlay();
     }
 
     ~GameWindow() override { hideGameCursor(false); }
@@ -148,7 +151,8 @@ protected:
 
     bool eventFilter(QObject *watched, QEvent *event) override
     {
-        if (watched != resultOverlay_ && watched != failureOverlay_) {
+        if (watched != resultOverlay_ && watched != failureOverlay_
+            && watched != mainOverlay_ && watched != settingsOverlay_) {
             return QWidget::eventFilter(watched, event);
         }
         if (event->type() == QEvent::MouseMove
@@ -367,6 +371,127 @@ private:
         failureOverlay_->raise();
     }
 
+    void setupMainOverlay()
+    {
+        mainOverlay_ = new QQuickWidget(this);
+        mainOverlay_->setResizeMode(QQuickWidget::SizeRootObjectToView);
+        mainOverlay_->setClearColor(Qt::transparent);
+        mainOverlay_->setFocusPolicy(Qt::NoFocus);
+        mainOverlay_->setCursor(Qt::BlankCursor);
+
+        const QString appQml = QCoreApplication::applicationDirPath()
+                               + QStringLiteral("/qml/MainOverlay.qml");
+        const QString sourceQml = QDir::currentPath()
+                                  + QStringLiteral("/src/qml/MainOverlay.qml");
+        const QString path = QFileInfo::exists(appQml) ? appQml : sourceQml;
+        mainOverlay_->engine()->addImportPath(
+            QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
+        mainOverlay_->setSource(QUrl::fromLocalFile(path));
+        if (mainOverlay_->status() != QQuickWidget::Ready) {
+            delete mainOverlay_;
+            mainOverlay_ = nullptr;
+            return;
+        }
+        mainQmlRoot_ = mainOverlay_->rootObject();
+        mainOverlay_->setMouseTracking(true);
+        mainOverlay_->installEventFilter(this);
+        mainOverlay_->setGeometry(rect());
+        mainOverlay_->hide();
+    }
+
+    void syncMainOverlay()
+    {
+        if (mainOverlay_ == nullptr || mainQmlRoot_ == nullptr) {
+            return;
+        }
+        if (menu_.screen() != Menu::Screen::Main) {
+            mainOverlay_->hide();
+            return;
+        }
+        syncQmlPointer(mainQmlRoot_);
+        const QVariantList cards = menu_.mainCards();
+        if (cards != mainCardsCache_) {
+            mainCardsCache_ = cards;
+            mainQmlRoot_->setProperty("cards", cards);
+        }
+        mainQmlRoot_->setProperty("selected", menu_.mainSelected());
+        mainQmlRoot_->setProperty("muted", BaseService.muted());
+        if (mainQmlRoot_->property("selectRequested").toBool()) {
+            mainQmlRoot_->setProperty("selectRequested", false);
+            menu_.mainSelect(mainQmlRoot_->property("requestedSelect").toInt());
+        }
+        if (mainQmlRoot_->property("activateRequested").toBool()) {
+            mainQmlRoot_->setProperty("activateRequested", false);
+            menu_.mainActivate(mainQmlRoot_->property("requestedAction").toInt(),
+                               mainQmlRoot_->property("requestedLevel").toInt());
+            return;
+        }
+        mainOverlay_->setGeometry(rect());
+        mainOverlay_->show();
+        mainOverlay_->raise();
+    }
+
+    void setupSettingsOverlay()
+    {
+        settingsOverlay_ = new QQuickWidget(this);
+        settingsOverlay_->setResizeMode(QQuickWidget::SizeRootObjectToView);
+        settingsOverlay_->setClearColor(Qt::transparent);
+        settingsOverlay_->setFocusPolicy(Qt::NoFocus);
+        settingsOverlay_->setCursor(Qt::BlankCursor);
+
+        const QString appQml = QCoreApplication::applicationDirPath()
+                               + QStringLiteral("/qml/SettingsOverlay.qml");
+        const QString sourceQml = QDir::currentPath()
+                                  + QStringLiteral("/src/qml/SettingsOverlay.qml");
+        const QString path = QFileInfo::exists(appQml) ? appQml : sourceQml;
+        settingsOverlay_->engine()->addImportPath(
+            QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
+        settingsOverlay_->setSource(QUrl::fromLocalFile(path));
+        if (settingsOverlay_->status() != QQuickWidget::Ready) {
+            delete settingsOverlay_;
+            settingsOverlay_ = nullptr;
+            return;
+        }
+        settingsQmlRoot_ = settingsOverlay_->rootObject();
+        settingsOverlay_->setMouseTracking(true);
+        settingsOverlay_->installEventFilter(this);
+        settingsOverlay_->setGeometry(rect());
+        settingsOverlay_->hide();
+    }
+
+    void syncSettingsOverlay()
+    {
+        if (settingsOverlay_ == nullptr || settingsQmlRoot_ == nullptr) {
+            return;
+        }
+        if (menu_.screen() != Menu::Screen::Settings) {
+            settingsOverlay_->hide();
+            return;
+        }
+        syncQmlPointer(settingsQmlRoot_);
+        settingsQmlRoot_->setProperty("sound", BaseService.soundVolume());
+        settingsQmlRoot_->setProperty("music", BaseService.musicVolume());
+        settingsQmlRoot_->setProperty("selected", menu_.settingsSelected());
+        if (settingsQmlRoot_->property("volumeRequested").toBool()) {
+            settingsQmlRoot_->setProperty("volumeRequested", false);
+            menu_.settingsSetVolume(
+                settingsQmlRoot_->property("requestedRow").toInt(),
+                settingsQmlRoot_->property("requestedValue").toReal());
+        }
+        if (settingsQmlRoot_->property("selectRequested").toBool()) {
+            settingsQmlRoot_->setProperty("selectRequested", false);
+            menu_.settingsSelect(settingsQmlRoot_->property("requestedSelect").toInt());
+        }
+        if (settingsQmlRoot_->property("backRequested").toBool()) {
+            settingsQmlRoot_->setProperty("backRequested", false);
+            menu_.keyPress(Qt::Key_Escape);
+            return;
+        }
+        settingsOverlay_->setGeometry(rect());
+        settingsOverlay_->show();
+        settingsOverlay_->raise();
+    }
+
     void tick()
     {
         const qint64 elapsed = clock_.nsecsElapsed();
@@ -383,6 +508,8 @@ private:
         menu_.render(QSize(qRound(width() * dpr), qRound(height() * dpr)), dpr);
         syncResultOverlay();
         syncFailureOverlay();
+        syncMainOverlay();
+        syncSettingsOverlay();
         update();
     }
 
@@ -391,6 +518,11 @@ private:
     QQuickItem *resultQmlRoot_ = nullptr;
     QQuickWidget *failureOverlay_ = nullptr;
     QQuickItem *failureQmlRoot_ = nullptr;
+    QQuickWidget *mainOverlay_ = nullptr;
+    QQuickItem *mainQmlRoot_ = nullptr;
+    QQuickWidget *settingsOverlay_ = nullptr;
+    QQuickItem *settingsQmlRoot_ = nullptr;
+    QVariantList mainCardsCache_;
     QTimer timer_;
     QElapsedTimer clock_;
     bool centered_ = false;

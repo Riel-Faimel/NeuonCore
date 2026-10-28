@@ -144,7 +144,7 @@ cpp/src/
 
 | 组件 | 职责 |
 | --- | --- |
-| `Main` | 标题页：标题、关卡卡、商店/战备/设置入口；选中状态和命中测试 |
+| `Main` | QML 标题页；C++ 只保留卡片数据、几何和输入逻辑 |
 | `Map` | 星区地图：关卡节点、锁定状态、选择与进入 |
 | `Match` | 默认持有网络 `GameClient`（内嵌/远端 `GameServer`）+ `GameView`/`Renderer`；`--local`/测试时持有本地 `Games`。`Mode::Local` 直接开局、`Mode::Network` 单机立即开局/加入远端、`Mode::Host` 只开房等待 `startRoomMatch()`。负责开局、房间生命周期、输入转发、推进、渲染和失败信息 |
 | `Room` | 房间/大厅：显示服务端权威的房间名、人数、房主/你标记和等待状态；主机的 `ENTER` 开始、`X` 解散、`ESC` 离开，加入者只能 `ESC` 离开 |
@@ -153,7 +153,7 @@ cpp/src/
 | `Editor` | 自定义协议编辑：顶部单机/局域网主机/加入主机选项卡；单机与主机编辑台本，主机在波次下方追加端口，加入主机显示地址和端口 |
 | `Depot` | 补给站界面：展示钱包/库存，把购买意图转给全局 `Shop` |
 | `Armory` | 战备界面：展示/选择发射器，把装备意图转给全局 `Loadout` |
-| `Settings` | 音效 / 背景音乐音量，读写配置存储 |
+| `Settings` | QML 音量设置；C++ 只保留配置读写和键盘/鼠标逻辑 |
 
 `Menu` 自己只负责：
 
@@ -410,7 +410,7 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
             ├─ RandomService ──────► 随机引擎（全局单例）
             ├─ ShopService ────────► shop::Score / Inventory（全局单例，注册表 / ini）
             └─ Menu（持有四个关卡表；Widgets 组件 + QML 结算/失败覆盖层）
-               ├─ menu::Main ─────────► 关卡卡 / 商店与设置入口（数据由 Menu 提供）
+               ├─ QML MainOverlay ────► 关卡卡 / 商店与设置入口
 ├─ menu::Map ──────────► 星区地图节点（levels.json），Start → 开局
                ├─ menu::Room ────────► 服务端权威房间（房主开始/解散、加入者等待）
                ├─ QML FailureOverlay ─► 无法连接服务器 / 房间已解散（重试/返回）
@@ -430,7 +430,7 @@ GameWindow ──► BaseService.pointer*（指针位置/时钟/绘制）
                ├─ QML ResultOverlay ──► 只读 ResultSummary
                ├─ menu::Editor ───────► games::Script（自己持有）
                ├─ menu::Depot ────────► ShopService（buyMine）+ 只读钱包/库存
-               └─ menu::Settings ─────► BaseService 音量接口 + 配置存储
+               └─ QML SettingsOverlay ► BaseService 音量接口 + 配置存储
 
 NeonCoreServer 模式:
 QCoreApplication ──► server::GameServer ──► games::GameSimulation ──► Arena / Waves / Upgrades

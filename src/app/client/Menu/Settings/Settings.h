@@ -3,8 +3,8 @@
 #include "Math.h"
 
 #include <QRectF>
+#include <algorithm>
 
-class QPainter;
 
 namespace menu {
 
@@ -25,11 +25,13 @@ public:
     Action mousePress(const Math::Vec2 &position);
     void mouseMove(const Math::Vec2 &position);
     void mouseRelease();
-    void render(QPainter &painter) const;
 
     QRectF rowRect(int row) const;
     QRectF trackRect(int row) const;
     QRectF backRect() const;
+    int selected() const { return row_; }
+    void select(int row) { row_ = std::clamp(row, 0, 1); }
+    void setVolume(int row, float value);
 
 private:
     void adjust(int row, float delta);

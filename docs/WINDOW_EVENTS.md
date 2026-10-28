@@ -103,6 +103,22 @@ Menu::update(dt)
 
 ## QML 覆盖层
 
+### Main
+
+- 文件：`src/qml/MainOverlay.qml`；
+- 显示条件：`Menu::Screen::Main`；
+- 数据：`Menu::mainCards()`、`Menu::mainSelected()`；
+- 卡片/商店/战备/设置按钮通过 `requestedAction/requestedLevel/activateRequested` 交回 `Menu::mainActivate()`；
+- hover 通过 `requestedSelect/selectRequested` 交回 `Menu::mainSelect()`。
+
+### Settings
+
+- 文件：`src/qml/SettingsOverlay.qml`；
+- 显示条件：`Menu::Screen::Settings`；
+- 数据：`BaseService.soundVolume()/musicVolume()`、`Menu::settingsSelected()`；
+- 拖动音轨通过 `requestedRow/requestedValue/volumeRequested` 交回 `Menu::settingsSetVolume()`；
+- 返回通过 `backRequested` 转成 `Menu` 的 ESC。
+
 ### Result
 
 - 文件：`src/qml/ResultOverlay.qml`；
@@ -145,6 +161,7 @@ C++ Menu 的 `QImage` 以物理像素重新栅格化，因此菜单文字不会�
 
 ## 已知边界
 
-- 只有 Result/Failure 是 QML-only；Main/Map/Room/Editor/Depot/Armory/Settings/Match HUD 仍是 C++ Widgets。
+- Main/Settings/Result/Failure 是 QML-only；Map/Room/Editor/Depot/Armory/Match HUD 仍是 C++ Widgets。
+- 这四屏的 C++ 类只保留数据、几何和键盘/鼠标逻辑；`render()` 已不再参与运行时绘制。
 - QML 和 QPainter 的字体栅格化不保证逐像素一致。
 - QML 覆盖层的鼠标事件由 QML 处理；C++ 只镜像指针位置和按钮请求。
