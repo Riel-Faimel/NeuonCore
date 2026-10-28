@@ -21,6 +21,12 @@ GameClient::GameClient(QObject *parent) : QObject(parent)
     BaseService.setMouseActive(true);
 
     reconnectTimer_.setSingleShot(true);
+    connectTimer_.setSingleShot(true);
+    connect(&connectTimer_, &QTimer::timeout, this, [this] {
+        if (!welcomed_ && !failed_ && !closedByUser_) {
+            fail(QStringLiteral("连接服务器超时，房间不存在"));
+        }
+    });
     connect(&socket_, &QTcpSocket::connected, this, [this] { onConnected(); });
     connect(&socket_, &QTcpSocket::readyRead, this, [this] { onReadyRead(); });
     connect(&socket_, &QTcpSocket::disconnected, this, [this] { onDisconnected(); });
@@ -43,6 +49,7 @@ bool GameClient::connectToHost(const QString &host, quint16 port)
         return false;
     }
     reconnectTimer_.stop();
+    connectTimer_.start(5000);
     if (socket_.state() != QAbstractSocket::UnconnectedState) {
         socket_.abort();
     }
@@ -74,6 +81,7 @@ void GameClient::close()
 {
     closedByUser_ = true;
     reconnectTimer_.stop();
+    connectTimer_.stop();
     welcomed_ = false;
     frames_.clear();
     if (socket_.state() != QAbstractSocket::UnconnectedState) {
@@ -250,6 +258,7 @@ void GameClient::onReconnectTimeout()
     if (socket_.state() != QAbstractSocket::UnconnectedState) {
         socket_.abort();
     }
+    connectTimer_.start(5000);
     socket_.connectToHost(host_, port_);
 }
 
@@ -318,6 +327,7 @@ void GameClient::handleWelcome(const QByteArray &payload)
     sessionId_ = welcome.sessionId;
     playerId_ = welcome.playerId;
     welcomed_ = true;
+    connectTimer_.stop();
     hadSession_ = true;
     reconnectAttempts_ = 0;
     lastError_.clear();
@@ -335,6 +345,8 @@ void GameClient::handleSnapshot(const QByteArray &payload)
     lastSnapshot_ = std::move(snapshot);
     view_.apply(lastSnapshot_);
     ++snapshotCount_;
+    matchEnded_ = false;
+    matchEnd_.reason.clear();
     inLobby_ = false;
 }
 
@@ -492,6 +504,7 @@ void GameClient::fail(const QString &reason)
         lastError_ = reason;
     }
     reconnectTimer_.stop();
+    connectTimer_.stop();
 }
 
 } // namespace client

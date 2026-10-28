@@ -1740,15 +1740,36 @@ public:
                                       == hostMenu.match_.totalWaves(),
                            QStringLiteral("host start uses the submitted script for every client"));
 
-        hostMenu.match_.dissolveRoom();
+        // 房主结果页“重新部署”必须原地开新局，不能重建服务器/房间。
+        const quint32 joinSessionBeforeRestart =
+            joinMenu.match_.gameClient() != nullptr
+                ? joinMenu.match_.gameClient()->sessionId()
+                : 0;
+        const int joinSnapshotsBeforeRestart =
+            joinMenu.match_.gameClient() != nullptr
+                ? joinMenu.match_.gameClient()->snapshotCount()
+                : 0;
+        success &= require(hostMenu.match_.restartInPlace(),
+                           QStringLiteral("host can start the next match in place"));
+        success &= require(pumpMenu(joinMenu, [&] {
+                               return joinMenu.screen() == Menu::Screen::Match
+                                      && joinMenu.match_.gameClient() != nullptr
+                                      && joinMenu.match_.gameClient()->sessionId()
+                                             == joinSessionBeforeRestart
+                                      && joinMenu.match_.gameClient()->snapshotCount()
+                                             > joinSnapshotsBeforeRestart;
+                           }, 4000),
+                           QStringLiteral("in-place host retry keeps the joined client connected"));
+
+        hostMenu.returnToMenu();
         success &= require(hostMenu.match_.localServer() == nullptr,
-                           QStringLiteral("dissolve closes the embedded host server"));
+                           QStringLiteral("host leaving the room closes the embedded server"));
         success &= require(pumpMenu(joinMenu, [&] {
                                return joinMenu.screen() == Menu::Screen::Failure;
                            }, 4000),
-                           QStringLiteral("dissolved host sends clients to the failure screen"));
+                           QStringLiteral("host leaving the room sends clients to failure"));
         success &= require(joinMenu.failureView().title.contains(QStringLiteral("房间已解散")),
-                           QStringLiteral("failure screen explains the room was dissolved"));
+                           QStringLiteral("host leaving is reported as room dissolved"));
 
         joinMenu.keyPress(Qt::Key_Return);
         success &= require(joinMenu.screen() == Menu::Screen::Room
@@ -1765,6 +1786,27 @@ public:
         success &= require(joinMenu.screen() == Menu::Screen::Main
                                && !joinMenu.match_.active(),
                            QStringLiteral("failure screen ESC returns to the main menu"));
+
+        // 服务器接受 TCP 但从不 Welcome：必须有连接超时，不能一直停在空房间。
+        QTcpServer silentServer;
+        success &= require(silentServer.listen(QHostAddress::LocalHost, 0),
+                           QStringLiteral("silent server reserves a port"));
+        Menu silentJoin(false, false);
+        silentJoin.keyPress(Qt::Key_2);
+        silentJoin.keyPress(Qt::Key_F3);
+        silentJoin.editor_.setHost(QStringLiteral("127.0.0.1"));
+        silentJoin.editor_.setPort(silentServer.serverPort());
+        silentJoin.keyPress(Qt::Key_Return);
+        success &= require(pumpMenu(silentJoin, [&] {
+                               return silentJoin.screen() == Menu::Screen::Failure;
+                           }, 7000),
+                           QStringLiteral("silent server times out instead of showing an empty room"));
+        success &= require(silentJoin.failureView().title.contains(
+                               QStringLiteral("不存在")),
+                           QStringLiteral("timeout is presented as a missing room"));
+        silentJoin.returnToMenu();
+        silentServer.close();
+
         hostMenu.returnToMenu();
 
         log(success ? QStringLiteral("ALL C++ SMOKE TESTS PASSED")

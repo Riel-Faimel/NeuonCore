@@ -82,6 +82,20 @@ bool Match::restart()
     return active();
 }
 
+bool Match::restartInPlace()
+{
+    if (!hasLevel_ || server_ == nullptr || client_ == nullptr) {
+        return false;
+    }
+    QString startError;
+    if (!server_->startMatch(level_, &startError)) {
+        error_ = startError;
+        return false;
+    }
+    error_.clear();
+    return true;
+}
+
 void Match::startLocal(const Games::Level &level)
 {
     games_ = std::make_unique<Games>(level);
@@ -154,6 +168,9 @@ void Match::startHostRoom(const Games::Level &level)
 
 void Match::stop()
 {
+    if (server_ != nullptr) {
+        server_->dissolveRoom(QStringLiteral("房间已解散"));
+    }
     client_.reset();
     server_.reset();
     games_.reset();
@@ -306,6 +323,11 @@ QString Match::failureTitle() const
     }
     if (client_ != nullptr && client_->lastError().contains(QStringLiteral("解散"))) {
         return QStringLiteral("房间已解散");
+    }
+    if (client_ != nullptr
+        && (client_->lastError().contains(QStringLiteral("不存在"))
+            || client_->lastError().contains(QStringLiteral("超时")))) {
+        return QStringLiteral("房间不存在或无法连接");
     }
     // 进过房间的客户端掉线（包括主机在对局中解散）都按“房间已解散”呈现。
     if (client_ != nullptr && client_->hadRoom()) {

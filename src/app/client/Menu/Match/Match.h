@@ -49,6 +49,8 @@ public:
     void stop();
     // 用上一次 start() 的关卡和配置重新开始（失败页的重试）。
     bool restart();
+    // 房间/内嵌服务端已存在时，直接在原地开下一局；不重建服务器和连接。
+    bool restartInPlace();
     bool active() const { return games_ != nullptr || client_ != nullptr; }
     bool lobby() const;
     bool failed() const;

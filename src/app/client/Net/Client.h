@@ -104,6 +104,7 @@ private:
 
     QTcpSocket socket_;
     QTimer reconnectTimer_;
+    QTimer connectTimer_;
     net::FrameBuffer frames_;
     GameView view_;
     games::Renderer renderer_;

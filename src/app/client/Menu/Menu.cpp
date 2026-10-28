@@ -350,6 +350,13 @@ void Menu::startLevel(int index)
 
 void Menu::retry()
 {
+    // 房间/内嵌服务端还活着时原地重开：客户端连接和房间都不重建，
+    // 其他玩家不会看到“房间已解散”。
+    if (match_.restartInPlace()) {
+        screen_ = Screen::Match;
+        BaseService.keyRelease(Qt::Key_Escape);
+        return;
+    }
     if (campaignActive_) {
         startCampaign(activeCampaign_);
     } else if (level_ == CustomLevelIndex) {
@@ -373,6 +380,10 @@ void Menu::retryFailure()
 void Menu::returnToMenu()
 {
     screen_ = Screen::Main;
+    if (match_.active() && match_.roomHost()) {
+        // 房主离开标题必须显式解散：通知已连接客户端，而不是直接析构让它们看到空房间。
+        match_.dissolveRoom();
+    }
     match_.stop();
     BaseService.clear();
 }
