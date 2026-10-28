@@ -208,6 +208,8 @@ Item {
             }
 
             MouseArea {
+
+                cursorShape: Qt.BlankCursor
                 id: retryArea
                 anchors.fill: parent
                 hoverEnabled: true
@@ -235,6 +237,8 @@ Item {
             }
 
             MouseArea {
+
+                cursorShape: Qt.BlankCursor
                 id: backArea
                 anchors.fill: parent
                 hoverEnabled: true

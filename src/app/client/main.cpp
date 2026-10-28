@@ -207,6 +207,7 @@ private:
         resultOverlay_->setResizeMode(QQuickWidget::SizeRootObjectToView);
         resultOverlay_->setClearColor(Qt::transparent);
         resultOverlay_->setFocusPolicy(Qt::NoFocus);
+        resultOverlay_->setCursor(Qt::BlankCursor);
 
         const QString appQml = QCoreApplication::applicationDirPath()
                                + QStringLiteral("/qml/ResultOverlay.qml");
@@ -276,6 +277,7 @@ private:
         failureOverlay_->setResizeMode(QQuickWidget::SizeRootObjectToView);
         failureOverlay_->setClearColor(Qt::transparent);
         failureOverlay_->setFocusPolicy(Qt::NoFocus);
+        failureOverlay_->setCursor(Qt::BlankCursor);
 
         const QString appQml = QCoreApplication::applicationDirPath()
                                + QStringLiteral("/qml/FailureOverlay.qml");
