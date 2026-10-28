@@ -21,6 +21,9 @@ CXXFLAGS ?= -std=c++20 -O2 -fexceptions -Wno-narrowing -MMD -MP
 INCS := -I$(QTDIR)/include/QtWidgets \
         -I$(QTDIR)/include \
         -I$(QTDIR)/include/QtMultimedia \
+        -I$(QTDIR)/include/QtQml \
+        -I$(QTDIR)/include/QtQuick \
+        -I$(QTDIR)/include/QtQuickWidgets \
         -I$(QTDIR)/include/QtGui \
         -I$(QTDIR)/include/QtNetwork \
         -I$(QTDIR)/include/QtCore \
@@ -28,10 +31,12 @@ INCS := -I$(QTDIR)/include/QtWidgets \
         -Isrc/app/shared -Isrc/app/client -Isrc/app/server -Isrc/app \
         -Isrc/include -Isrc/lib -I$(BUILD)/generated
 DEFS := -DQT_WIDGETS_LIB -DQT_MULTIMEDIA_LIB -DQT_GUI_LIB \
-        -DQT_CORE_LIB -DQT_NETWORK_LIB -DWIN32 -DWIN64 -D_WIN64 \
+        -DQT_CORE_LIB -DQT_NETWORK_LIB -DQT_QML_LIB -DQT_QUICK_LIB \
+        -DWIN32 -DWIN64 -D_WIN64 \
         -DMINGW_HAS_SECURE_API=1 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -DNDEBUG
 LIBS := -L$(QTDIR)/lib \
         -lQt6Widgets -lQt6Multimedia -lQt6Gui -lQt6Network -lQt6Core \
+        -lQt6Qml -lQt6Quick -lQt6QuickWidgets -lQt6QmlModels -lQt6QmlWorkerScript \
         -lole32 -loleaut32 -luuid -lws2_32 -ladvapi32 -lshell32 \
         -luser32 -lkernel32 -lgdi32 -lwinmm -limm32 -lversion \
         -ldwmapi -luxtheme -lmsimg32 -static-libgcc -static-libstdc++
@@ -192,11 +197,16 @@ deploy: release server
 	@if not exist "$(DIST_WIN)\platforms" mkdir "$(DIST_WIN)\platforms"
 	@if not exist "$(DIST_WIN)\multimedia" mkdir "$(DIST_WIN)\multimedia"
 	@if not exist "$(DIST_WIN)\styles" mkdir "$(DIST_WIN)\styles"
+	@if not exist "$(DIST_WIN)\qml" mkdir "$(DIST_WIN)\qml"
 	@copy /Y "$(BUILD_WIN)\NeonCore.exe" "$(DIST_WIN)\NeonCore.exe" >nul
 	@copy /Y "$(BUILD_WIN)\NeonCoreServer.exe" "$(DIST_WIN)\NeonCoreServer.exe" >nul
 	@if exist "$(DIST_WIN)\NeonCoreConsole.exe" del /Q "$(DIST_WIN)\NeonCoreConsole.exe"
 	@copy /Y "THIRD_PARTY.txt" "$(DIST_WIN)\THIRD_PARTY.txt" >nul
-	@for %%F in (Qt6Core.dll Qt6Gui.dll Qt6Widgets.dll Qt6Multimedia.dll Qt6Network.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll avcodec-61.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll) do @copy /Y "$(QTDIR_WIN)\bin\%%F" "$(DIST_WIN)\%%F" >nul
+	@copy /Y "src\app\qml\ResultOverlay.qml" "$(DIST_WIN)\qml\ResultOverlay.qml" >nul
+	@xcopy /E /I /Y "$(QTDIR_WIN)\qml\QtQuick" "$(DIST_WIN)\qml\QtQuick" >nul
+	@xcopy /E /I /Y "$(QTDIR_WIN)\qml\QtQml" "$(DIST_WIN)\qml\QtQml" >nul
+	@xcopy /E /I /Y "$(QTDIR_WIN)\qml\QtCore" "$(DIST_WIN)\qml\QtCore" >nul
+	@for %%F in (Qt6Core.dll Qt6Gui.dll Qt6Widgets.dll Qt6Multimedia.dll Qt6Network.dll Qt6Qml.dll Qt6QmlModels.dll Qt6QmlWorkerScript.dll Qt6QmlMeta.dll Qt6QmlCompiler.dll Qt6Quick.dll Qt6QuickWidgets.dll Qt6OpenGL.dll Qt6OpenGLWidgets.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll avcodec-61.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll) do @copy /Y "$(QTDIR_WIN)\bin\%%F" "$(DIST_WIN)\%%F" >nul
 	@copy /Y "$(QTDIR_WIN)\plugins\platforms\qwindows.dll" "$(DIST_WIN)\platforms\" >nul
 	@copy /Y "$(QTDIR_WIN)\plugins\platforms\qoffscreen.dll" "$(DIST_WIN)\platforms\" >nul
 	@copy /Y "$(QTDIR_WIN)\plugins\multimedia\ffmpegmediaplugin.dll" "$(DIST_WIN)\multimedia\" >nul

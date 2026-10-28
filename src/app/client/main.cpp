@@ -19,6 +19,10 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QQmlEngine>
+#include <QQuickWidget>
+#include <QQuickItem>
+#include <QUrl>
 #include <QPixmap>
 #include <QPolygonF>
 #include <QScreen>
@@ -71,6 +75,7 @@ public:
         timer_.setInterval(16);
         connect(&timer_, &QTimer::timeout, this, [this] { tick(); });
         timer_.start();
+        setupResultOverlay();
     }
 
 protected:
@@ -192,6 +197,53 @@ private:
         return {float(position.x()) * sx, float(position.y()) * sy};
     }
 
+    void setupResultOverlay()
+    {
+        resultOverlay_ = new QQuickWidget(this);
+        resultOverlay_->setResizeMode(QQuickWidget::SizeRootObjectToView);
+        resultOverlay_->setClearColor(Qt::transparent);
+        resultOverlay_->setFocusPolicy(Qt::NoFocus);
+
+        const QString appQml = QCoreApplication::applicationDirPath()
+                               + QStringLiteral("/qml/ResultOverlay.qml");
+        const QString sourceQml = QDir::currentPath()
+                                  + QStringLiteral("/src/app/qml/ResultOverlay.qml");
+        const QString path = QFileInfo::exists(appQml) ? appQml : sourceQml;
+        resultOverlay_->engine()->addImportPath(
+            QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
+        resultOverlay_->setSource(QUrl::fromLocalFile(path));
+        if (resultOverlay_->status() != QQuickWidget::Ready) {
+            delete resultOverlay_;
+            resultOverlay_ = nullptr;
+            return;
+        }
+        resultQmlRoot_ = resultOverlay_->rootObject();
+        resultOverlay_->setGeometry(rect());
+        resultOverlay_->hide();
+    }
+
+    void syncResultOverlay()
+    {
+        if (resultOverlay_ == nullptr || resultQmlRoot_ == nullptr) {
+            return;
+        }
+        if (menu_.screen() != Menu::Screen::Result) {
+            resultOverlay_->hide();
+            return;
+        }
+        const menu::Result::Summary summary = menu_.resultSummary();
+        resultQmlRoot_->setProperty("victory", summary.victory);
+        resultQmlRoot_->setProperty("levelName", summary.levelName);
+        resultQmlRoot_->setProperty("score", summary.score);
+        resultQmlRoot_->setProperty("kills", summary.kills);
+        resultQmlRoot_->setProperty("wave", summary.wave);
+        resultQmlRoot_->setProperty("totalWaves", summary.totalWaves);
+        resultQmlRoot_->setProperty("runTime", double(summary.runTime));
+        resultOverlay_->setGeometry(rect());
+        resultOverlay_->show();
+        resultOverlay_->raise();
+    }
+
     void tick()
     {
         const qint64 elapsed = clock_.nsecsElapsed();
@@ -205,10 +257,13 @@ private:
         menu_.update(dt);
         BaseService.pointerUpdate(dt);
         menu_.render();
+        syncResultOverlay();
         update();
     }
 
     Menu menu_;
+    QQuickWidget *resultOverlay_ = nullptr;
+    QQuickItem *resultQmlRoot_ = nullptr;
     QTimer timer_;
     QElapsedTimer clock_;
     bool centered_ = false;

@@ -67,6 +67,8 @@ public:
     bool muted() const { return BaseService.muted(); }
     bool audioEnabled() const { return BaseService.audioEnabled(); }
     Screen screen() const { return screen_; }
+    // QML 结算覆盖层只读数据；C++ Result 仍是测试/无 QML 时的回退。
+    menu::Result::Summary resultSummary() const { return summary(); }
 
 private:
     DebugInfo(friend class SelfTest;)

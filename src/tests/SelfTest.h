@@ -1191,6 +1191,15 @@ public:
                                    && quint32(frame.size())
                                           == net::kFrameHeaderSize + frameHeader.length,
                                QStringLiteral("snapshot is written as one exact frame"));
+            const QByteArray compressed =
+                net::encodeCompressedSnapshotMessage(original);
+            net::Snapshot unzipped;
+            snapshotError.clear();
+            success &= require(!compressed.isEmpty()
+                                   && net::decodeCompressedSnapshotMessage(
+                                          compressed, &unzipped, &snapshotError)
+                                   && unzipped == original,
+                               QStringLiteral("compressed snapshot roundtrips"));
             const QByteArray wrongVersion = net::frameMessage(
                 net::MessageType::Snapshot, net::serializeSnapshot(original),
                 quint16(net::kProtocolVersion + 1));

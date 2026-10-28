@@ -90,6 +90,7 @@ private:
     void handleFrame(const QByteArray &frame);
     void handleWelcome(const QByteArray &payload);
     void handleSnapshot(const QByteArray &payload);
+    void handleCompressedSnapshot(const QByteArray &payload);
     void handleEvent(const QByteArray &payload);
     void handleMatchEnd(const QByteArray &payload);
     void handleRoomList(const QByteArray &payload);

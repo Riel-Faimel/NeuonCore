@@ -260,7 +260,7 @@ public:
 
 | 角色 | 位置 | 职责 |
 | --- | --- | --- |
-| `net::Protocol` | `src/app/shared/Net/Protocol.h` | 协议版本（v2）、消息 id、`[u32 length][u16 type][u16 version][payload]` 帧的打包/拆包、TCP 粘包缓冲 `FrameBuffer` |
+| `net::Protocol` | `src/app/shared/Net/Protocol.h` | 协议版本（v3）、消息 id、`[u32 length][u16 type][u16 version][payload]` 帧的打包/拆包、TCP 粘包缓冲 `FrameBuffer` |
 | `net::Input` | `src/app/shared/Net/Input.h` | `InputCommand`：移动轴、鼠标、射击、冲刺、暂停、布雷、强化选择；`playerId` 只用于 stdio 宿主选择目标，TCP 客户端必须为 0 |
 | `net::Messages` | `src/app/shared/Net/Messages.h` | `Hello / Welcome（sessionId + playerId/slot）/ StartMatch / Input / Snapshot / Event / MatchEnd / RoomList（含会话槽位）` 的 payload 与带帧头的编码/解码；加入当前房间由 Hello/Welcome 完成，没有 JoinRoom 消息 |
 | `net::Snapshot` | `src/app/shared/Net/Snapshot.h` | `players[]`（每个玩家 id/颜色/生命/冲刺/瞄准/复活倒计时）、`localPlayerId`（每个接收者自己的飞机）、敌人（dataKey + 绘制字段）、子弹、传送门/掉落/地雷/粒子/飘字/冲击波、波次 HUD、强化卡、状态/时间/分数/击杀/Boss；编码直接写入帧缓冲 |

@@ -126,6 +126,7 @@ private:
     int rejectedClients_ = 0;
     bool matchEndSent_ = false;
     quint32 adminSessionId_ = 0;
+    int snapshotTick_ = 0;
     // openRoom() 由本地宿主调用：只有这种房间才把第一个会话标成房主。
     // 独立 NeonCoreServer 的 TCP 客户端都只是加入者，控制权在 stdio 宿主。
     bool localHostRoom_ = false;

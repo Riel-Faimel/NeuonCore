@@ -281,4 +281,10 @@ QByteArray encodeSnapshotMessage(const Snapshot &snapshot,
 bool decodeSnapshotMessage(const QByteArray &frame, Snapshot *snapshot,
                            QString *error = nullptr);
 
+// 30Hz 广播用：payload qCompress，消息类型 SnapshotCompressed。
+QByteArray encodeCompressedSnapshotMessage(const Snapshot &snapshot,
+                                           quint16 version = kProtocolVersion);
+bool decodeCompressedSnapshotMessage(const QByteArray &frame, Snapshot *snapshot,
+                                     QString *error = nullptr);
+
 } // namespace net
