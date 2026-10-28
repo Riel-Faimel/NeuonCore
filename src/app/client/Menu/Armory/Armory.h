@@ -4,7 +4,6 @@
 
 #include <QRectF>
 
-class QPainter;
 
 namespace menu {
 
@@ -20,11 +19,11 @@ public:
     void open();
     Action keyPress(int key);
     Action mousePress(const Math::Vec2 &position);
-    void render(QPainter &painter) const;
 
     QRectF cardRect(int index) const;
     QRectF backRect() const;
     int selected() const { return selected_; }
+    void select(int index) { selected_ = index; }
 
 private:
     int selected_ = 0;

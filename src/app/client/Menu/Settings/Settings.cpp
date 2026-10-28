@@ -4,12 +4,9 @@
 #include "Data/Settings.h"
 #include "GameConfig.h"
 
-#include <QLinearGradient>
-#include <QPen>
 #include <Qt>
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 
 namespace menu {

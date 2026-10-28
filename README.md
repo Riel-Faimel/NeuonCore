@@ -189,8 +189,13 @@ cpp/
 │  ├─ qml/
 │  │  ├─ MainOverlay.qml      QML 标题/关卡卡/入口
 │  │  ├─ SettingsOverlay.qml   QML 音量设置
+│  │  ├─ DepotOverlay.qml     QML 补给站
+│  │  ├─ ArmoryOverlay.qml    QML 战备/发射器
 │  │  ├─ ResultOverlay.qml    QML 结算覆盖层（唯一 UI 路径）
-│  │  └─ FailureOverlay.qml   QML 连接/房间失败页
+│  │  ├─ FailureOverlay.qml   QML 连接/房间失败页
+│  │  ├─ NeonText.qml         六向 glow 文本
+│  │  ├─ MainEntry.qml        标题页入口
+│  │  └─ Reticle.qml          QML 准星/射线
 │  ├─ app/
 │  │  ├─ shared/
 │  │  │  ├─ Arena/
@@ -277,7 +282,7 @@ cpp/
 
 `src/app/server/Loadout/` 是战备全局模块（`LoadoutService`）：从 `loadout.json` 读发射器数值，选择持久化到 `loadout/launcher`；`Player::reset()` 应用伤害/射速/弹速倍率，`Player::shoot()` 应用散射倍率、额外弹丸和穿透。界面是 `menu::Armory`，默认标准发射器保持原弹道。
 
-`src/app/client/Menu/` 和 `Arena/` 同构：`Menu` 只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop`/`Loadout` 都是全局单例，不在 `Menu` 里），十个界面是 `namespace menu` 组件——`Map`（星区地图）、`Match`（默认持有网络 `GameClient` + 内嵌/远端服务端，`--local`/测试时持有这一局的 `Games`；`Mode::Host` 时只开房不开局）、`Room`（服务端权威房间页：房主开始/解散、加入者等待）、`Failure`（QML `FailureOverlay`，C++ 只提供 `FailureView`）、`Main`/`Settings`（QML `MainOverlay`/`SettingsOverlay`，C++ 只提供数据、几何和输入逻辑）、`Result`（QML `ResultOverlay`，C++ 只提供只读 `ResultSummary`）、`Editor`（自定义协议：顶部三个选项卡，单机/局域网主机显示台本编辑，主机追加服务器端口，加入主机显示地址和端口）、`Depot`（补给站/商店）、`Armory`（战备/发射器）。组件把玩家意图作为 `Action` 交回 `Menu`，`Menu` 负责开局、进编辑器、进房间和回主菜单；“自定义协议”点开即进编辑界面，逐波编辑台本（1–12 波、四种敌人数量、单 Boss），`ENTER` 按当前选项卡执行：单机本地立即开局、主机启动服务端并进入房间等待 `ENTER` 开始、加入连接远端并显示同一房间。
+`src/app/client/Menu/` 和 `Arena/` 同构：`Menu` 只持有进程级的关卡表、当前屏幕和输入路由（`Base`/`Shop`/`Loadout` 都是全局单例，不在 `Menu` 里），十个界面是 `namespace menu` 组件——`Map`（星区地图）、`Match`（默认持有网络 `GameClient` + 内嵌/远端服务端，`--local`/测试时持有这一局的 `Games`；`Mode::Host` 时只开房不开局）、`Room`（服务端权威房间页：房主开始/解散、加入者等待）、`Failure`（QML `FailureOverlay`，C++ 只提供 `FailureView`）、`Main`/`Settings`（QML `MainOverlay`/`SettingsOverlay`，C++ 只提供数据、几何和输入逻辑）、`Result`（QML `ResultOverlay`，C++ 只提供只读 `ResultSummary`）、`Depot`/`Armory`（QML `DepotOverlay`/`ArmoryOverlay`，C++ 只保留购买/装备逻辑）、`Editor`（自定义协议：顶部三个选项卡，单机/局域网主机显示台本编辑，主机追加服务器端口，加入主机显示地址和端口）。组件把玩家意图作为 `Action` 交回 `Menu`，`Menu` 负责开局、进编辑器、进房间和回主菜单；“自定义协议”点开即进编辑界面，逐波编辑台本（1–12 波、四种敌人数量、单 Boss），`ENTER` 按当前选项卡执行：单机本地立即开局、主机启动服务端并进入房间等待 `ENTER` 开始、加入连接远端并显示同一房间。
 
 `src/app/shared/Arena/` 是模块目录：`Arena` 是全局模块类，**私有继承** `Bullets`、`Combatants`、`Entities`、`Events`、`State` 五个 `namespace arena` 组件。私有继承意味着这些组件是 `Arena` 的实现细节：外部只能调用 `Arena` 自己声明的接口（`beginWave/update/draw/placeMine/playerState/bossInfo/clear*/celebrate*/takeFeedback` 等），看不到 `enemies()`、`submit()`、`player()` 这类组件方法。组件之间通过 `Arena/Context.h` 的 `arena::Context` 协作——`Arena` 调用组件时把 `Host&` 和 5 个兄弟组件引用显式注入，组件头文件因此不需要知道 `Arena`；组件 → 模块的反馈（闪屏/震屏）通过 `Arena/Host.h` 的 `arena::Host` 虚接口回调 `Arena::addFeedback()`。`Bullet` 是 `src/include/Bullet.h` 里的全局纯虚接口，具体弹种（目前是 `StandardBullet`）在 `Arena/Bullets/`；发射方只 `submit()` 对象，推进、回收和绘制都由池统一做。`Fighter` 也放在 `src/include/`，`Player`/`Enemy`/实体类型放在各自组件目录，不再各自算组件。`Events` 一个 class 同时处理碰撞与击杀，`State` 一个 class 同时处理 Boss 阶段和玩家失败（积分在 `ShopService` 的 `Score` 组件）。`SelfTest` 是 `Arena` 唯一保留的 friend（测试要直接摆局面）。
 

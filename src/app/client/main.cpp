@@ -80,6 +80,8 @@ public:
         setupFailureOverlay();
         setupMainOverlay();
         setupSettingsOverlay();
+        setupDepotOverlay();
+        setupArmoryOverlay();
     }
 
     ~GameWindow() override { hideGameCursor(false); }
@@ -92,9 +94,13 @@ protected:
         painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
         painter.drawImage(rect(), menu_.frame());
 
-        // QML Result/Failure 自己画准星，避免 Widgets 准星透出来形成双层。
+        // QML 覆盖层自己画准星，避免 Widgets 准星透出来形成双层。
         const bool qmlScreen = menu_.screen() == Menu::Screen::Result
-                               || menu_.screen() == Menu::Screen::Failure;
+                               || menu_.screen() == Menu::Screen::Failure
+                               || menu_.screen() == Menu::Screen::Main
+                               || menu_.screen() == Menu::Screen::Settings
+                               || menu_.screen() == Menu::Screen::Shop
+                               || menu_.screen() == Menu::Screen::Armory;
         if (!qmlScreen && width() > 0 && height() > 0) {
             painter.save();
             painter.scale(float(width()) / float(GameConfig::ScreenWidth),
@@ -152,7 +158,8 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override
     {
         if (watched != resultOverlay_ && watched != failureOverlay_
-            && watched != mainOverlay_ && watched != settingsOverlay_) {
+            && watched != mainOverlay_ && watched != settingsOverlay_
+            && watched != depotOverlay_ && watched != armoryOverlay_) {
             return QWidget::eventFilter(watched, event);
         }
         if (event->type() == QEvent::MouseMove
@@ -492,6 +499,121 @@ private:
         settingsOverlay_->raise();
     }
 
+
+    void setupDepotOverlay()
+    {
+        depotOverlay_ = new QQuickWidget(this);
+        depotOverlay_->setResizeMode(QQuickWidget::SizeRootObjectToView);
+        depotOverlay_->setClearColor(Qt::transparent);
+        depotOverlay_->setFocusPolicy(Qt::NoFocus);
+        depotOverlay_->setCursor(Qt::BlankCursor);
+        const QString appQml = QCoreApplication::applicationDirPath()
+                               + QStringLiteral("/qml/DepotOverlay.qml");
+        const QString sourceQml = QDir::currentPath()
+                                  + QStringLiteral("/src/qml/DepotOverlay.qml");
+        const QString path = QFileInfo::exists(appQml) ? appQml : sourceQml;
+        depotOverlay_->engine()->addImportPath(
+            QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
+        depotOverlay_->setSource(QUrl::fromLocalFile(path));
+        if (depotOverlay_->status() != QQuickWidget::Ready) {
+            delete depotOverlay_;
+            depotOverlay_ = nullptr;
+            return;
+        }
+        depotQmlRoot_ = depotOverlay_->rootObject();
+        depotOverlay_->setMouseTracking(true);
+        depotOverlay_->installEventFilter(this);
+        depotOverlay_->setGeometry(rect());
+        depotOverlay_->hide();
+    }
+
+    void syncDepotOverlay()
+    {
+        if (depotOverlay_ == nullptr || depotQmlRoot_ == nullptr) {
+            return;
+        }
+        if (menu_.screen() != Menu::Screen::Shop) {
+            depotOverlay_->hide();
+            return;
+        }
+        syncQmlPointer(depotQmlRoot_);
+        depotQmlRoot_->setProperty("score", ShopService.score().total());
+        depotQmlRoot_->setProperty("mines", ShopService.inventory().mines());
+        depotQmlRoot_->setProperty("price", data::kMine.price);
+        if (depotQmlRoot_->property("buyRequested").toBool()) {
+            depotQmlRoot_->setProperty("buyRequested", false);
+            ShopService.buyMine();
+        }
+        if (depotQmlRoot_->property("backRequested").toBool()) {
+            depotQmlRoot_->setProperty("backRequested", false);
+            menu_.keyPress(Qt::Key_Escape);
+            return;
+        }
+        depotOverlay_->setGeometry(rect());
+        depotOverlay_->show();
+        depotOverlay_->raise();
+    }
+
+    void setupArmoryOverlay()
+    {
+        armoryOverlay_ = new QQuickWidget(this);
+        armoryOverlay_->setResizeMode(QQuickWidget::SizeRootObjectToView);
+        armoryOverlay_->setClearColor(Qt::transparent);
+        armoryOverlay_->setFocusPolicy(Qt::NoFocus);
+        armoryOverlay_->setCursor(Qt::BlankCursor);
+        const QString appQml = QCoreApplication::applicationDirPath()
+                               + QStringLiteral("/qml/ArmoryOverlay.qml");
+        const QString sourceQml = QDir::currentPath()
+                                  + QStringLiteral("/src/qml/ArmoryOverlay.qml");
+        const QString path = QFileInfo::exists(appQml) ? appQml : sourceQml;
+        armoryOverlay_->engine()->addImportPath(
+            QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
+        armoryOverlay_->setSource(QUrl::fromLocalFile(path));
+        if (armoryOverlay_->status() != QQuickWidget::Ready) {
+            delete armoryOverlay_;
+            armoryOverlay_ = nullptr;
+            return;
+        }
+        armoryQmlRoot_ = armoryOverlay_->rootObject();
+        armoryOverlay_->setMouseTracking(true);
+        armoryOverlay_->installEventFilter(this);
+        armoryOverlay_->setGeometry(rect());
+        armoryOverlay_->hide();
+    }
+
+    void syncArmoryOverlay()
+    {
+        if (armoryOverlay_ == nullptr || armoryQmlRoot_ == nullptr) {
+            return;
+        }
+        if (menu_.screen() != Menu::Screen::Armory) {
+            armoryOverlay_->hide();
+            return;
+        }
+        syncQmlPointer(armoryQmlRoot_);
+        const QVariantList cards = menu_.armoryCards();
+        if (cards != armoryCardsCache_) {
+            armoryCardsCache_ = cards;
+            armoryQmlRoot_->setProperty("cards", cards);
+        }
+        armoryQmlRoot_->setProperty("selected", menu_.armorySelected());
+        if (armoryQmlRoot_->property("selectRequested").toBool()) {
+            armoryQmlRoot_->setProperty("selectRequested", false);
+            menu_.armorySelect(armoryQmlRoot_->property("requestedSelect").toInt());
+        }
+        if (armoryQmlRoot_->property("equipRequested").toBool()) {
+            armoryQmlRoot_->setProperty("equipRequested", false);
+            menu_.armoryEquip(armoryQmlRoot_->property("requestedEquip").toInt());
+        }
+        if (armoryQmlRoot_->property("backRequested").toBool()) {
+            armoryQmlRoot_->setProperty("backRequested", false);
+            menu_.keyPress(Qt::Key_Escape);
+            return;
+        }
+        armoryOverlay_->setGeometry(rect());
+        armoryOverlay_->show();
+        armoryOverlay_->raise();
+    }
     void tick()
     {
         const qint64 elapsed = clock_.nsecsElapsed();
@@ -510,6 +632,8 @@ private:
         syncFailureOverlay();
         syncMainOverlay();
         syncSettingsOverlay();
+        syncDepotOverlay();
+        syncArmoryOverlay();
         update();
     }
 
@@ -523,6 +647,11 @@ private:
     QQuickWidget *settingsOverlay_ = nullptr;
     QQuickItem *settingsQmlRoot_ = nullptr;
     QVariantList mainCardsCache_;
+    QQuickWidget *depotOverlay_ = nullptr;
+    QQuickItem *depotQmlRoot_ = nullptr;
+    QQuickWidget *armoryOverlay_ = nullptr;
+    QQuickItem *armoryQmlRoot_ = nullptr;
+    QVariantList armoryCardsCache_;
     QTimer timer_;
     QElapsedTimer clock_;
     bool centered_ = false;

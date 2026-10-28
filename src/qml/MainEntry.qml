@@ -7,6 +7,8 @@ Item {
 
     property string label: ""
     property string icon: "cross"
+    property color accent: "#53e8ff"
+    property color restColor: "#96c8dc"
     signal clicked()
 
     Rectangle {
@@ -15,7 +17,7 @@ Item {
         color: "#060e19"
         opacity: 0.92
         border.width: 1
-        border.color: mouse.containsMouse ? "#53e8ff" : "#305b70"
+        border.color: mouse.containsMouse ? root.accent : "#305b70"
     }
 
     Canvas {
@@ -26,7 +28,7 @@ Item {
         onPaint: {
             const ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
-            ctx.strokeStyle = mouse.containsMouse ? "#53e8ff" : "#96c8dc"
+            ctx.strokeStyle = mouse.containsMouse ? root.accent : root.restColor
             ctx.fillStyle = ctx.strokeStyle
             ctx.lineWidth = 1.5
             const cx = 10
@@ -76,7 +78,7 @@ Item {
         anchors.leftMargin: 44
         anchors.verticalCenter: parent.verticalCenter
         text: root.label
-        color: mouse.containsMouse ? "#f4fbff" : "#bfd8e6"
+        color: mouse.containsMouse ? "#f4fbff" : (root.icon === "crate" ? "#e8c98e" : "#bfd8e6")
         renderType: Text.NativeRendering
         font.family: "Microsoft YaHei"
         font.pixelSize: 16

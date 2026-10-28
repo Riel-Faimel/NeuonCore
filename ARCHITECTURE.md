@@ -151,8 +151,8 @@ cpp/src/
 | `Failure` | 连接层失败页数据；UI 只在 QML `FailureOverlay` |
 | `Result` | 结算数据 + QML `ResultOverlay`；C++ 只提供只读 `ResultSummary` |
 | `Editor` | 自定义协议编辑：顶部单机/局域网主机/加入主机选项卡；单机与主机编辑台本，主机在波次下方追加端口，加入主机显示地址和端口 |
-| `Depot` | 补给站界面：展示钱包/库存，把购买意图转给全局 `Shop` |
-| `Armory` | 战备界面：展示/选择发射器，把装备意图转给全局 `Loadout` |
+| `Depot` | QML 补给站；C++ 只保留购买/返回逻辑 |
+| `Armory` | QML 战备；C++ 只保留选择/装备逻辑 |
 | `Settings` | QML 音量设置；C++ 只保留配置读写和键盘/鼠标逻辑 |
 
 `Menu` 自己只负责：

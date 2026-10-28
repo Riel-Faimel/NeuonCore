@@ -77,6 +77,10 @@ public:
     int settingsSelected() const;
     void settingsSelect(int row);
     void settingsSetVolume(int row, float value);
+    QVariantList armoryCards() const;
+    int armorySelected() const;
+    void armorySelect(int index);
+    void armoryEquip(int index);
 
 private:
     DebugInfo(friend class SelfTest;)

@@ -276,6 +276,8 @@ Item {
             y: 26
             label: "商店"
             icon: "crate"
+            accent: "#ffab4e"
+            restColor: "#e8c98e"
             onClicked: {
                 root.requestedAction = 3
                 root.requestedLevel = -1
@@ -288,6 +290,7 @@ Item {
             y: 26
             label: "设置"
             icon: "gear"
+            restColor: "#96becd"
             onClicked: {
                 root.requestedAction = 5
                 root.requestedLevel = -1

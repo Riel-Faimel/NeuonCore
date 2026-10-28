@@ -119,6 +119,18 @@ Menu::update(dt)
 - 拖动音轨通过 `requestedRow/requestedValue/volumeRequested` 交回 `Menu::settingsSetVolume()`；
 - 返回通过 `backRequested` 转成 `Menu` 的 ESC。
 
+### Depot
+
+- 文件：`src/qml/DepotOverlay.qml`；
+- 数据：`ShopService` 积分/库存、`data::kMine.price`；
+- 购买/返回通过 `buyRequested/backRequested` 交回 C++。
+
+### Armory
+
+- 文件：`src/qml/ArmoryOverlay.qml`；
+- 数据：`Menu::armoryCards()`（名称/数值/已装备/强调色）；
+- hover 只改变选中，点击/ENTER 才装备；`armorySelect` 与 `armoryEquip` 分开。
+
 ### Result
 
 - 文件：`src/qml/ResultOverlay.qml`；
@@ -161,7 +173,7 @@ C++ Menu 的 `QImage` 以物理像素重新栅格化，因此菜单文字不会�
 
 ## 已知边界
 
-- Main/Settings/Result/Failure 是 QML-only；Map/Room/Editor/Depot/Armory/Match HUD 仍是 C++ Widgets。
+- Main/Settings/Shop/Armory/Result/Failure 是 QML-only；Map/Room/Editor/Match HUD 仍是 C++ Widgets。
 - 这四屏的 C++ 类只保留数据、几何和键盘/鼠标逻辑；`render()` 已不再参与运行时绘制。
 - QML 和 QPainter 的字体栅格化不保证逐像素一致。
 - QML 覆盖层的鼠标事件由 QML 处理；C++ 只镜像指针位置和按钮请求。

@@ -1,14 +1,10 @@
 #include "Menu/Main/Main.h"
 
-#include "Base/Base.h"
 #include "GameConfig.h"
 
-#include <QLinearGradient>
-#include <QPen>
 #include <Qt>
 
 #include <algorithm>
-#include <cmath>
 
 namespace menu {
 

@@ -2838,7 +2838,6 @@ public:
         movePointer({float(shopEntry.center().x()), float(shopEntry.center().y())});
         menu.mousePressLeft({float(shopEntry.center().x()),
                              float(shopEntry.center().y())});
-        save(QStringLiteral("shop.png"));
         menu.keyPress(Qt::Key_Escape);
 
         // 战备
@@ -2849,7 +2848,6 @@ public:
         menu.mousePressLeft({float(armoryEntry.center().x()),
                              float(armoryEntry.center().y())});
         menu.mouseReleaseLeft();
-        save(QStringLiteral("armory.png"));
         menu.keyPress(Qt::Key_Escape);
         LoadoutService.select(0);
 

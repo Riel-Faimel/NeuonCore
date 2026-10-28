@@ -4,7 +4,6 @@
 
 #include <QRectF>
 
-class QPainter;
 
 namespace menu {
 
@@ -19,7 +18,6 @@ public:
 
     Action keyPress(int key);
     Action mousePress(const Math::Vec2 &position);
-    void render(QPainter &painter) const;
 
     QRectF itemRect() const;
     QRectF buyRect() const;

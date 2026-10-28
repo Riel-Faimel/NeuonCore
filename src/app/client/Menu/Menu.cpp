@@ -4,6 +4,7 @@
 #include "Base/Base.h"
 #include "Data/GameData.h"
 #include "Net/Client.h"
+#include "Loadout/Loadout.h"
 
 #include <QPainter>
 #include <Qt>
@@ -186,6 +187,56 @@ void Menu::settingsSetVolume(int row, float value)
     settings_.setVolume(row, value);
 }
 
+QVariantList Menu::armoryCards() const
+{
+    QVariantList list;
+    const int equipped = LoadoutService.selected();
+    for (int i = 0; i < data::kLaunchers.count; ++i) {
+        const data::LauncherDef &def = data::kLaunchers.items[size_t(i)];
+        QVariantMap card;
+        card.insert(QStringLiteral("name"),
+                    QString::fromUtf8(def.name.data(), int(def.name.size())));
+        card.insert(QStringLiteral("subtitle"),
+                    QString::fromUtf8(def.subtitle.data(), int(def.subtitle.size())));
+        card.insert(QStringLiteral("damage"),
+                    QString::number(def.damageScale, 'f', 2));
+        card.insert(QStringLiteral("rate"),
+                    QString::number(1.0 / std::max(0.01f, def.fireCdScale), 'f', 2));
+        card.insert(QStringLiteral("shots"), def.extraShots);
+        card.insert(QStringLiteral("pierce"), def.pierceBonus);
+        card.insert(QStringLiteral("equipped"), i == equipped);
+        card.insert(QStringLiteral("accent"),
+                    i == 1 ? QStringLiteral("#ffab4e")
+                           : (i == 2 ? QStringLiteral("#b580ff")
+                                     : QStringLiteral("#53e8ff")));
+        list.push_back(card);
+    }
+    return list;
+}
+
+int Menu::armorySelected() const
+{
+    return armory_.selected();
+}
+
+void Menu::armorySelect(int index)
+{
+    if (index < 0 || index >= data::kLaunchers.count) {
+        return;
+    }
+    armory_.select(index);
+}
+
+void Menu::armoryEquip(int index)
+{
+    if (index < 0 || index >= data::kLaunchers.count) {
+        return;
+    }
+    armory_.select(index);
+    LoadoutService.select(index);
+    BaseService.playSound(QStringLiteral("upgrade"));
+}
+
 const QImage &Menu::frame() const
 {
     if (screen_ == Screen::Match && match_.active()) {
@@ -319,8 +370,9 @@ void Menu::render(const QSize &target, qreal pixelRatio)
                                                  GameConfig::ScreenHeight);
     const qreal sx = qreal(size.width()) / GameConfig::ScreenWidth;
     const qreal sy = qreal(size.height()) / GameConfig::ScreenHeight;
-    if (screen_ == Screen::Main || screen_ == Screen::Settings) {
-        // Main/Settings 由 QML 覆盖层绘制。
+    if (screen_ == Screen::Main || screen_ == Screen::Settings
+        || screen_ == Screen::Shop || screen_ == Screen::Armory) {
+        // Main/Settings/Shop/Armory 由 QML 覆盖层绘制。
         return;
     }
     auto prepare = [&]() {
@@ -364,10 +416,6 @@ void Menu::render(const QSize &target, qreal pixelRatio)
             map_.render(painter);
         } else if (screen_ == Screen::Editor) {
             editor_.render(painter, BaseService.muted());
-        } else if (screen_ == Screen::Shop) {
-            depot_.render(painter);
-        } else if (screen_ == Screen::Armory) {
-            armory_.render(painter);
         }
     }
     finish();

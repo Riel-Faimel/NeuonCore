@@ -209,6 +209,8 @@ deploy: release server
 	@copy /Y "src\qml\SettingsOverlay.qml" "$(DIST_WIN)\qml\SettingsOverlay.qml" >nul
 	@copy /Y "src\qml\MainEntry.qml" "$(DIST_WIN)\qml\MainEntry.qml" >nul
 	@copy /Y "src\qml\NeonText.qml" "$(DIST_WIN)\qml\NeonText.qml" >nul
+	@copy /Y "src\qml\DepotOverlay.qml" "$(DIST_WIN)\qml\DepotOverlay.qml" >nul
+	@copy /Y "src\qml\ArmoryOverlay.qml" "$(DIST_WIN)\qml\ArmoryOverlay.qml" >nul
 	@xcopy /E /I /Y "$(QTDIR_WIN)\qml\QtQuick" "$(DIST_WIN)\qml\QtQuick" >nul
 	@xcopy /E /I /Y "$(QTDIR_WIN)\qml\QtQml" "$(DIST_WIN)\qml\QtQml" >nul
 	@xcopy /E /I /Y "$(QTDIR_WIN)\qml\QtCore" "$(DIST_WIN)\qml\QtCore" >nul
