@@ -26,6 +26,7 @@ SummonerEnemy::SummonerEnemy(const Math::Vec2 &position, int wave)
     const EnemyStats &stats = statsFor(type());
     chargeRequired = std::max(1, stats.chargeRequired);
     summonCount = std::max(1, stats.summonCount);
+    listensToAllyKills = true;
 }
 
 void SummonerEnemy::onAllyKilled(const Context &ctx, Enemy &dead)

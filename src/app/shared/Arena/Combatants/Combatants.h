@@ -1,12 +1,14 @@
 #pragma once
 
 #include "Arena/Combatants/Enemy.h"
+#include "Arena/Combatants/EnemyGrid.h"
 #include "Arena/Combatants/Player.h"
 
 #include <QColor>
 #include <QPainter>
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace net {
@@ -54,6 +56,41 @@ public:
     int aliveEnemyCount() const;
     BossInfo bossInfo() const;
 
+    // ----- 空间网格 -----
+    // 敌人位置被夹在场内，网格覆盖整个战斗区域；Arena 在“子弹结算前”和
+    // “敌人移动后”各刷新一次（O(n)），之后的范围查询只碰邻近格子。
+    void refreshEnemyGrid();
+    // 刷新每个敌人的“150 半径内友军数”（辅助型的密集点选择只查缓存）。
+    void refreshEnemyDensity();
+
+    // ----- mini 对象池 -----
+    // 召唤物数量大、生命周期短（一次召唤好几只、被打死就消失），如果每次 new/delete
+    // 会造成明显的分配抖动。这里把死掉的 mini 收回池里，下次召唤/复活时原地重建，
+    // 复用同一块内存（`std::destroy_at` + `std::construct_at`，不分配不释放）。
+    // 池只存 mini；其他敌人仍然走普通分配。
+    static constexpr int MiniPoolLimit = 1024;
+    // 取一个 mini：优先复用池里的对象，池空时新建。返回的指针归调用方所有。
+    std::unique_ptr<Enemy> acquireMini(const Math::Vec2 &position, int wave);
+    // 把所有已死亡的 mini 收回池（其余死亡敌人照常释放）。
+    void recycleEnemies();
+    // 池里空闲的 mini 数量（测试/基准用）。
+    int pooledMiniCount() const { return int(miniPool_.size()); }
+
+    // ----- 绘制 LOD -----
+    // 策略：mini 这类“数量多、体积小”的敌人始终简化（见 Enemy::prefersLowDetail）；
+    // 其他敌人尽量保留完整机身，只在人群很大时才逐步降级：
+    //   > CrowdLimit         关闭敌人辉光（辉光是逐像素填充，最贵，机身细节保留）
+    //   > CrowdExtremeLimit  连机身也简化 + 关抗锯齿（保命档，避免上千单位时卡死）
+    static constexpr int CrowdLimit = 420;
+    static constexpr int CrowdExtremeLimit = 700;
+    const EnemyGrid &enemyGrid() const { return grid_; }
+    int enemyCount() const { return int(enemies_.size()); }
+    template <typename Fn>
+    void forEachEnemyNear(const Math::Vec2 &pos, float radius, Fn &&fn) const
+    {
+        grid_.forEachNear(pos, radius, std::forward<Fn>(fn));
+    }
+
     // ----- 多玩家查询 -----
     int playerCount() const;                 // active 玩家数量
     int livingPlayerCount() const;           // active && alive
@@ -92,6 +129,9 @@ public:
 private:
     std::vector<Player> players_;
     std::vector<std::unique_ptr<Enemy>> enemies_;
+    // mini 的空闲对象池（见 acquireMini/recycleEnemies）。
+    std::vector<std::unique_ptr<Enemy>> miniPool_;
+    EnemyGrid grid_;
     Enemy *boss_ = nullptr;
     // 客户端视图的本地玩家 id；模拟端保持 0（无本地视角）。
     int localPlayerId_ = 0;

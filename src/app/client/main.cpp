@@ -678,6 +678,7 @@ int main(int argc, char *argv[])
     bool capture = false;
     bool windowTest = false;
     bool bench = false;
+    int benchCrowd = 0;
     QString captureDirectory = QStringLiteral("screenshots");
     QString windowShot = QStringLiteral("screenshots/window.png");
     )
@@ -725,6 +726,15 @@ int main(int argc, char *argv[])
         } else if (argument == QStringLiteral("--bench")) {
             bench = true;
             headless = true;
+            // 可选参数：人群规模。跳过时跑原来的固定 12 敌场景。
+            if (i + 1 < argc) {
+                bool ok = false;
+                const int value = QString::fromLocal8Bit(argv[i + 1]).toInt(&ok);
+                if (ok && value > 0) {
+                    benchCrowd = value;
+                    ++i;
+                }
+            }
 #endif
         } else {
             argumentError = QStringLiteral("unknown argument: %1").arg(argument);
@@ -736,7 +746,7 @@ int main(int argc, char *argv[])
         std::fprintf(stderr,
                      "usage: NeonCore [--local] [--connect host:port]\n"
                      "       NeonCoreServer --port 7777   (stdio control)\n"
-                     "       NeonCoreConsole --smoke-test | --capture DIR | --bench\n");
+                     "       NeonCoreConsole --smoke-test | --capture DIR | --bench [ENEMIES]\n");
     };
     if (showHelp) {
         usage();
@@ -789,7 +799,7 @@ int main(int argc, char *argv[])
         return code;
     }
     if (bench) {
-        const int code = SelfTest::bench();
+        const int code = SelfTest::bench(benchCrowd);
         ShopService.save();
         LoadoutService.save();
         BaseService.shutdown();

@@ -220,11 +220,12 @@ void Player::shoot(const Context &ctx)
                                      ? RandomService.real(-5.0f, 5.0f)
                                      : ((float(index) - (count - 1) / 2.0f) * 4.0f);
         const Math::Vec2 origin = state.pos + forward * 20.0f + side * sideOffset;
+        // 吸附是 buff（强化“磁吸弹道”）给的：没拿过强化时两个值都是 0 → 直线弹道。
         ctx.bullets.spawnStandard(
             origin, direction * state.bulletSpeed, state.damage,
             LoadoutService.color(), Bullet::Standpoint::Player,
             launcher.radius, state.pierce + launcher.pierceBonus,
-            state.critChance);
+            state.critChance, state.homingRadius, state.homingRatio);
     }
     state.muzzlePos = state.pos + forward * 22.0f;
     state.fireFlash = 0.07f;

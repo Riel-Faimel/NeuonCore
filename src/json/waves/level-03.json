@@ -13,7 +13,7 @@
   "campaign": [
     [{"kind": "drone", "count": 9}, {"kind": "spitter", "count": 2}],
     [{"kind": "drone", "count": 9}, {"kind": "spitter", "count": 5},
-     {"kind": "amplifier", "count": 1}],
+     {"kind": "amplifier", "count": 1}, {"kind": "gunner", "count": 1}],
     [{"kind": "drone", "count": 9}, {"kind": "spitter", "count": 5},
      {"kind": "tank", "count": 3}, {"kind": "mender", "count": 1}],
     [{"kind": "drone", "count": 10}, {"kind": "spitter", "count": 5},
@@ -21,7 +21,7 @@
      {"kind": "rusher", "count": 4}],
     [{"kind": "drone", "count": 10}, {"kind": "spitter", "count": 6},
      {"kind": "tank", "count": 3}, {"kind": "splitter", "count": 3},
-     {"kind": "linker", "count": 1}],
+     {"kind": "linker", "count": 1}, {"kind": "gunner", "count": 1}],
     [{"kind": "drone", "count": 11}, {"kind": "spitter", "count": 6},
      {"kind": "tank", "count": 4}, {"kind": "splitter", "count": 4},
      {"kind": "necromancer", "count": 1}, {"kind": "rusher", "count": 3}],
@@ -30,7 +30,8 @@
      {"kind": "summoner", "count": 1}, {"kind": "amplifier", "count": 1}],
     [{"kind": "drone", "count": 12}, {"kind": "spitter", "count": 7},
      {"kind": "tank", "count": 4}, {"kind": "splitter", "count": 4},
-     {"kind": "mender", "count": 1}, {"kind": "linker", "count": 1}],
+     {"kind": "mender", "count": 1}, {"kind": "linker", "count": 1},
+     {"kind": "gunner", "count": 2}],
     [{"kind": "drone", "count": 12}, {"kind": "spitter", "count": 7},
      {"kind": "tank", "count": 5}, {"kind": "splitter", "count": 5},
      {"kind": "necromancer", "count": 1}, {"kind": "summoner", "count": 1}],
@@ -41,10 +42,10 @@
     [{"kind": "drone", "count": 13}, {"kind": "spitter", "count": 8},
      {"kind": "tank", "count": 5}, {"kind": "splitter", "count": 5},
      {"kind": "necromancer", "count": 1}, {"kind": "summoner", "count": 1},
-     {"kind": "rusher", "count": 2}],
+     {"kind": "rusher", "count": 2}, {"kind": "gunner", "count": 2}],
     [{"kind": "drone", "count": 9}, {"kind": "spitter", "count": 6},
      {"kind": "tank", "count": 4}, {"kind": "splitter", "count": 4},
      {"kind": "mender", "count": 1}, {"kind": "linker", "count": 1},
-     {"kind": "boss", "count": 1}]
+     {"kind": "gunner", "count": 1}, {"kind": "boss", "count": 1}]
   ]
 }

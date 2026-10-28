@@ -22,6 +22,13 @@ public:
 
     // 位置推进：记录上一帧位置后按 dt 前进（含寿命、出屏判死）。
     virtual void advance(float dt) = 0;
+    // 吸附：推进前按自身吸附参数微调速度方向。
+    // 池每帧先调它，再调 advance()；默认不吸附，只有带吸附参数的弹种会覆盖。
+    virtual void steer(const arena::Context &ctx, float dt)
+    {
+        (void)ctx;
+        (void)dt;
+    }
     // 样式绘制。
     virtual void draw(QPainter &world, QPainter &glow) const = 0;
     // 碰撞事件：命中目标后由子弹自己结算伤害/穿透等，返回 false 表示这颗弹到此结束。

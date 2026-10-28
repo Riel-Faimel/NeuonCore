@@ -445,6 +445,16 @@ Editor::Action Editor::mousePress(const Math::Vec2 &position)
             return Action::None;
         }
     }
+    // 没点中具体单元格（典型情况：这一波一个敌人都没有，没有任何列）时，
+    // 点行本身也能选中这一波，保证空波次可选、可继续拖入敌人。
+    for (int row = 0; row < waveCount(); ++row) {
+        if (!waveTable_.rowRect(row).contains(point)) {
+            continue;
+        }
+        row_ = row;
+        clampColumn();
+        return Action::None;
+    }
     return Action::None;
 }
 
@@ -502,8 +512,8 @@ void Editor::render(QPainter &painter, bool muted) const
         waveTable_.draw(painter, script_, kinds, row_, column_, pointer_, dragKind_,
                         dragPos_, tint);
         // 幽灵在表格之后、端口行/检查器之前绘制，保持原有叠放顺序；
-        // 没有任何敌人列时表格提前返回，原实现也不会画幽灵。
-        if (dragKind_ >= 0 && !kinds.empty()) {
+        // 没有敌人列时表格依然画波次行，所以幽灵也照常跟着指针走。
+        if (dragKind_ >= 0) {
             palette_.drawGhost(painter, dragKind_, dragPos_);
         }
         if (mode_ == Mode::Host) {

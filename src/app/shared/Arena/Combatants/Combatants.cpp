@@ -4,6 +4,7 @@
 #include "Arena/Context.h"
 #include "Arena/Entities/Entities.h"
 #include "Arena/Host.h"
+#include "Base/Paint/Paint.h"
 #include "Net/Snapshot.h"
 #include "Random.h"
 #include "Base/Base.h"
@@ -23,6 +24,7 @@ void Combatants::reset()
     players_.back().reset();
     localPlayerId_ = 0;
     enemies_.clear();
+    grid_.clear();
     boss_ = nullptr;
 }
 
@@ -50,7 +52,37 @@ void Combatants::configurePlayers(const std::vector<int> &playerIds)
     }
     localPlayerId_ = 0;
     enemies_.clear();
+    grid_.clear();
     boss_ = nullptr;
+}
+
+void Combatants::refreshEnemyGrid()
+{
+    grid_.rebuild(enemies_);
+}
+
+void Combatants::refreshEnemyDensity(){
+    // 一次 O(n) 扫描：每个敌人数一遍 150 半径内的友军，供 SupportEnemy 选密集点。
+    // 之前是每个支援型敌人各自嵌套遍历全场，人数一多就是 O(n²)。
+    static constexpr float kDensityRadius = 150.0f;
+    for (const auto &owned : enemies_) {
+        Enemy *enemy = owned.get();
+        if (enemy == nullptr || !enemy->isAlive()) {
+            continue;
+        }
+        int neighbors = 0;
+        grid_.forEachNear(enemy->pos, kDensityRadius, [enemy, &neighbors](Enemy &other) {
+            if (&other == enemy || !other.isAlive()) {
+                return true;
+            }
+            if (enemy->pos.distanceSquaredTo(other.pos)
+                <= kDensityRadius * kDensityRadius) {
+                ++neighbors;
+            }
+            return true;
+        });
+        enemy->localDensity = neighbors;
+    }
 }
 
 void Combatants::beginWave()
@@ -85,14 +117,55 @@ void Combatants::updateEnemies(const Context &ctx, float dt)
     }
 }
 
+std::unique_ptr<Enemy> Combatants::acquireMini(const Math::Vec2 &position, int wave)
+{
+    while (!miniPool_.empty()) {
+        std::unique_ptr<Enemy> pooled = std::move(miniPool_.back());
+        miniPool_.pop_back();
+        auto *mini = dynamic_cast<MiniEnemy *>(pooled.get());
+        if (mini == nullptr) {
+            continue;   // 池里理论上只有 mini；异常对象直接丢弃
+        }
+        // 原地析构 + 重建：内存复用，不触发 new/delete，也不影响已注册的 vtable。
+        std::destroy_at(mini);
+        std::construct_at(mini, position, wave);
+        return pooled;
+    }
+    return Enemy::create(EnemyType(typeid(MiniEnemy)), position, wave);
+}
+
+void Combatants::recycleEnemies()
+{
+    // 交换删除：死亡的 mini 收进池（有上限），其他死亡敌人正常释放。
+    size_t index = 0;
+    while (index < enemies_.size()) {
+        std::unique_ptr<Enemy> &owned = enemies_[index];
+        if (owned->isAlive()) {
+            ++index;
+            continue;
+        }
+        Enemy *raw = owned.release();
+        const bool pooled = dynamic_cast<MiniEnemy *>(raw) != nullptr
+                            && int(miniPool_.size()) < MiniPoolLimit;
+        if (pooled) {
+            miniPool_.emplace_back(raw);
+        } else {
+            delete raw;
+        }
+        if (index + 1 != enemies_.size()) {
+            enemies_[index] = std::move(enemies_.back());
+        }
+        enemies_.pop_back();
+    }
+}
+
 void Combatants::cleanup()
 {
     if (boss_ != nullptr && !boss_->isAlive()) {
         boss_ = nullptr;
     }
-    std::erase_if(enemies_, [](const std::unique_ptr<Enemy> &enemy) {
-        return !enemy->isAlive();
-    });
+    recycleEnemies();
+    grid_.rebuild(enemies_);
 }
 
 void Combatants::draw(QPainter &world, QPainter &glow, const Context &ctx) const
@@ -112,8 +185,29 @@ void Combatants::draw(QPainter &world, QPainter &glow, const Context &ctx) const
               [](const Fighter *a, const Fighter *b) {
                   return a->position().y < b->position().y;
               });
+    // 人群 LOD：敌人过多时把辉光通道临时切成“世界通道”，
+    // Paint::glow 在 World 通道直接返回，于是这一批敌人不画光晕（机身照旧）。
+    // 人群 LOD：只在人数超过门槛时关辉光（保命档再关抗锯齿）。
+    // mini 自己的简化在 Enemy::draw 里按类型处理，不依赖这里。
+    const bool skipEnemyGlow = enemyCount() > CrowdLimit;
+    const bool emergency = enemyCount() > CrowdExtremeLimit;
+    const base::Paint::Pass savedPass = base::Paint::currentPass();
+    const bool antialiasing = world.renderHints().testFlag(QPainter::Antialiasing);
+    if (skipEnemyGlow) {
+        base::Paint::setPass(base::Paint::Pass::World);
+    }
+    if (emergency) {
+        // 抗锯齿是这几百个圆的主要开销；极端人群里看不出锯齿。
+        world.setRenderHint(QPainter::Antialiasing, false);
+    }
     for (const Fighter *fighter : drawOrder) {
         fighter->draw(world, glow, ctx);
+    }
+    if (emergency) {
+        world.setRenderHint(QPainter::Antialiasing, antialiasing);
+    }
+    if (skipEnemyGlow) {
+        base::Paint::setPass(savedPass);
     }
     // 远程飞机先画，本机飞机最后画（保证自己的机身在最上层）。
     const Player *local = nullptr;
@@ -135,7 +229,10 @@ void Combatants::draw(QPainter &world, QPainter &glow, const Context &ctx) const
 void Combatants::spawnEnemy(const Context &ctx, EnemyType type,
                             const Math::Vec2 &pos, int wave, int enemyLevel)
 {
-    std::unique_ptr<Enemy> enemy = Enemy::create(type, pos, wave);
+    // mini 走专用对象池；其他类型正常分配。
+    std::unique_ptr<Enemy> enemy =
+        type == EnemyType(typeid(MiniEnemy)) ? acquireMini(pos, wave)
+                                             : Enemy::create(type, pos, wave);
     if (!enemy) {
         return;
     }
@@ -149,6 +246,9 @@ void Combatants::spawnEnemy(const Context &ctx, EnemyType type,
     } else {
         ctx.entities.spawnBurst(ctx, pos, ptr->color, 8, 120.0f, 0.4f);
     }
+    // 新敌人立即进网格：伤害分担/子弹结算可能在两次常规刷新之间发生
+    // （测试和地雷/冲击波路径也会直接调 takeDamage）。
+    grid_.rebuild(enemies_);
 }
 
 void Combatants::spawnEnemy(const Context &ctx, const QString &dataKey,
@@ -166,8 +266,7 @@ void Combatants::spawnMinions(const Context &ctx, const Math::Vec2 &pos, int cou
         const float angle = RandomService.real(0.0f, Math::Tau);
         const Math::Vec2 offset = Math::Vec2(std::cos(angle), std::sin(angle))
             * RandomService.real(60.0f, 90.0f);
-        std::unique_ptr<Enemy> child = Enemy::create(
-            EnemyType(typeid(MiniEnemy)), pos + offset, wave);
+        std::unique_ptr<Enemy> child = acquireMini(pos + offset, wave);
         if (!child) {
             continue;
         }
@@ -175,6 +274,7 @@ void Combatants::spawnMinions(const Context &ctx, const Math::Vec2 &pos, int cou
         ctx.entities.spawnBurst(ctx, child->pos, child->color, 6, 110.0f, 0.35f);
         enemies_.push_back(std::move(child));
     }
+    grid_.rebuild(enemies_);
 }
 
 void Combatants::clearForVictory(const Context &ctx)
@@ -186,9 +286,13 @@ void Combatants::clearForVictory(const Context &ctx)
                                     8, 130.0f, 0.45f);
         }
     }
-    std::erase_if(enemies_, [](const std::unique_ptr<Enemy> &enemy) {
-        return !enemy->boss;
-    });
+    // 结算清场：非 Boss 全部标记为死亡，死亡 mini 回池，其余释放；Boss 保留。
+    recycleEnemies();
+    enemies_.erase(std::remove_if(enemies_.begin(), enemies_.end(),
+                                  [](const std::unique_ptr<Enemy> &enemy) {
+                                      return !enemy->boss;
+                                  }),
+                   enemies_.end());
     boss_ = nullptr;
     for (Player &player : players_) {
         if (player.state.active) {
@@ -503,6 +607,16 @@ void Combatants::applySnapshot(const net::Snapshot &snapshot)
         }
     }
 
+    // 视图每帧重建敌人：先把上一帧的 mini 收进池，下一次重建直接原地复用，
+    // 避免 30Hz × N 个召唤物持续 new/delete。
+    for (std::unique_ptr<Enemy> &owned : enemies_) {
+        if (int(miniPool_.size()) >= MiniPoolLimit) {
+            break;
+        }
+        if (dynamic_cast<MiniEnemy *>(owned.get()) != nullptr) {
+            miniPool_.push_back(std::move(owned));
+        }
+    }
     enemies_.clear();
     enemies_.reserve(snapshot.enemies.size());
     boss_ = nullptr;
@@ -511,7 +625,10 @@ void Combatants::applySnapshot(const net::Snapshot &snapshot)
         if (!type) {
             continue;
         }
-        std::unique_ptr<Enemy> enemy = Enemy::create(*type, data.pos, data.wave);
+        std::unique_ptr<Enemy> enemy =
+            *type == EnemyType(typeid(MiniEnemy))
+                ? acquireMini(data.pos, data.wave)
+                : Enemy::create(*type, data.pos, data.wave);
         if (!enemy) {
             continue;
         }
@@ -555,6 +672,7 @@ void Combatants::applySnapshot(const net::Snapshot &snapshot)
         }
         enemies_.push_back(std::move(enemy));
     }
+    refreshEnemyGrid();
 }
 
 } // namespace arena

@@ -40,6 +40,10 @@ struct PlayerState {
     int pierce = 0;
     float critChance = 0.0f;
     int shockLevel = 0;
+    // 子弹吸附（强化“磁吸弹道”给的 buff）：基础为 0，即默认所有子弹都是直线弹道。
+    // homingRadius 是感知半径，homingRatio 是每 1/60 秒朝目标转过去的比例。
+    float homingRadius = 0.0f;
+    float homingRatio = 0.0f;
     float dashCdMax = 1.45f;
     float dashCd = 0.0f;
     float dashTime = 0.0f;

@@ -5,7 +5,7 @@
 - 8 个波次、4 种普通敌人、最终 Boss「虚空吞噬者」；胜负只看台本是否打完，Boss 只是强敌，放在第几波都不改变结束条件
 - 背景音乐：`music\` 目录下的音频文件（MP4 / MP3 / M4A / FLAC / OGG / WAV 等）按文件名顺序轮转播放，一首结束自动切下一首
 - 同样的波次组成、敌人数值、Boss 血量阶段、弹幕与召唤逻辑
-- 同样的 9 种强化协议、叠加效果和生命/伤害/射速数值（每轮数值在区间内随机）
+- 同样机制的 9 种强化协议，加上 C++ 版新增的「磁吸弹道」共 10 种；叠加效果和生命/伤害/射速数值（每轮数值在区间内随机）
 - 同样的碰撞判定、冲刺无敌、击退、掉落概率、波次间隔
 - 同样的标题、战斗、强化、暂停、胜利、失败流程
 
@@ -89,7 +89,7 @@ NeonCoreServer.exe --port 7777
 
 标题页另有：`↑` `↓` / `W` `S` 切换卡片；选中“标准协议”时 `ENTER`（或点卡片）进入 **星区地图**，地图上 `←` `→` 选择区域、`ENTER` 进入当前区域、`ESC` 返回；选中“自定义协议”时 `ENTER`（或点卡片）进入带三个选项卡的编辑界面：**单机 / 局域网主机 / 加入主机**；单机与局域网主机显示台本编辑，主机额外在波次下方显示服务器端口，加入主机只显示地址和端口；`1` 进地图，`2` 进编辑器，`3` 进战备。标题页右上角还有“战备”入口，可选择发射器（标准/散射/磁轨）。
 
-台本编辑器：表格只显示当前用到的敌人列；从底部“敌人库”把敌人**拖到某一波**（或按 `1`–`9`、`0`）才会加入该列。`↑` `↓` / `W` `S` 选波次，`←` `→` / `A` `D` 选列，`+` / `-` 调数量或开关 Boss（**按住不放会连续快速加减**），`N` 新增波次、`X` 删除末波（1–12 波，单格 0–20），`ENTER` 部署，`ESC` 返回。编辑结果只存在内存里，重启回到默认台本。
+台本编辑器：表格只显示当前用到的敌人列；从底部“敌人库”把敌人**拖到某一波**（或按 `1`–`9`、`0`）才会加入该列。**没有任何敌人的波次照样显示**（行尾标 `×0`，行内写“空波次 · 拖动敌人到这一波”），即使整个台本一个敌人都没有、列数为 0，表格也不会消失：点行即可选中这一波，再把敌人拖进来。`↑` `↓` / `W` `S` 选波次，`←` `→` / `A` `D` 选列，`+` / `-` 调数量或开关 Boss（**按住不放会连续快速加减**），`N` 新增波次、`X` 删除末波（1–12 波，单格 0–20），`ENTER` 部署，`ESC` 返回。编辑结果只存在内存里，重启回到默认台本。
 
 房间页：房主按 `ENTER` 开始对局、`X` 解散房间、`ESC` 离开并关闭房间；加入者按 `ESC` 离开。失败页按 `ENTER` 重试连接、`ESC` 返回主菜单。
 
@@ -110,6 +110,22 @@ NeonCoreServer.exe --port 7777
 - 局内 **右键** 在光标处布置，敌人进入感应范围即引爆，对爆炸范围内敌人造成大量伤害；
 - 地雷是一次性消耗品：布置即扣库存，每局开始（新一波）会清掉场上未引爆的地雷；
 - 价格、伤害、感应/爆炸半径、引爆延迟都在 `src/json/items.json`。
+
+## 子弹吸附（强化：磁吸弹道）
+
+吸附**不是子弹的固有属性**，而是强化协议「磁吸弹道」给的 buff：
+
+- 玩家的 `homingRadius` / `homingRatio` 初始都是 **0**，所以默认所有子弹（玩家弹、敌方弹）都是直线弹道；
+- 抽到「磁吸弹道」后，`homingRadius` 变成 **170 像素**（感知范围），`homingRatio` 累加本轮的随机值
+  （每张 **+5%–10%**，上限 **45%**），所以可以叠多层；
+- 生效方式：飞行途中如果 170 像素内出现**对面阵营**的目标（玩家弹找敌人，敌方弹找玩家飞机），
+  每帧把飞行方向朝最近目标转 `homingRatio` 的比例；只改方向不改速度，弹道拐弯但速度/寿命不变；
+- 数值区间在 `src/json/upgrades.json` 的 `"homing"`（`min` / `max` 是吸附比例），
+  卡面名称/说明在 `src/app/server/Simulation/Upgrades/Upgrades.cpp`；
+- 实现：`Bullet::steer()` 是接口，`Arena/Bullets/StandardBullet::steer()` 负责“找最近对手 + 按比例转向”，
+  `Bullets::update()` 在推进前统一调用（先吸附，再 `advance`）；`Player::shoot()` 把
+  `PlayerState::homingRadius/Ratio` 传给每颗弹，所以只有拿到 buff 的玩家子弹会拐弯。
+  镜像/快照路径不推进子弹，协议无需改动。
 
 ## 构建
 
@@ -295,21 +311,23 @@ cpp/
 
 每关的波次安排单独放在 `src/json/waves/level-0N.json`（当前 01–04 四关），`levels.json` 的节点用 `waves` 字段登记。
 
-新增的 6 种敌人（数值与光环参数都在 `src/json/enemies.json`）：
+新增的 7 种敌人（数值与光环参数都在 `src/json/enemies.json`）：
 
 - `amplifier`：为范围内友军增伤（子弹与接触都吃加成）；
 - `linker`：为范围内友军分担一部分伤害；
 - `mender`：持续治疗范围内友军；
 - `rusher`：高速突进、攻击欲望高；
 - `necromancer`：概率复活范围内阵亡的友军；
-- `summoner`：按常规友军阵亡数积累进度（召唤物 mini 不计入），满进度召唤小怪。
+- `summoner`：按常规友军阵亡数积累进度（召唤物 mini 不计入），满进度召唤小怪；
+- `gunner`：射速极快的远程敌人，**持续连射**：每 0.10–0.15 秒打一发，没有点射间隔或长冷却，
+  单发伤害低（2.2）、瞄准带随机偏移，靠火力密度压制。
 
-台本编辑器底部的敌人库也已包含这 6 种，拖拽或按 `1`–`9`、`0` 加入。
+台本编辑器底部的敌人库也已包含这 7 种：拖到某一波即可加入；前 10 种还能用 `1`–`9`、`0` 快捷加入（`SUMMONER` / `GUNNER` 在第二行，只支持拖拽）。
 
 敌人按类型形成阵型：
 
 - 进攻型（drone / mini / rusher）与自毁型（splitter）：直冲玩家、以接触为目标；
-- 远程型（spitter / summoner）：保持射程，玩家弹幕逼近时短促侧闪（0.12s，冷却 1.6s）；有防御线时躲到防御者背后；
+- 远程型（spitter / summoner / gunner）：保持射程，玩家弹幕逼近时短促侧闪（0.12s，冷却 1.6s）；有防御线时躲到防御者背后；
 - 防御型（tank / linker）：站在远程/辅助后排与玩家之间，不主动贴脸；
 - 辅助型（amplifier / mender / necromancer）：躲在防御者背后，朝“非自毁型”友军最密集的位置靠拢；
 - Boss：独立走位（中距离绕圈 + 定向/环形弹幕）。
@@ -373,6 +391,9 @@ mingw32-make -j12 test
 - 战备：标题页入口、发射器装备、玩家伤害/射速随发射器变化
 - 敌人等级：升级后血量/伤害提高，战斗界面不显示等级
 - 支援敌人：增伤光环、伤害分担、群体治疗、高速突进、概率复活、召唤进度
+- 连射敌人：`gunner` 持续射击（没有点射/冷却停顿），3 秒窗口内发射数远高于普通远程敌人
+- 吸附 buff：玩家初始吸附为 0（直线弹道），抽到“磁吸弹道”后子弹带吸附参数并按比例转向最近敌人
+- 编辑器空波次：清空所有敌人后台本仍保留波次、列数为 0、空行可见可点选，拖入敌人后恢复成一列
 - 快照：完整场景提取 → QDataStream 序列化 → 反序列化，逐字段相等；玩家 id/颜色/localPlayerId 保留；帧长度/协议版本不匹配被拒绝
 - GameView：快照重建后的玩家/敌人/子弹/实体/HUD/强化卡/Boss 条正确，并能用现有 `Renderer` 画出完整一帧
 - 单机路径：`GameSimulation -> Snapshot -> GameView -> Renderer` 的视图与模拟状态一致
@@ -418,9 +439,33 @@ mingw32-make -j12 test
 
 其他改动：绘制原语去掉逐次 `save/restore`；世界层直接画进最终帧、去掉多余整图；标准弹对象池复用（稳态零堆分配）；敌人 `Archetype` 缓存替代 `dynamic_cast`；`Combatants::draw` 使用线程内排序缓冲。
 
+### 人群（数量很大时）
+
+自定义台本或召唤师海很容易堆到几百上千个敌人，这时瓶颈不是渲染管线而是**数量**：
+
+- 模拟侧：新增敌人空间网格（`Arena/Combatants/EnemyGrid.h`，64px 格 / 20×12 覆盖全场），分离、子弹命中、接触伤害、地雷、linker 伤害分担、光环/治疗、防御者与密集点查询都只查邻近格子；辅助型敌人的“150 半径友军数”每帧缓存一次。阵亡通知只发给 necromancer / summoner。
+- 绘制侧：**按类型降级**。`mini` 这类“数量多、体积小”的召唤物**倾向**更早简化——全场敌人超过 120 时它们先变成纯色圆（不画辉光/血条），人少时照常画完整机身；其他敌人默认保留完整机身，只在
+  - 敌人数 > `Combatants::CrowdLimit`（420）时关闭敌人辉光（机身细节保留），
+  - 敌人数 > `Combatants::CrowdExtremeLimit`（700）时才简化机身并关闭抗锯齿（保命档）。
+
+`--bench` 可以带敌人数量跑人群场景（一半 mini、一半常规敌人）：
+
 ```powershell
-# 基准（debug/test 构建）
+.\build\NeonCoreConsole.exe --bench 800
+# BENCH crowd=800 frames=300 render=18.003 ms/frame update=3.389 ms/frame
+```
+
+| 场景 | render | update |
+| --- | --- | --- |
+| 12 敌（固定基准） | 6.6–7.4 ms/帧 | ~0.01 ms/帧 |
+| 800 敌 · 优化前（全详细绘制） | 162.6 ms/帧 | 66.7 ms/帧 |
+| 800 敌 · 现在（一半 mini 走 LOD） | **18.0 ms/帧** | **3.4 ms/帧** |
+| 400 敌 · 现在 | 28.5 ms/帧（辉光未关） | 1.0 ms/帧 |
+
+```powershell
+# 基准（debug/test 构建）；带数字是人群压力场景（一半 mini 召唤物）
 .\build\NeonCoreConsole.exe --bench
+.\build\NeonCoreConsole.exe --bench 800
 
 # 关闭并行 / 指定工作线程数（0–8，默认 min(核数-1, 3)）
 $env:NEON_SINGLE_THREAD=1
@@ -436,4 +481,4 @@ $env:NEON_RENDER_THREADS=2
 - 鼠标指针是全局元素，属于 `Base` 的 `base::Pointer` 组件（`src/app/client/Base/Pointer/`）：Widgets 画面用 `BaseService.pointerDraw()`，QML 结算/失败页用 `Reticle.qml` 镜像同一位置/时钟/可见性；`base::Paint::reticle()` 是 Widgets 画法。窗口内隐藏系统光标，指针移出窗口时恢复系统箭头。
 - 第三方运行库：Qt 6（LGPLv3）与 FFmpeg（LGPLv2.1+）。分发时请保留相应的许可证信息，见 [`THIRD_PARTY.txt`](THIRD_PARTY.txt)。
 
-更多画面：[标题](screenshots/title.png) · [星区地图](screenshots/map.png) · [战备](screenshots/armory.png) · [商店](screenshots/shop.png) · [设置](screenshots/settings.png) · [台本编辑器](screenshots/editor.png) · [局域网主机](screenshots/server_setup.png) · [加入主机](screenshots/server_join.png) · [房间（房主）](screenshots/room_host.png) · [房间（加入者）](screenshots/room_join.png) · [多玩家](screenshots/multiplayer.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [真实窗口](screenshots/window.png)
+更多画面：[标题](screenshots/title.png) · [星区地图](screenshots/map.png) · [战备](screenshots/armory.png) · [商店](screenshots/shop.png) · [设置](screenshots/settings.png) · [台本编辑器](screenshots/editor.png) · [空波次](screenshots/editor_empty.png) · [局域网主机](screenshots/server_setup.png) · [加入主机](screenshots/server_join.png) · [房间（房主）](screenshots/room_host.png) · [房间（加入者）](screenshots/room_join.png) · [多玩家](screenshots/multiplayer.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [真实窗口](screenshots/window.png)

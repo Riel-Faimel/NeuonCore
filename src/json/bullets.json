@@ -1,5 +1,6 @@
 {
   "boss_aimed":  {"speed": 315, "damage": 13, "radius": 5},
   "boss_radial": {"speed": 285, "damage": 13, "radius": 5},
-  "spitter":     {"speed": 300, "damage": 11, "radius": 4}
+  "spitter":     {"speed": 300, "damage": 11, "radius": 4},
+  "gunner":      {"speed": 340, "damage": 2.2, "radius": 3}
 }

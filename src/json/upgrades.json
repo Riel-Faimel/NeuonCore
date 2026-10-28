@@ -7,5 +7,6 @@
   "maxhp":   {"min": 20,   "max": 40},
   "heal":    {"min": 0.35, "max": 0.60},
   "shock":   {"min": 1,    "max": 1},
-  "crit":    {"min": 0.08, "max": 0.16}
+  "crit":    {"min": 0.08, "max": 0.16},
+  "homing":  {"min": 0.05, "max": 0.10}
 }

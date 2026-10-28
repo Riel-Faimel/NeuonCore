@@ -152,7 +152,7 @@ cpp/src/
 | `Room` | 房间/大厅：显示服务端权威的房间名、人数、房主/你标记和等待状态；主机的 `ENTER` 开始、`X` 解散、`ESC` 离开，加入者只能 `ESC` 离开 |
 | `Failure` | 连接层失败页数据；UI 只在 QML `FailureOverlay` |
 | `Result` | 结算数据 + QML `ResultOverlay`；C++ 只提供只读 `ResultSummary` |
-| `Editor` | 自定义协议编辑：顶部单机/局域网主机/加入主机选项卡；单机与主机编辑台本，主机在波次下方追加端口，加入主机显示地址和端口 |
+| `Editor` | 自定义协议编辑：顶部单机/局域网主机/加入主机选项卡；单机与主机编辑台本，主机在波次下方追加端口，加入主机显示地址和端口。表格的列由“台本里用到的敌人”派生，**没有任何敌人的波次仍然画出整行**（列数为 0 时也一样），所以空波次始终可见、可点选、可拖入 |
 | `Depot` | QML 补给站；C++ 只保留购买/返回逻辑 |
 | `Armory` | QML 战备；C++ 只保留选择/装备逻辑 |
 | `Settings` | QML 音量设置；C++ 只保留配置读写和键盘/鼠标逻辑 |
@@ -221,8 +221,9 @@ public:
     enum class Standpoint { Player, Enemy };
 
     virtual void advance(float dt) = 0;                       // 位置推进 + 寿命
+    virtual void steer(const arena::Context &ctx, float dt);   // 吸附转向（默认空实现）
     virtual void draw(QPainter &world, QPainter &glow) const = 0;
-    virtual bool hit(Arena &arena, arena::Fighter &target) = 0;  // 命中多态；返回 false 结束自己
+    virtual bool hit(const arena::Context &ctx, arena::Fighter &target) = 0;  // 命中多态；返回 false 结束自己
     virtual bool alive() const = 0;                            // 池据此回收
     virtual const Math::Vec2 &prev() const = 0;                // 扫掠碰撞起点
     virtual const Math::Vec2 &position() const = 0;            // 扫掠碰撞终点
@@ -234,6 +235,7 @@ public:
 - 发射方只做 `ctx.bullets.spawnStandard(...)`（`Arena` 继承了 `arena::Bullets`；组件接口不对外），不自持子弹；
 - `arena::Bullets` 按 `standpoint()` 分流到玩家/敌方两组，用 `reserve` + 交换删除（swap-pop）回收；死亡的标准弹回到空闲池复用（`StandardBullet::reset`），稳态射击**不再产生堆分配**；
 - 碰撞仍由 `arena::Events` 做几何判定（`segmentCircle(bullet.prev(), bullet.position(), target, targetR + bullet.radius)`），命中后调 `bullet.hit(...)`，伤害、暴击、穿透全部由弹种自己结算；
+- **吸附**：`Bullets::update(ctx, dt)` 先 `steer()` 再 `advance()`，所以“转向”和“推进”仍然只有池一个驱动点。`StandardBullet` 自己实现 `steer()`：在 `homing_radius` 内找最近的**对面阵营**目标（玩家弹找 `Combatants::enemies()`，敌方弹找 `Combatants::players()`），把速度方向按 `homing_ratio * dt * 60` 的比例插值过去，速度大小不变（方向变、弹道弯）。吸附默认 **关闭**（`PlayerState::homingRadius/Ratio` 初始为 0，所有子弹直线飞行），只有强化「磁吸弹道」（`Upgrades::applyEffect` 的 `homing` 分支）把 170 像素半径和叠加的比例写进玩家状态，`Player::shoot()` 再把它们传给每颗弹；
 - 新弹种 = 在 `Arena/Bullets/` 加一个 `Bullet` 实现，提交即可，`Events`/`Renderer` 不用改；对象池目前只复用标准弹。
 
 ### Renderer
@@ -352,7 +354,7 @@ public:
 | 虚基类 | 实现 |
 | --- | --- |
 | `OffensiveEnemy` | drone / mini / rusher |
-| `RangedEnemy` | spitter / summoner |
+| `RangedEnemy` | spitter / summoner / gunner |
 | `DefensiveEnemy` | tank / linker |
 | `SupportEnemy` | amplifier / mender / necromancer |
 | `SelfDestructEnemy` | splitter（死亡分裂） |
@@ -368,6 +370,7 @@ public:
 | `rusher` | 300 速度直冲，每 1.6s 以 2.3 倍速度突进 |
 | `necromancer` | 220 范围内友军阵亡时 30% 概率半血复活；复活体不再连锁复活，分数减半 |
 | `summoner` | 每个常规友军阵亡积累 +1 进度（mini 不计入），满 3 时在自身周围召唤 3 只 mini |
+| `gunner` | 持续连射型远程：每 0.10–0.15s 打一发，没有点射/长冷却分段；单发伤害低、瞄准 ±0.10rad 抖动 |
 
 支援型敌人的光环半径画在 `Enemy::draw()`，被增伤的敌人有一圈琥珀色提示；伤害分担通过 `Damage.shared` 防止递归。
 
@@ -379,7 +382,7 @@ public:
 | --- | --- | --- |
 | 进攻型 | drone / mini / rusher | 直冲玩家，以接触为目标（rusher 额外周期突进） |
 | 自毁型 | splitter | 直冲玩家，死亡时分裂（后续自毁敌人也在 `SelfDestructEnemy` 下直冲） |
-| 远程型 | spitter / summoner | 在没有防御线时保持射程；有防御者且防御者更靠前时，移动到防御者背后（玩家反方向 42px）；同时保留 0.12s 弹幕侧闪 |
+| 远程型 | spitter / summoner / gunner | 在没有防御线时保持射程；有防御者且防御者更靠前时，移动到防御者背后（玩家反方向 42px）；同时保留 0.12s 弹幕侧闪 |
 | 防御型 | tank / linker | 计算远程/辅助友军的质心，站到“质心与玩家之间”（45% 处），不主动贴玩家 |
 | 辅助型 | amplifier / mender / necromancer | 优先躲到最近防御者背后；朝“非自毁型”友军最密集点靠拢（150 半径邻居数），并只考虑防御线后方的友军；贴玩家过近时后退 |
 | Boss | boss | 独立走位：保持 185–265 距离、绕圈、定向弹幕 + 环形弹幕 |
@@ -400,7 +403,7 @@ const EnemyRegistrar<DroneEnemy> kRegistration("drone", Base::Coral);
 - `Enemy::create(EnemyType, pos, wave)` 按类型查表，未注册返回 `nullptr`；`Enemy::create(QString)` 只在数据/测试边界把 `dataKey` 解析成类型；
 - 台本在数据边界完成解析：`Menu::standardScript()` 和 `Editor` 把 JSON/编辑器键解析成 `EnemyType`，`games::EnemySpawn` 只存类型；`Waves::buildQueue()` 直接用类型排队，Boss 判定用 `Enemy::isBoss(type)`，传送门也不再保存 kind 字符串；
 - `Enemy.cpp` 不再有按 kind 的走位/绘制 `switch`，只保留基类逻辑、`statsFor(EnemyType)` 和注册表；
-- 新增敌人：`enemies.json` 加数值 → 在 `Enemies/` 新建 `XEnemy.h/.cpp`，继承对应虚基类并写走位/绘制 → 在 cpp 里放 `EnemyRegistrar` → Makefile 的 `ARENA_COMPONENTS` 加对象 → 编辑器敌人库（`Menu/Editor/Editor.cpp` 的 `kKeys/kLabels/kindColor`）加一项 → 波次里使用。
+- 新增敌人：`enemies.json` 加数值 → 在 `Enemies/` 新建 `XEnemy.h/.cpp`，继承对应虚基类并写走位/绘制 → 在 cpp 里放 `EnemyRegistrar` → Makefile 的 `SHARED_COMPONENTS` 加对象 → 编辑器敌人库（`Client/Menu/Editor/Palette.cpp` 的 `kKeys/kLabels/kindColor`，以及 `Menu/Editor/Types.h` 的 `kKindCount`）加一项 → 波次里使用（`src/json/waves/level-0N.json`）。
 
 ## 依赖方向
 
@@ -608,6 +611,13 @@ GameWindow::paintEvent()
 - 敌人 `Archetype` 缓存替代每帧 `dynamic_cast`；`statsFor` 从线性扫描改为 `QHash` 下标表；`takeDamage` 先按 `Archetype::Defensive` 过滤 linker 扫描；
 - `Combatants::draw` 排序缓冲改为线程内 `thread_local`，两个渲染通道各自复用；
 - `QLocale` 等每帧构造的对象改为 `static`。
+
+**敌人数量很大时**（自定义台本 / 召唤师海）：
+
+- `Combatants` 持有一个 `arena::EnemyGrid`（64px 格、20×12 覆盖全场），`Arena::update` 在“子弹结算前”和“敌人移动后”各重建一次（O(n)）。`Events` 的分离/子弹命中/接触/地雷、`Enemy::takeDamage` 的 linker 分担、`SupportEnemy` 的光环/治疗、`nearestDefender`/`densestAlly`/`DefensiveEnemy` 的质心统计全部改为 `forEachEnemyNear(pos, radius, fn)`，把原来的 O(n²) 降到与邻域相关；
+- `Combatants::refreshEnemyDensity()` 每帧一次 O(n) 扫描缓存每个敌人 150 半径内的友军数（`Enemy::localDensity`），辅助型敌人不再各自嵌套遍历全场；
+- `Enemy::listensToAllyKills` 让阵亡通知只发给 necromancer / summoner；
+- 绘制按类型降级：`mini` 的 `prefersLowDetail = true` 表示**倾向** LOD——全场敌人超过 120 时先简化成一个纯色圆（跳过朝向计算、辉光、血条），人少时仍画完整机身；其他敌人保留完整机身，只有全场敌人超过 `Combatants::CrowdLimit`（420）才关闭敌人辉光、超过 `CrowdExtremeLimit`（700）才简化机身并关闭抗锯齿。辉光关闭通过把 `Paint::Pass` 临时切成 `World` 实现，不需要改各敌人的绘制代码。
 
 并发调试开关：
 

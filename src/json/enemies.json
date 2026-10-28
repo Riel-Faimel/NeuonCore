@@ -5,6 +5,9 @@
   "spitter" : {
     "hp": 38,   "speed": 94,  "radius": 15, "damage": 10, "score": 18
   },
+  "gunner" : {
+    "hp": 34,   "speed": 92,  "radius": 13, "damage": 8,  "score": 20
+  },
   "tank" : {
     "hp": 122,  "speed": 60,  "radius": 24, "damage": 18, "score": 36
   },

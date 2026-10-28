@@ -30,29 +30,33 @@ void Bullets::submit(std::unique_ptr<Bullet> bullet)
 void Bullets::spawnStandard(const Math::Vec2 &position, const Math::Vec2 &velocity,
                             float damage, const QColor &color,
                             Bullet::Standpoint standpoint, float radius, int pierce,
-                            float critChance)
+                            float critChance, float homingRadius, float homingRatio)
 {
     if (!free_.empty()) {
         std::unique_ptr<Bullet> bullet = std::move(free_.back());
         free_.pop_back();
         if (auto *standard = dynamic_cast<StandardBullet *>(bullet.get())) {
             standard->reset(position, velocity, damage, color, standpoint, radius, pierce,
-                            critChance);
+                            critChance, homingRadius, homingRatio);
             submit(std::move(bullet));
             return;
         }
         // 池里只放标准弹；异常情况下丢弃并重新分配。
     }
     submit(std::make_unique<StandardBullet>(position, velocity, damage, color, standpoint,
-                                            radius, pierce, critChance));
+                                            radius, pierce, critChance, homingRadius,
+                                            homingRatio));
 }
 
-void Bullets::update(float dt)
+void Bullets::update(const Context &ctx, float dt)
 {
+    // 先吸附（只改方向），再推进；没有吸附参数的弹种 steer() 是空实现。
     for (auto &bullet : player_) {
+        bullet->steer(ctx, dt);
         bullet->advance(dt);
     }
     for (auto &bullet : enemy_) {
+        bullet->steer(ctx, dt);
         bullet->advance(dt);
     }
 }
