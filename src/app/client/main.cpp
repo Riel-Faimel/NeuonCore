@@ -68,7 +68,8 @@ public:
         }
         setWindowIcon(icon);
 
-        menu_.render();
+        const qreal dpr = devicePixelRatioF();
+        menu_.render(QSize(qRound(width() * dpr), qRound(height() * dpr)), dpr);
         clock_.start();
         timer_.setTimerType(Qt::PreciseTimer);
         timer_.setInterval(16);
@@ -336,7 +337,8 @@ private:
 
         menu_.update(dt);
         BaseService.pointerUpdate(dt);
-        menu_.render();
+        const qreal dpr = devicePixelRatioF();
+        menu_.render(QSize(qRound(width() * dpr), qRound(height() * dpr)), dpr);
         syncResultOverlay();
         syncFailureOverlay();
         update();

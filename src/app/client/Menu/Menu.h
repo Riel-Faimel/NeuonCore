@@ -53,7 +53,7 @@ public:
     Menu &operator=(const Menu &) = delete;
 
     void update(float dt);
-    void render();
+    void render(const QSize &target = QSize(), qreal pixelRatio = 1.0);
     const QImage &frame() const;
 
     void keyPress(int key, bool autoRepeat = false);

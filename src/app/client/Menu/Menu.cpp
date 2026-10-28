@@ -239,11 +239,31 @@ void Menu::update(float dt)
     }
 }
 
-void Menu::render()
+void Menu::render(const QSize &target, qreal pixelRatio)
 {
+    const QSize size = target.isValid() ? target
+                                         : QSize(GameConfig::ScreenWidth,
+                                                 GameConfig::ScreenHeight);
+    const qreal sx = qreal(size.width()) / GameConfig::ScreenWidth;
+    const qreal sy = qreal(size.height()) / GameConfig::ScreenHeight;
+    auto prepare = [&]() {
+        if (frame_.size() != size) {
+            frame_ = QImage(size, QImage::Format_ARGB32_Premultiplied);
+        }
+        // 绘制期间用 1:1 像素坐标，画完再交给 Qt 按 DPR 显示。
+        frame_.setDevicePixelRatio(1.0);
+        frame_.fill(Qt::transparent);
+    };
+    auto finish = [&]() { frame_.setDevicePixelRatio(pixelRatio); };
+
     if (screen_ == Screen::Room && match_.active()) {
-        QPainter painter(&frame_);
-        room_.render(painter, roomView());
+        prepare();
+        {
+            QPainter painter(&frame_);
+            painter.scale(sx, sy);
+            room_.render(painter, roomView());
+        }
+        finish();
         return;
     }
     if (screen_ == Screen::Match && match_.active()) {
@@ -259,21 +279,26 @@ void Menu::render()
         match_.render();
         return;
     }
-    QPainter painter(&frame_);
-    if (screen_ == Screen::Map) {
-        map_.render(painter);
-    } else if (screen_ == Screen::Editor) {
-        editor_.render(painter, BaseService.muted());
-    } else if (screen_ == Screen::Shop) {
-        depot_.render(painter);
-    } else if (screen_ == Screen::Armory) {
-        armory_.render(painter);
-    } else if (screen_ == Screen::Settings) {
-        settings_.render(painter);
-    } else {
-        main_.render(painter, cards(), mouse_, mouseActive_, BaseService.muted(),
-                     audioRequested_ && !BaseService.audioEnabled());
+    prepare();
+    {
+        QPainter painter(&frame_);
+        painter.scale(sx, sy);
+        if (screen_ == Screen::Map) {
+            map_.render(painter);
+        } else if (screen_ == Screen::Editor) {
+            editor_.render(painter, BaseService.muted());
+        } else if (screen_ == Screen::Shop) {
+            depot_.render(painter);
+        } else if (screen_ == Screen::Armory) {
+            armory_.render(painter);
+        } else if (screen_ == Screen::Settings) {
+            settings_.render(painter);
+        } else {
+            main_.render(painter, cards(), mouse_, mouseActive_, BaseService.muted(),
+                         audioRequested_ && !BaseService.audioEnabled());
+        }
     }
+    finish();
 }
 
 void Menu::startCampaign(int index)
