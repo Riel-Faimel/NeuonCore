@@ -141,6 +141,7 @@ $(SERVER_OBJS): $(BUILD)/app/server/%.o: src/app/server/%.cpp | $(BUILD)
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 
 $(LIB_OBJS): $(BUILD)/lib/%.o: src/lib/%.cpp | $(BUILD)
+	@if not exist "$(BUILD_WIN)\lib" mkdir "$(BUILD_WIN)\lib"
 	@echo [CXX] $<
 	@$(CXX) $(CXXFLAGS) $(INCS) $(DEFS) -c $< -o $@
 

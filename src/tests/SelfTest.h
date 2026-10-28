@@ -31,17 +31,221 @@
 #include <QThread>
 #include <QTcpSocket>
 #include <QTcpServer>
+#include <QTimer>
 #include <QHostAddress>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <utility>
 
 #ifdef DEBUG
+
+// 测试专用 TCP 延迟代理：在客户端和真实服务端之间逐字节转发，双向各自延迟。
+// 只在 -DDEBUG 的测试控制台里编译，release/交付构建完全不包含这段代码。
+// 用它可以把握手、开局、输入和快照都放进“高延迟网络”里跑，且不引入生产代码开关。
+class LatencyProxy : public QObject {
+public:
+    explicit LatencyProxy(QObject *parent = nullptr) : QObject(parent)
+    {
+        clock_.start();
+        flushTimer_.setInterval(2);
+        flushTimer_.setTimerType(Qt::PreciseTimer);
+        connect(&flushTimer_, &QTimer::timeout, this, [this] { flushDue(); });
+        connect(&server_, &QTcpServer::newConnection, this, [this] {
+            acceptClients();
+        });
+    }
+
+    ~LatencyProxy() override { close(); }
+
+    LatencyProxy(const LatencyProxy &) = delete;
+    LatencyProxy &operator=(const LatencyProxy &) = delete;
+
+    bool listen(quint16 upstreamPort, int delayMs, QString *error = nullptr)
+    {
+        close();
+        upstreamPort_ = upstreamPort;
+        delayMs_ = std::max(0, delayMs);
+        if (!server_.listen(QHostAddress::LocalHost, 0)) {
+            if (error != nullptr) {
+                *error = server_.errorString();
+            }
+            return false;
+        }
+        flushTimer_.start();
+        return true;
+    }
+
+    void close()
+    {
+        flushTimer_.stop();
+        server_.close();
+        while (QTcpSocket *pending = server_.nextPendingConnection()) {
+            pending->abort();
+            pending->deleteLater();
+        }
+        QTcpSocket *sockets[2] = {client_, upstream_};
+        client_ = nullptr;
+        upstream_ = nullptr;
+        for (QTcpSocket *socket : sockets) {
+            if (socket != nullptr) {
+                socket->disconnect(this);
+                socket->abort();
+                socket->deleteLater();
+            }
+        }
+        toClient_.clear();
+        toServer_.clear();
+        clientGone_ = false;
+        upstreamGone_ = false;
+        accepted_ = 0;
+        bytesToServer_ = 0;
+        bytesToClient_ = 0;
+    }
+
+    quint16 port() const { return server_.serverPort(); }
+    int delayMs() const { return delayMs_; }
+    void setDelayMs(int delayMs) { delayMs_ = std::max(0, delayMs); }
+    int accepted() const { return accepted_; }
+    int bytesToServer() const { return bytesToServer_; }
+    int bytesToClient() const { return bytesToClient_; }
+
+private:
+    struct Pending {
+        QByteArray bytes;
+        qint64 due = 0;
+    };
+
+    qint64 nowMs() const { return clock_.elapsed(); }
+
+    void acceptClients()
+    {
+        while (QTcpSocket *socket = server_.nextPendingConnection()) {
+            if (client_ != nullptr) {
+                socket->abort();
+                socket->deleteLater();
+                continue;
+            }
+            ++accepted_;
+            clientGone_ = false;
+            upstreamGone_ = false;
+            client_ = socket;
+            client_->setParent(this);
+            upstream_ = new QTcpSocket(this);
+            connect(client_, &QTcpSocket::readyRead, this, [this] {
+                queueFrom(client_, toServer_, &bytesToServer_);
+            });
+            connect(client_, &QTcpSocket::disconnected, this, [this] {
+                clientGone_ = true;
+            });
+            connect(upstream_, &QTcpSocket::connected, this, [this] {
+                // 上游连接建立前到达的字节仍在排队：从连接建立时开始计延迟，
+                // 保证慢连接不会被“已经到期”的队列提前放行。
+                const qint64 base = nowMs();
+                for (Pending &pending : toServer_) {
+                    pending.due = std::max(pending.due, base + delayMs_);
+                }
+            });
+            connect(upstream_, &QTcpSocket::readyRead, this, [this] {
+                queueFrom(upstream_, toClient_, &bytesToClient_);
+            });
+            connect(upstream_, &QTcpSocket::disconnected, this, [this] {
+                upstreamGone_ = true;
+            });
+            connect(upstream_, &QTcpSocket::errorOccurred, this,
+                    [this](QAbstractSocket::SocketError) {
+                        if (upstream_ != nullptr
+                            && upstream_->state() == QAbstractSocket::UnconnectedState) {
+                            upstreamGone_ = true;
+                        }
+                    });
+            upstream_->connectToHost(QHostAddress::LocalHost, upstreamPort_);
+            if (!flushTimer_.isActive()) {
+                flushTimer_.start();
+            }
+            // 客户端的 Hello 可能在 accept 事件之前就已经到达缓冲区；先排空，
+            // 否则会等一个永远不会再来的 readyRead。
+            if (client_->bytesAvailable() > 0) {
+                queueFrom(client_, toServer_, &bytesToServer_);
+            }
+        }
+    }
+
+    void queueFrom(QTcpSocket *source, std::deque<Pending> &queue, int *counter)
+    {
+        if (source == nullptr) {
+            return;
+        }
+        const QByteArray bytes = source->readAll();
+        if (bytes.isEmpty()) {
+            return;
+        }
+        if (counter != nullptr) {
+            *counter += bytes.size();
+        }
+        queue.push_back(Pending{bytes, nowMs() + delayMs_});
+    }
+
+    void flushQueue(std::deque<Pending> &queue, QTcpSocket *destination)
+    {
+        if (destination == nullptr
+            || destination->state() != QAbstractSocket::ConnectedState) {
+            return;
+        }
+        const qint64 now = nowMs();
+        while (!queue.empty() && queue.front().due <= now) {
+            destination->write(queue.front().bytes);
+            destination->flush();
+            queue.pop_front();
+        }
+    }
+
+    void flushDue()
+    {
+        flushQueue(toServer_, upstream_);
+        flushQueue(toClient_, client_);
+        // 一端关闭后先把已排队的字节送完，再关闭另一端；否则解散房间的
+        // MatchEnd 会在代理里被丢掉，客户端只能看到“连接已关闭”。
+        if (upstreamGone_ && toClient_.empty() && client_ != nullptr
+            && client_->state() == QAbstractSocket::ConnectedState) {
+            client_->disconnectFromHost();
+        }
+        if (clientGone_ && toServer_.empty() && upstream_ != nullptr
+            && upstream_->state() == QAbstractSocket::ConnectedState) {
+            upstream_->disconnectFromHost();
+        }
+        const bool clientDown = client_ == nullptr
+                                || client_->state() == QAbstractSocket::UnconnectedState;
+        const bool upstreamDown = upstream_ == nullptr
+                                  || upstream_->state()
+                                         == QAbstractSocket::UnconnectedState;
+        // accept 之前不要停表：listen() 之后、第一个客户端到来之前队列本来就是空的。
+        if (accepted_ > 0 && clientDown && upstreamDown
+            && toClient_.empty() && toServer_.empty()) {
+            flushTimer_.stop();
+        }
+    }
+
+    QTcpServer server_;
+    QTcpSocket *client_ = nullptr;
+    QTcpSocket *upstream_ = nullptr;
+    QTimer flushTimer_;
+    QElapsedTimer clock_;
+    std::deque<Pending> toClient_;
+    std::deque<Pending> toServer_;
+    quint16 upstreamPort_ = 0;
+    int delayMs_ = 0;
+    int accepted_ = 0;
+    int bytesToServer_ = 0;
+    int bytesToClient_ = 0;
+    bool clientGone_ = false;
+    bool upstreamGone_ = false;
+};
 
 class SelfTest {
 public:
@@ -144,6 +348,30 @@ public:
             game.update(1.0f / 60.0f);
         }
         return false;
+    }
+
+    // 网络测试共用的一份最小台本：单波、单架无人机，保证对局状态可预期。
+    static Games::Level networkTestLevel(const QString &name)
+    {
+        Games::Level level;
+        level.name = name;
+        level.startWave = 1;
+        level.enemyLevel = 1;
+        level.script.push_back(games::Wave{{games::EnemySpawn{
+            arena::EnemyType(typeid(arena::DroneEnemy)), 1}}});
+        return level;
+    }
+
+    // 不进入 Menu 事件循环也能等待异步 socket/timer：只泵 Qt 事件，时间有上界。
+    static bool pumpNetworkUntil(const std::function<bool()> &predicate, int timeoutMs)
+    {
+        QElapsedTimer timer;
+        timer.start();
+        while (!predicate() && timer.elapsed() < timeoutMs) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+            QThread::msleep(1);
+        }
+        return predicate();
     }
 
     static int run()
@@ -1401,6 +1629,561 @@ public:
                                QStringLiteral("connection failure carries an error message"));
         }
 
+        log(QStringLiteral("Four-client room fan-out"));
+        {
+            server::GameServer quadServer;
+            QString quadError;
+            const bool quadListening = quadServer.listen(0, true, &quadError);
+            success &= require(quadListening,
+                               QStringLiteral("four-client server listens (%1)")
+                                   .arg(quadError));
+            if (quadListening) {
+                const Games::Level quadLevel =
+                    networkTestLevel(QStringLiteral("四人房间"));
+                std::array<std::unique_ptr<client::GameClient>, 4> quads;
+                bool quadConnectStarted = true;
+                for (int i = 0; i < 4; ++i) {
+                    quads[size_t(i)] = std::make_unique<client::GameClient>();
+                    quadConnectStarted &=
+                        quads[size_t(i)]->connectToHost(QStringLiteral("127.0.0.1"),
+                                                        quadServer.port());
+                }
+                success &= require(quadConnectStarted,
+                                   QStringLiteral("four clients start connecting before the match"));
+
+                auto allInRoom = [&] {
+                    for (const auto &quad : quads) {
+                        if (!quad->welcomed() || !quad->inLobby()) {
+                            return false;
+                        }
+                    }
+                    return quadServer.roomPlayers() == 4;
+                };
+                success &= require(pumpNetworkUntil(allInRoom, 6000),
+                                   QStringLiteral("all four clients complete Hello/Welcome"));
+                success &= require(quadServer.roomPlayers() == 4
+                                       && quadServer.roomMaxPlayers() == 4
+                                       && quadServer.roomHostSessionId() == 0,
+                                   QStringLiteral("room count/capacity/host come from the server"));
+                std::array<int, 4> quadPlayerIds{};
+                std::array<quint32, 4> quadSessionIds{};
+                for (int i = 0; i < 4; ++i) {
+                    quadPlayerIds[size_t(i)] = quads[size_t(i)]->playerId();
+                    quadSessionIds[size_t(i)] = quads[size_t(i)]->sessionId();
+                }
+                std::array<int, 4> sortedPlayerIds = quadPlayerIds;
+                std::sort(sortedPlayerIds.begin(), sortedPlayerIds.end());
+                bool distinctSessions = true;
+                for (int i = 0; i < 4; ++i) {
+                    for (int j = i + 1; j < 4; ++j) {
+                        distinctSessions &= quadSessionIds[size_t(i)]
+                                            != quadSessionIds[size_t(j)];
+                    }
+                }
+                success &= require(sortedPlayerIds
+                                       == std::array<int, 4>{1, 2, 3, 4}
+                                       && distinctSessions,
+                                   QStringLiteral("four sessions get stable, distinct player ids"));
+
+                // 未 claim admin 前，服务端拒绝开局；claim 之后才能开始。
+                QString noAdminError;
+                success &= require(!quadServer.startMatch(quadLevel, &noAdminError)
+                                       && !noAdminError.isEmpty()
+                                       && !quadServer.running(),
+                                   QStringLiteral("match start is refused before admin is claimed"));
+                success &= require(quadServer.claimAdmin(quadSessionIds[0]),
+                                   QStringLiteral("host claims admin with the first session"));
+                success &= require(quadServer.adminSessionId() == quadSessionIds[0]
+                                       && quadServer.roomHostSessionId() == quadSessionIds[0],
+                                   QStringLiteral("admin identity and room host agree"));
+                success &= require(quadServer.startMatch(quadLevel),
+                                   QStringLiteral("claimed admin starts the four-client match"));
+                auto allHaveSnapshots = [&] {
+                    for (const auto &quad : quads) {
+                        if (quad->snapshotCount() == 0) {
+                            return false;
+                        }
+                    }
+                    return true;
+                };
+                success &= require(pumpNetworkUntil(allHaveSnapshots, 4000),
+                                   QStringLiteral("all four clients receive snapshots"));
+                bool fanoutOk = true;
+                for (const auto &quad : quads) {
+                    const net::Snapshot &snap = quad->lastSnapshot();
+                    fanoutOk &= snap.players.size() == 4
+                                && snap.localPlayerId == quad->playerId()
+                                && quad->view().playerState().playerId
+                                       == quad->playerId()
+                                && !quad->inLobby();
+                }
+                success &= require(fanoutOk,
+                                   QStringLiteral("each client sees four aircraft and its own local id"));
+                const net::Snapshot &quadFirst = quads[0]->lastSnapshot();
+                bool uniqueAircraft = quadFirst.players.size() == 4;
+                for (size_t i = 0; i < quadFirst.players.size(); ++i) {
+                    for (size_t j = i + 1; j < quadFirst.players.size(); ++j) {
+                        uniqueAircraft &= quadFirst.players[i].playerId
+                                              != quadFirst.players[j].playerId
+                                          && quadFirst.players[i].color
+                                              != quadFirst.players[j].color
+                                          && quadFirst.players[i].pos
+                                              != quadFirst.players[j].pos;
+                    }
+                }
+                success &= require(uniqueAircraft,
+                                   QStringLiteral("four aircraft keep distinct ids, colors and spawns"));
+
+                auto playerPos = [](const net::Snapshot &snapshot, int playerId) {
+                    for (const net::PlayerSnapshot &player : snapshot.players) {
+                        if (player.playerId == playerId) {
+                            return player.pos;
+                        }
+                    }
+                    return Math::Vec2{};
+                };
+                const Math::Vec2 moverBefore =
+                    playerPos(quads[1]->lastSnapshot(), quads[1]->playerId());
+                const Math::Vec2 bystanderBefore =
+                    playerPos(quads[2]->lastSnapshot(), quads[2]->playerId());
+                net::InputCommand quadMove;
+                quadMove.moveX = 1.0f;
+                quadMove.mouseActive = true;
+                quadMove.mouseX = moverBefore.x + 220.0f;
+                quadMove.mouseY = moverBefore.y;
+                success &= require(quads[1]->sendInput(quadMove),
+                                   QStringLiteral("one of four clients sends input"));
+                success &= require(pumpNetworkUntil([&] {
+                                       return playerPos(quads[1]->lastSnapshot(),
+                                                        quads[1]->playerId()).x
+                                              > moverBefore.x + 4.0f;
+                                   }, 3000),
+                                   QStringLiteral("four-client input moves only the sender's aircraft"));
+                success &= require(playerPos(quads[2]->lastSnapshot(),
+                                             quads[2]->playerId())
+                                       .distanceTo(bystanderBefore) < 1.5f,
+                                   QStringLiteral("other clients' aircraft stay put"));
+
+                // 房间满员时第 5 个连接被拒绝，不能挤掉已有成员。
+                client::GameClient overflow;
+                const int rejectsBefore = quadServer.rejectedClients();
+                overflow.connectToHost(QStringLiteral("127.0.0.1"), quadServer.port());
+                success &= require(pumpNetworkUntil([&] { return overflow.failed(); },
+                                                    3000),
+                                   QStringLiteral("a fifth client is rejected while the room is full"));
+                success &= require(quadServer.rejectedClients() == rejectsBefore + 1
+                                       && quadServer.roomPlayers() == 4,
+                                   QStringLiteral("full-room rejection keeps the roster intact"));
+
+                // 有槽位释放后，对局中再加入的会话只能观战。
+                quads[3]->close();
+                success &= require(pumpNetworkUntil([&] {
+                                       return quadServer.roomPlayers() == 3;
+                                   }, 3000),
+                                   QStringLiteral("a mid-match disconnect frees its room slot"));
+                client::GameClient lateSpectator;
+                success &= require(lateSpectator.connectToHost(QStringLiteral("127.0.0.1"),
+                                                               quadServer.port()),
+                                   QStringLiteral("a late client connects after the match started"));
+                success &= require(pumpNetworkUntil([&] {
+                                       return lateSpectator.welcomed()
+                                              && lateSpectator.snapshotCount() > 0;
+                                   }, 4000),
+                                   QStringLiteral("late client receives running snapshots"));
+                success &= require(lateSpectator.spectating()
+                                       && lateSpectator.localPlayerId() == 0
+                                       && lateSpectator.lastSnapshot().players.size() == 3
+                                       && quadServer.roomPlayers() == 4,
+                                   QStringLiteral("late joiner is a spectator without an aircraft"));
+                quads[0]->close();
+                quads[1]->close();
+                quads[2]->close();
+                overflow.close();
+                lateSpectator.close();
+                success &= require(pumpNetworkUntil([&] {
+                                       return quadServer.clientCount() == 0;
+                                   }, 3000),
+                                   QStringLiteral("four-client server tears down cleanly"));
+                quadServer.close();
+            }
+        }
+
+        log(QStringLiteral("Join/start/dissolve races"));
+        {
+            // 1) 第一个客户端还在连接时就开始对局：服务端用 fallback roster 开局，
+            //    客户端完成握手后必须接管那架飞机，而不是变成观战者。
+            server::GameServer earlyServer;
+            QString earlyError;
+            const bool earlyListening = earlyServer.listen(0, true, &earlyError);
+            success &= require(earlyListening,
+                               QStringLiteral("race server listens (%1)").arg(earlyError));
+            LatencyProxy earlyProxy;
+            QString earlyProxyError;
+            const Games::Level raceLevel = networkTestLevel(QStringLiteral("竞态"));
+            if (earlyListening
+                && earlyProxy.listen(earlyServer.port(), 120, &earlyProxyError)) {
+                client::GameClient earlyClient;
+                success &= require(earlyClient.connectToHost(QStringLiteral("127.0.0.1"),
+                                                             earlyProxy.port()),
+                                   QStringLiteral("client starts connecting through a delay proxy"));
+                success &= require(earlyServer.startMatch(raceLevel),
+                                   QStringLiteral("host starts while the first client is still joining"));
+                success &= require(earlyServer.running(),
+                                   QStringLiteral("match runs before any Welcome was delivered"));
+                success &= require(pumpNetworkUntil([&] {
+                                       return earlyClient.welcomed()
+                                              && earlyClient.snapshotCount() > 0;
+                                   }, 6000),
+                                   QStringLiteral("mid-join client completes the handshake into a running match"));
+                success &= require(earlyClient.playerId() > 0
+                                       && earlyClient.localPlayerId()
+                                              == earlyClient.playerId()
+                                       && !earlyClient.spectating(),
+                                   QStringLiteral("mid-join client takes over the fallback slot"));
+                success &= require(earlyClient.lastSnapshot().players.size() == 1,
+                                   QStringLiteral("running match keeps exactly one fallback aircraft"));
+                earlyClient.close();
+                earlyProxy.close();
+                earlyServer.close();
+            } else {
+                success &= require(false,
+                                   QStringLiteral("race latency proxy listens (%1)")
+                                       .arg(earlyProxyError));
+            }
+
+            // 2) 一个客户端已经在房间、第二个正握手时开始对局：第二个会话本局只能观战。
+            server::GameServer midServer;
+            QString midError;
+            const bool midListening = midServer.listen(0, true, &midError);
+            success &= require(midListening,
+                               QStringLiteral("second race server listens (%1)").arg(midError));
+            LatencyProxy midProxy;
+            QString midProxyError;
+            if (midListening && midProxy.listen(midServer.port(), 120, &midProxyError)) {
+                client::GameClient seated;
+                success &= require(seated.connectToHost(QStringLiteral("127.0.0.1"),
+                                                        midServer.port()),
+                                   QStringLiteral("seated client connects directly"));
+                success &= require(pumpNetworkUntil([&] {
+                                       return seated.welcomed() && seated.inLobby();
+                                   }, 4000),
+                                   QStringLiteral("seated client enters the room"));
+                success &= require(midServer.claimAdmin(seated.sessionId()),
+                                   QStringLiteral("seated client claims admin"));
+                client::GameClient midJoin;
+                success &= require(midJoin.connectToHost(QStringLiteral("127.0.0.1"),
+                                                         midProxy.port()),
+                                   QStringLiteral("second client starts a delayed handshake"));
+                success &= require(pumpNetworkUntil([&] {
+                                       return midServer.clientCount() == 2
+                                              && midProxy.accepted() == 1
+                                              && !midJoin.welcomed();
+                                   }, 4000),
+                                   QStringLiteral("second client is in the TCP session but not yet welcomed"));
+                success &= require(midServer.startMatch(raceLevel),
+                                   QStringLiteral("admin starts while the second client is mid-handshake"));
+                success &= require(pumpNetworkUntil([&] {
+                                       return seated.snapshotCount() > 0
+                                              && midJoin.welcomed()
+                                              && midJoin.snapshotCount() > 0;
+                                   }, 5000),
+                                   QStringLiteral("both clients reach snapshots after the race"));
+                success &= require(midJoin.spectating()
+                                       && midJoin.localPlayerId() == 0
+                                       && midJoin.playerId() != seated.playerId()
+                                       && midJoin.lastSnapshot().players.size() == 1,
+                                   QStringLiteral("mid-handshake joiner becomes a spectator, not a crash"));
+
+                // 3) 对局进行中解散：已入座和刚完成握手的客户端都必须进入失败态，不能挂起。
+                midServer.dissolveRoom();
+                success &= require(pumpNetworkUntil([&] {
+                                       return seated.failed() && midJoin.failed();
+                                   }, 5000),
+                                   QStringLiteral("dissolve fails both connected clients instead of hanging"));
+                success &= require(seated.lastError().contains(QStringLiteral("解散"))
+                                       || seated.lastError().contains(QStringLiteral("closed")),
+                                   QStringLiteral("seated client reports the dissolved room"));
+                success &= require(pumpNetworkUntil([&] {
+                                       return midServer.clientCount() == 0;
+                                   }, 3000),
+                                   QStringLiteral("dissolve drops every session"));
+                success &= require(!midServer.isListening(),
+                                   QStringLiteral("dissolve closes the listener"));
+                success &= require(pumpNetworkUntil([&] {
+                                       return !seated.welcomed() && !midJoin.welcomed();
+                                   }, 3000),
+                                   QStringLiteral("failed clients are no longer welcomed"));
+                midProxy.close();
+            } else {
+                success &= require(false,
+                                   QStringLiteral("second race proxy listens (%1)")
+                                       .arg(midProxyError));
+            }
+
+            // 4) 房间已入座、第二个客户端还在握手时直接解散：两个客户端都不崩、不挂起。
+            server::GameServer joinDissolveServer;
+            QString joinDissolveError;
+            const bool joinDissolveListening =
+                joinDissolveServer.listen(0, true, &joinDissolveError);
+            success &= require(joinDissolveListening,
+                               QStringLiteral("join/dissolve race server listens (%1)")
+                                   .arg(joinDissolveError));
+            LatencyProxy joinDissolveProxy;
+            QString joinDissolveProxyError;
+            if (joinDissolveListening
+                && joinDissolveProxy.listen(joinDissolveServer.port(), 120,
+                                            &joinDissolveProxyError)) {
+                client::GameClient roomClient;
+                roomClient.connectToHost(QStringLiteral("127.0.0.1"),
+                                         joinDissolveServer.port());
+                success &= require(pumpNetworkUntil([&] {
+                                       return roomClient.welcomed() && roomClient.inLobby();
+                                   }, 4000),
+                                   QStringLiteral("room client enters before the dissolve"));
+                client::GameClient joiningClient;
+                joiningClient.connectToHost(QStringLiteral("127.0.0.1"),
+                                            joinDissolveProxy.port());
+                success &= require(pumpNetworkUntil([&] {
+                                       return joinDissolveServer.clientCount() == 2
+                                              && joinDissolveProxy.accepted() == 1
+                                              && !joiningClient.welcomed();
+                                   }, 4000),
+                                   QStringLiteral("dissolve happens with a second client mid-handshake"));
+                joinDissolveServer.dissolveRoom();
+                success &= require(pumpNetworkUntil([&] {
+                                       return roomClient.failed() && joiningClient.failed();
+                                   }, 5000),
+                                   QStringLiteral("dissolve during join fails both clients without a crash"));
+                success &= require(!joiningClient.lastError().isEmpty()
+                                       && !roomClient.lastError().isEmpty(),
+                                   QStringLiteral("both race clients carry a failure reason"));
+                joinDissolveProxy.close();
+            } else {
+                success &= require(false,
+                                   QStringLiteral("join/dissolve proxy listens (%1)")
+                                       .arg(joinDissolveProxyError));
+            }
+            joinDissolveServer.close();
+        }
+
+        log(QStringLiteral("Admin and session lifecycle"));
+        {
+            server::GameServer adminServer;
+            QString adminError;
+            const bool adminListening = adminServer.listen(0, true, &adminError);
+            success &= require(adminListening,
+                               QStringLiteral("admin lifecycle server listens (%1)")
+                                   .arg(adminError));
+            if (adminListening) {
+                const Games::Level adminLevel =
+                    networkTestLevel(QStringLiteral("管理员"));
+                client::GameClient hostClient;
+                client::GameClient guestClient;
+                success &= require(hostClient.connectToHost(QStringLiteral("127.0.0.1"),
+                                                            adminServer.port())
+                                       && guestClient.connectToHost(
+                                           QStringLiteral("127.0.0.1"),
+                                           adminServer.port()),
+                                   QStringLiteral("host and guest sessions connect"));
+                success &= require(pumpNetworkUntil([&] {
+                                       return hostClient.welcomed()
+                                              && guestClient.welcomed()
+                                              && adminServer.roomPlayers() == 2;
+                                   }, 4000),
+                                   QStringLiteral("both sessions are welcomed into the room"));
+                success &= require(hostClient.playerId() != guestClient.playerId(),
+                                   QStringLiteral("host and guest get distinct player slots"));
+
+                // 未 claim 前任何来源都不能开局。
+                QString unclaimedError;
+                success &= require(!adminServer.startMatch(adminLevel, &unclaimedError)
+                                       && !unclaimedError.isEmpty()
+                                       && !adminServer.running(),
+                                   QStringLiteral("start is rejected without a claimed admin"));
+                QString unclaimedReturnError;
+                success &= require(!adminServer.returnToRoom(&unclaimedReturnError)
+                                       && !unclaimedReturnError.isEmpty(),
+                                   QStringLiteral("return-to-room is rejected without a claimed admin"));
+
+                // TCP 客户端（非宿主控制面）发 StartMatch：直接拒绝且不改变服务端状态。
+                const int rejectsBefore = adminServer.rejectedClients();
+                QTcpSocket intruder;
+                intruder.connectToHost(QStringLiteral("127.0.0.1"), adminServer.port());
+                success &= require(pumpNetworkUntil([&] {
+                                       return intruder.state()
+                                              == QAbstractSocket::ConnectedState;
+                                   }, 2000),
+                                   QStringLiteral("raw TCP intruder connects"));
+                net::HelloMessage intruderHello;
+                intruderHello.clientVersion = QStringLiteral("non-admin");
+                intruder.write(net::encodeHello(intruderHello));
+                net::StartMatchMessage intruderStart;
+                intruderStart.levelName = QStringLiteral("intruder");
+                intruderStart.startWave = 1;
+                intruderStart.enemyLevel = 1;
+                net::StartMatchWave intruderWave;
+                intruderWave.spawns.push_back({QStringLiteral("drone"), 99});
+                intruderStart.waves.push_back(intruderWave);
+                intruder.write(net::encodeStartMatch(intruderStart));
+                intruder.flush();
+                success &= require(pumpNetworkUntil([&] {
+                                       return intruder.state()
+                                              == QAbstractSocket::UnconnectedState;
+                                   }, 3000),
+                                   QStringLiteral("non-admin TCP StartMatch is rejected"));
+                success &= require(pumpNetworkUntil([&] {
+                                       return adminServer.roomPlayers() == 2;
+                                   }, 3000),
+                                   QStringLiteral("rejected intruder leaves the room"));
+                success &= require(adminServer.rejectedClients() == rejectsBefore + 1
+                                       && !adminServer.running(),
+                                   QStringLiteral("rejected StartMatch starts nothing"));
+
+                QString bogusClaimError;
+                success &= require(!adminServer.claimAdmin(999999, &bogusClaimError)
+                                       && !bogusClaimError.isEmpty(),
+                                   QStringLiteral("claiming an unknown session fails"));
+                success &= require(adminServer.claimAdmin(hostClient.sessionId()),
+                                   QStringLiteral("host claims admin with its own session"));
+                const quint32 adminId = hostClient.sessionId();
+                success &= require(adminServer.adminSessionId() == adminId
+                                       && adminServer.roomHostSessionId() == adminId,
+                                   QStringLiteral("claimed admin owns the room host slot"));
+                success &= require(adminServer.claimAdmin(hostClient.sessionId()),
+                                   QStringLiteral("re-claiming the same session is idempotent"));
+                success &= require(adminServer.adminSessionId() == adminId,
+                                   QStringLiteral("admin identity survives re-claim"));
+                success &= require(adminServer.startMatch(adminLevel),
+                                   QStringLiteral("claimed admin starts the match"));
+                success &= require(pumpNetworkUntil([&] {
+                                       return hostClient.snapshotCount() > 0
+                                              && guestClient.snapshotCount() > 0;
+                                   }, 4000),
+                                   QStringLiteral("both sessions receive the admin's match"));
+                success &= require(adminServer.adminSessionId() == adminId,
+                                   QStringLiteral("admin identity survives start"));
+
+                success &= require(adminServer.returnToRoom(),
+                                   QStringLiteral("claimed admin returns the room"));
+                success &= require(!adminServer.running()
+                                       && adminServer.adminSessionId() == adminId
+                                       && adminServer.roomHostSessionId() == adminId,
+                                   QStringLiteral("admin identity is stable across return-to-room"));
+                success &= require(adminServer.returnToRoom(),
+                                   QStringLiteral("returning to the room again is idempotent"));
+                success &= require(adminServer.adminSessionId() == adminId,
+                                   QStringLiteral("idempotent return keeps the admin identity"));
+                success &= require(adminServer.startMatch(adminLevel),
+                                   QStringLiteral("the same admin starts the next match"));
+                success &= require(adminServer.adminSessionId() == adminId,
+                                   QStringLiteral("admin identity survives retry/restart"));
+
+                // 管理员掉线后：陈旧 admin 不会转给 guest，start/return 都被拒绝。
+                hostClient.close();
+                success &= require(pumpNetworkUntil([&] {
+                                       return adminServer.roomPlayers() == 1;
+                                   }, 3000),
+                                   QStringLiteral("admin disconnect leaves the guest in the room"));
+                QString noAdminStartError;
+                success &= require(!adminServer.startMatch(adminLevel, &noAdminStartError)
+                                       && !noAdminStartError.isEmpty()
+                                       && adminServer.adminSessionId() == adminId,
+                                   QStringLiteral("start is refused after the admin disconnects"));
+                QString noAdminReturnError;
+                success &= require(!adminServer.returnToRoom(&noAdminReturnError)
+                                       && !noAdminReturnError.isEmpty(),
+                                   QStringLiteral("return-to-room is refused after the admin disconnects"));
+                success &= require(adminServer.adminSessionId() == adminId,
+                                   QStringLiteral("stale admin id is not reassigned to the guest"));
+                success &= require(!adminServer.claimAdmin(adminId),
+                                   QStringLiteral("the disconnected admin session cannot be reclaimed"));
+                guestClient.close();
+                success &= require(pumpNetworkUntil([&] {
+                                       return adminServer.clientCount() == 0;
+                                   }, 3000),
+                                   QStringLiteral("admin lifecycle server clears its sessions"));
+                adminServer.close();
+            }
+        }
+
+        log(QStringLiteral("Delayed network proxy"));
+        {
+            server::GameServer latencyServer;
+            QString latencyError;
+            const bool latencyListening = latencyServer.listen(0, true, &latencyError);
+            success &= require(latencyListening,
+                               QStringLiteral("latency test server listens (%1)")
+                                   .arg(latencyError));
+            LatencyProxy proxy;
+            QString proxyError;
+            const bool proxyListening =
+                latencyListening && proxy.listen(latencyServer.port(), 90, &proxyError);
+            success &= require(proxyListening,
+                               QStringLiteral("test latency proxy listens (%1)")
+                                   .arg(proxyError));
+            if (proxyListening) {
+                const Games::Level latencyLevel =
+                    networkTestLevel(QStringLiteral("延迟网络"));
+                client::GameClient delayed;
+                QElapsedTimer handshakeClock;
+                handshakeClock.start();
+                success &= require(delayed.connectToHost(QStringLiteral("127.0.0.1"),
+                                                         proxy.port()),
+                                   QStringLiteral("client connects through the latency proxy"));
+                success &= require(pumpNetworkUntil([&] { return delayed.welcomed(); },
+                                                    5000),
+                                   QStringLiteral("Hello/Welcome traverses the latency proxy"));
+                const qint64 handshakeMs = handshakeClock.elapsed();
+                success &= require(handshakeMs >= 80,
+                                   QStringLiteral("proxy really delays the handshake (%1 ms)")
+                                       .arg(handshakeMs));
+                success &= require(proxy.accepted() == 1
+                                       && proxy.bytesToServer() > 0
+                                       && proxy.bytesToClient() > 0,
+                                   QStringLiteral("proxy forwards bytes in both directions"));
+                success &= require(pumpNetworkUntil([&] {
+                                       return delayed.inLobby()
+                                              && !delayed.rooms().empty()
+                                              && delayed.rooms().front().players == 1;
+                                   }, 4000),
+                                   QStringLiteral("room state traverses the latency proxy"));
+                success &= require(latencyServer.claimAdmin(delayed.sessionId()),
+                                   QStringLiteral("admin claim works through the proxy connection"));
+                success &= require(latencyServer.startMatch(latencyLevel),
+                                   QStringLiteral("host start works with a delayed client"));
+                success &= require(pumpNetworkUntil([&] {
+                                       return delayed.snapshotCount() > 0;
+                                   }, 5000),
+                                   QStringLiteral("snapshots traverse the latency proxy"));
+                proxy.setDelayMs(150);
+                success &= require(proxy.delayMs() == 150,
+                                   QStringLiteral("proxy delay is configurable (80-150 ms)"));
+                const float delayedBefore = delayed.view().playerState().pos.x;
+                net::InputCommand delayedMove;
+                delayedMove.moveX = 1.0f;
+                delayedMove.mouseActive = true;
+                delayedMove.mouseX = delayedBefore + 220.0f;
+                delayedMove.mouseY = delayed.view().playerState().pos.y;
+                success &= require(delayed.sendInput(delayedMove),
+                                   QStringLiteral("input is written through the delay proxy"));
+                success &= require(pumpNetworkUntil([&] {
+                                       return delayed.view().playerState().pos.x
+                                              > delayedBefore + 4.0f;
+                                   }, 5000),
+                                   QStringLiteral("input and snapshot round-trip at 150 ms"));
+                success &= require(latencyServer.snapshot().players.front().pos.x
+                                       > delayedBefore + 4.0f,
+                                   QStringLiteral("authoritative state moved behind the proxy"));
+                delayed.close();
+                success &= require(pumpNetworkUntil([&] {
+                                       return latencyServer.clientCount() == 0;
+                                   }, 3000),
+                                   QStringLiteral("delayed client disconnects cleanly"));
+                proxy.close();
+            }
+            latencyServer.close();
+        }
+
         log(QStringLiteral("Multiplayer sessions over TCP"));
         {
             server::GameServer multiServer;
@@ -1746,23 +2529,56 @@ public:
                                       == hostMenu.match_.totalWaves(),
                            QStringLiteral("host start uses the submitted script for every client"));
 
-        // 房主结果页“重新部署”必须原地开新局，不能重建服务器/房间。
+        // 房主/加入者都停在结果页时，房主“重新部署”必须原地回到房间：
+        // 不重建服务器、不换会话、不丢管理员身份。
         const quint32 joinSessionBeforeRestart =
             joinMenu.match_.gameClient() != nullptr
                 ? joinMenu.match_.gameClient()->sessionId()
                 : 0;
+        server::GameServer *hostServerBeforeRetry = hostMenu.match_.localServer();
+        const quint32 hostSessionBeforeRetry =
+            hostMenu.match_.gameClient() != nullptr
+                ? hostMenu.match_.gameClient()->sessionId()
+                : 0;
+        const quint32 adminBeforeRetry =
+            hostServerBeforeRetry != nullptr ? hostServerBeforeRetry->adminSessionId() : 0;
+        hostMenu.screen_ = Menu::Screen::Result;
+        joinMenu.screen_ = Menu::Screen::Result;
         hostMenu.retry();
         success &= require(hostMenu.screen() == Menu::Screen::Room
-                               && hostMenu.match_.localServer() != nullptr
-                               && !hostMenu.match_.localServer()->running(),
-                           QStringLiteral("host retry returns to the room, not a new match"));
+                               && hostMenu.match_.localServer() == hostServerBeforeRetry
+                               && hostServerBeforeRetry != nullptr
+                               && !hostServerBeforeRetry->running()
+                               && hostMenu.match_.gameClient() != nullptr
+                               && hostMenu.match_.gameClient()->sessionId()
+                                      == hostSessionBeforeRetry
+                               && hostServerBeforeRetry->adminSessionId()
+                                      == adminBeforeRetry,
+                           QStringLiteral("host retry from the result screen reuses server/admin/session"));
         success &= require(pumpMenu(joinMenu, [&] {
                                return joinMenu.screen() == Menu::Screen::Room
                                       && joinMenu.match_.gameClient() != nullptr
                                       && joinMenu.match_.gameClient()->sessionId()
                                              == joinSessionBeforeRestart;
                            }, 4000),
-                           QStringLiteral("joined client returns to the room on host retry"));
+                           QStringLiteral("result-screen clients follow the host back to the room"));
+        // 重复 retry 不应重复建房或让会话漂移。
+        hostMenu.retry();
+        success &= require(hostMenu.screen() == Menu::Screen::Room
+                               && hostMenu.match_.localServer() == hostServerBeforeRetry
+                               && hostMenu.match_.gameClient() != nullptr
+                               && hostMenu.match_.gameClient()->sessionId()
+                                      == hostSessionBeforeRetry
+                               && hostServerBeforeRetry->adminSessionId()
+                                      == adminBeforeRetry,
+                           QStringLiteral("repeated host retry stays in the same room and session"));
+        success &= require(pumpMenu(joinMenu, [&] {
+                               return joinMenu.screen() == Menu::Screen::Room
+                                      && joinMenu.match_.gameClient() != nullptr
+                                      && joinMenu.match_.gameClient()->sessionId()
+                                             == joinSessionBeforeRestart;
+                           }, 2000),
+                           QStringLiteral("repeated host retry keeps the joined session stable"));
 
         hostMenu.keyPress(Qt::Key_Return);
         success &= require(hostMenu.match_.localServer()->running(),
@@ -1776,8 +2592,12 @@ public:
                            }, 4000),
                            QStringLiteral("joined client enters the restarted match"));
 
-        hostMenu.returnToMenu();
-        success &= require(hostMenu.match_.localServer() == nullptr,
+        // 客户端仍停在结算页时房主 ESC 离开：房主解散，加入者进入失败页。
+        hostMenu.screen_ = Menu::Screen::Result;
+        joinMenu.screen_ = Menu::Screen::Result;
+        hostMenu.keyPress(Qt::Key_Escape);
+        success &= require(hostMenu.screen() == Menu::Screen::Main
+                               && hostMenu.match_.localServer() == nullptr,
                            QStringLiteral("host leaving the room closes the embedded server"));
         success &= require(pumpMenu(joinMenu, [&] {
                                return joinMenu.screen() == Menu::Screen::Failure;
@@ -1785,6 +2605,9 @@ public:
                            QStringLiteral("host leaving the room sends clients to failure"));
         success &= require(joinMenu.failureView().title.contains(QStringLiteral("房间已解散")),
                            QStringLiteral("host leaving is reported as room dissolved"));
+        success &= require(joinMenu.match_.failed()
+                               && joinMenu.failureView().retryable,
+                           QStringLiteral("client failure state is terminal but retryable"));
 
         joinMenu.keyPress(Qt::Key_Return);
         success &= require(joinMenu.screen() == Menu::Screen::Room
@@ -1802,23 +2625,46 @@ public:
                                && !joinMenu.match_.active(),
                            QStringLiteral("failure screen ESC returns to the main menu"));
 
-        // 服务器接受 TCP 但从不 Welcome：必须有连接超时，不能一直停在空房间。
+        // 服务器接受 TCP 但从不 Welcome：必须有连接超时，不能一直停在空房间；
+        // 连续重试每次只开一条新连接，不会堆积房间或挂起。
         QTcpServer silentServer;
         success &= require(silentServer.listen(QHostAddress::LocalHost, 0),
                            QStringLiteral("silent server reserves a port"));
+        int silentAccepts = 0;
+        QObject::connect(&silentServer, &QTcpServer::newConnection, [&] {
+            while (QTcpSocket *socket = silentServer.nextPendingConnection()) {
+                ++silentAccepts;
+                socket->setParent(&silentServer);   // 接受但永远不写 Welcome
+            }
+        });
         Menu silentJoin(false, false);
         silentJoin.keyPress(Qt::Key_2);
         silentJoin.keyPress(Qt::Key_F3);
         silentJoin.editor_.setHost(QStringLiteral("127.0.0.1"));
         silentJoin.editor_.setPort(silentServer.serverPort());
         silentJoin.keyPress(Qt::Key_Return);
-        success &= require(pumpMenu(silentJoin, [&] {
-                               return silentJoin.screen() == Menu::Screen::Failure;
-                           }, 7000),
-                           QStringLiteral("silent server times out instead of showing an empty room"));
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            if (attempt > 0) {
+                silentJoin.keyPress(Qt::Key_Return);
+            }
+            success &= require(pumpMenu(silentJoin, [&] {
+                                   return silentJoin.screen() == Menu::Screen::Failure;
+                               }, 7000),
+                               QStringLiteral("silent server attempt %1 times out instead of hanging")
+                                   .arg(attempt + 1));
+            success &= require(silentAccepts == attempt + 1,
+                               QStringLiteral("silent retry %1 opens exactly one connection")
+                                   .arg(attempt + 1));
+            success &= require(silentJoin.match_.localServer() == nullptr
+                                   && silentJoin.match_.gameClient() != nullptr,
+                               QStringLiteral("silent retry %1 never fabricates a room server")
+                                   .arg(attempt + 1));
+        }
         success &= require(silentJoin.failureView().title.contains(
                                QStringLiteral("不存在")),
                            QStringLiteral("timeout is presented as a missing room"));
+        success &= require(silentAccepts == 3,
+                           QStringLiteral("repeated timeout retries leave three sockets, not duplicates"));
         silentJoin.returnToMenu();
         silentServer.close();
 
