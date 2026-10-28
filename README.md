@@ -61,6 +61,10 @@ NeonCoreServer.exe --port 7777
 - “加入主机”连接到正在等待的房间时显示同一份房间数据；连接失败、服务器不存在或房主解散时显示带 `ENTER` 重试 / `ESC` 返回的专用失败页；开局后加入的会话进入观战；
 - “单机”选项卡仍是本地直连、立即开局；“标准协议”与单机内嵌服务端路径完全不变。
 
+## 窗口与 QML 事件
+
+窗口事件、坐标换算、QML 覆盖层、准星和缩放流程见 [`docs/WINDOW_EVENTS.md`](docs/WINDOW_EVENTS.md)。
+
 ## 操作
 
 | 按键 | 动作 |
@@ -204,7 +208,7 @@ cpp/
 │  │  │  │  ├─ GameSimulation.h/.cpp 模拟：Arena / Waves / Upgrades、状态、计时、输入
 │  │  │  │  ├─ Waves/Waves.h/.cpp    按提交的台本出生敌人
 │  │  │  │  └─ Upgrades/Upgrades.h/.cpp 强化池、抽取与应用
-│  │  │  ├─ Net/Server.h/.cpp        QTcpServer：headless GameSimulation + 60Hz 广播 + 房间生命周期
+│  │  │  ├─ Net/Server.h/.cpp        QTcpServer：headless GameSimulation + 30Hz 压缩快照 + 房间生命周期
 │  │  │  ├─ Room/Room.h/.cpp         服务端权威房间：名字/容量/房主/等待或对局中（单房间）
 │  │  │  ├─ Shop/                    权威积分 + 地雷库存（持久化）
 │  │  │  ├─ Loadout/                 权威发射器（持久化）
@@ -261,7 +265,7 @@ cpp/
 └─ dist/NeonCore/                 交付用 release GUI + 运行库
 ```
 
-`src/app/client/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Music`、`Pointer`、`Paint`、`ThreadPool` 六个 `namespace base` 组件。`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），Menu / Games / Arena / Renderer / Shop 都直接调用 `BaseService`，不再通过构造函数传递 `Base&`。`Base.h` 仍只暴露 Base 的输入/音频/指针/并行/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Music` 的 QMediaPlayer、`Pointer` 的位置/时钟/准星、`Paint` 的 QFontDatabase 细节、`ThreadPool` 的线程管理都在各自组件内。字体与工作线程由 `main()` 在 `QApplication` 之后调 `Base::initialize()` 初始化；音频由 `BaseService.initAudio()` 按需初始化，`main()` 退出前调 `BaseService.shutdown()`（先停线程池，再释放 Qt 音频对象）。窗口通过 `BaseService.pointerMoveTo/pointerSetVisible/pointerUpdate/pointerDraw` 驱动全局指针。
+`src/app/client/Base/` 是模块目录：`Base` 是全局模块类，组合 `Input`、`Audio`、`Music`、`Pointer`、`Paint`、`ThreadPool` 六个 `namespace base` 组件。`Base` 是**进程级单例**：唯一实例是 `BaseService`（`extern Base BaseService;`，定义在 `Base.cpp`），Menu / Games / Arena / Renderer / Shop 都直接调用 `BaseService`，不再通过构造函数传递 `Base&`。`Base.h` 仍只暴露 Base 的输入/音频/指针/并行/绘制接口；`Input` 的键鼠状态、`Audio` 的 QSoundEffect/WAV、`Music` 的 QMediaPlayer、`Pointer` 的位置/时钟/准星、`Paint` 的 QFontDatabase 细节、`ThreadPool` 的线程管理都在各自组件内。字体与工作线程由 `main()` 在 `QApplication` 之后调 `Base::initialize()` 初始化；音频由 `BaseService.initAudio()` 按需初始化，`main()` 退出前调 `BaseService.shutdown()`（先停线程池，再释放 Qt 音频对象）。窗口通过 `BaseService.pointerMoveTo/pointerSetVisible/pointerUpdate/pointerDraw` 驱动 Widgets 准星；QML 结算/失败页通过 `Reticle.qml` 读取同一组指针状态绘制，详见 `docs/WINDOW_EVENTS.md`。
 
 `src/app/client/Games/` 是单机适配器目录：`Games` 公开继承 `games::GameSimulation`，自己只拥有 `games::Renderer` 并实现模拟的表现钩子。`GameSimulation` 在 `src/app/server/Simulation/`，只推进 `Arena / Waves / Upgrades`、一局状态、运行时间和输入，不依赖 Renderer；`Waves` 和 `Upgrades` 也在 `src/app/server/Simulation/`。本地离线路径同样链接这份模拟，但服务端仍是联机时的唯一权威实例。`Games::update()` 每帧先从 `BaseService` 采集 `arena::InputState`（移动/鼠标/射击），再调用模拟，并通过 `on*` 钩子调用渲染器的震屏/闪屏/横幅/彩带和音效。`Games::render()` 先 `writeSnapshot()` 提取 `net::Snapshot`，再让 `client::GameView::apply()` 重建只读世界，最后交给 `Renderer` 绘制——本地离线路径和 TCP 客户端共用同一条表现路径（标题在 `menu::*`，结算/失败页在 `src/qml/`）。四个关卡分别使用 `waves/level-01..04.json`，`GameSimulation::Level.enemyLevel` 为 1–4，作为隐藏的敌人成长等级乘在血量/伤害/速度上。
 
@@ -414,7 +418,7 @@ $env:NEON_RENDER_THREADS=2
 
 - C++ 版使用 Qt 6 的字体渲染，字形和抗锯齿效果与 pygame 版略有差异；布局、配色和逻辑保持一致。
 - 中文使用系统微软雅黑/黑体。若字体缺失，可在 `src/app/client/Base/Paint/Paint.cpp` 的 `Paint::initialize()` 中更换字体路径。
-- 鼠标指针是全局元素，属于 `Base` 的 `base::Pointer` 组件（`src/app/client/Base/Pointer/`）：窗口每帧通过 `BaseService.pointerDraw()` 把它叠在画面最上层，`base::Paint::reticle()` 是唯一画法，所有界面共用同一个指针和同一个时钟（局内暂停时外弧也照常旋转）；窗口内隐藏系统光标，指针移出窗口时恢复系统箭头。
+- 鼠标指针是全局元素，属于 `Base` 的 `base::Pointer` 组件（`src/app/client/Base/Pointer/`）：Widgets 画面用 `BaseService.pointerDraw()`，QML 结算/失败页用 `Reticle.qml` 镜像同一位置/时钟/可见性；`base::Paint::reticle()` 是 Widgets 画法。窗口内隐藏系统光标，指针移出窗口时恢复系统箭头。
 - 第三方运行库：Qt 6（LGPLv3）与 FFmpeg（LGPLv2.1+）。分发时请保留相应的许可证信息，见 [`THIRD_PARTY.txt`](THIRD_PARTY.txt)。
 
 更多画面：[标题](screenshots/title.png) · [星区地图](screenshots/map.png) · [战备](screenshots/armory.png) · [商店](screenshots/shop.png) · [设置](screenshots/settings.png) · [台本编辑器](screenshots/editor.png) · [局域网主机](screenshots/server_setup.png) · [加入主机](screenshots/server_join.png) · [房间（房主）](screenshots/room_host.png) · [房间（加入者）](screenshots/room_join.png) · [多玩家](screenshots/multiplayer.png) · [强化协议](screenshots/upgrade.png) · [Boss](screenshots/boss.png) · [真实窗口](screenshots/window.png)

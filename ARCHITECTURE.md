@@ -2,6 +2,8 @@
 
 这份文档只描述 **C++ / Qt 6 版** 的结构。目标是让后续加机制时，知道“这件事应该由谁决定”，而不是继续往中心类里堆分支。
 
+窗口事件、QML 覆盖层和准星流程见 [`docs/WINDOW_EVENTS.md`](docs/WINDOW_EVENTS.md)。
+
 ## 设计原则
 
 1. **一个工作只做一次**
@@ -107,7 +109,7 @@ cpp/src/
 
 音频是进程级服务，拆成两个组件：`Audio` 在 `%TEMP%\neon_core_cpp_audio\<pid>` 下生成自己的 WAV（同时开两个实例不会互相覆盖），启动时设备还没就绪的话会在 `play()` 里节流重试初始化；`Music` 是独立的背景音乐管理器，只初始化一次、由主线程的定时器推进曲目，任何音频重试、界面切换、开局/结算都不会重建播放器。`QMediaPlayer` 自带解码线程，`Music` 只负责在主线程上做状态管理。
 
-指针是全局元素，不属于任何一局、也不属于任何画面，现在是 `Base` 的 `Pointer` 组件：`BaseService` 持有指针位置和独立时钟，`GameWindow` 每帧在 `paintEvent` 里通过 `BaseService.pointerDraw()` 把它叠在 `Menu::frame()` 之上（`pointerMoveTo` / `pointerSetVisible` 由窗口事件驱动）。所以主菜单、局内、强化、暂停、结算共用同一个指针，暂停时外弧也照常旋转。准星的画法只有一份，在 `base::Paint::reticle()`；窗口内隐藏系统光标，指针离开窗口时恢复系统箭头。
+指针是全局元素，不属于任何一局、也不属于任何画面，现在是 `Base` 的 `Pointer` 组件：`BaseService` 持有指针位置和独立时钟，`GameWindow` 在非 QML 屏幕用 `BaseService.pointerDraw()` 把它叠在 `Menu::frame()` 之上；Result/Failure 的 QML 覆盖层用 `Reticle.qml` 读取同一位置/时钟/可见性绘制。主菜单、局内、强化、暂停共用同一个指针，暂停时外弧也照常旋转。Widgets 准星画法在 `base::Paint::reticle()`；QML 准星是它的 Canvas 镜像。窗口内隐藏系统光标，指针离开窗口时恢复系统箭头。
 
 ### Games
 
@@ -490,7 +492,8 @@ GameWindow::tick()
 
 GameWindow::paintEvent()
 ├─ drawImage(Menu::frame())              ← 当前画面
-└─ BaseService.pointerDraw()             ← 全局指针叠在最上层
+├─ 非 QML 屏幕: BaseService.pointerDraw()   ← Widgets 准星
+└─ QML 屏幕: Reticle.qml                  ← QML 准星（同一指针状态）
 ```
 
 ## 加机制应该改哪里
@@ -638,7 +641,7 @@ GPU 加速没有采用：当前是 `QImage` + `QPainter` 光栅管线，走 GPU 
 - 一局的安排只经构造参数进入 `GameSimulation`；`Games` 不提供任何读回安排的接口，`Menu` 只保留展示用的关卡表。
 - 模拟阶段 3：`Games` 仍保留为单机适配器（测试/`--local` 回退）；`menu::Match` 默认用 `GameClient` + 内嵌 `GameServer`，远端用 `--connect`。单机内嵌服务端与客户端在同一主线程的 Qt 事件循环里跑，真实 TCP 回环但不额外起线程。
 - `net::Snapshot` 只含数据：玩家列表（playerId/颜色/复活倒计时）与每个接收者自己的 `localPlayerId`、敌人/传送门类型用注册表的 `dataKey` 字符串，`std::type_index` 不出现在协议里；帧格式是 `[u32 length][u16 type][u16 version][payload]`，序列化用 `QDataStream`。协议版本与快照数据版本都是 2（players[]/localPlayerId/Welcome.playerId/RoomList.members）。
-- 服务端固定 60Hz tick 广播完整快照（目前不压缩、不插值）；单机回环会引入一个 tick/一帧左右的延迟，远端高延迟下的插值/预测留到阶段 4。
+- 服务端 60Hz tick，每 2 tick 广播一次 qCompress 后的完整 keyframe（30Hz）；没有插值/预测，远端高延迟下仍有 30Hz 的阶梯感。
 - `Player` 只读 `InputState`（`moveAxis / mouseActive / mousePosition / shooting / dashRequested`）；客户端把同样的字段封成 `net::InputCommand`，服务端校验后按会话的 playerId 写回 `GameSimulation::setInput(playerId, ...)`，冲刺/暂停/布雷/强化选择都是服务端权威动作。TCP 客户端不能指定 playerId；stdio 宿主可以用 `InputCommand.playerId` 选择飞机。
 - 多玩家目前是 1–4 人的合作对局：积分/击杀仍是全局 `ShopService`（不按玩家拆分），强化是全队共享，暂停/选强化只由 leader（最小 active playerId）决定；阵亡后 3.2s 重新部署（阵亡期间不切换成自由观战），全灭才判负。开局后加入的会话只能观战；重连会得到新的 session/playerId，不会自动接管原来的飞机（没有可恢复令牌）。
 - 房间目前是单房间模型（`RoomManager` 只保存一个 `Room`），没有准备/踢人/玩家昵称；`RoomList.members` 只是会话槽位（sessionId、playerId、是否房主、是否已进入对局）。人数直接由成员列表派生，统计所有 welcomed 会话（主机自己的回环客户端也算 1 人），第 5 个连接会被拒绝；对局开始后加入的会话仍计入房间人数，但没有飞机。`RoomManager` 在服务端记录房主会话，房主离开时会把 host 交给下一个 welcomed 会话。房主解散后 `Match` 直接销毁内嵌服务端，加入者靠 `MatchEnd("房间已解散")` 或断线兜底进入 `Failure`。
