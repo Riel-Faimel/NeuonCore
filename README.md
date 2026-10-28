@@ -65,6 +65,13 @@ NeonCoreServer.exe --port 7777
 
 窗口事件、坐标换算、QML 覆盖层、准星和缩放流程见 [`docs/WINDOW_EVENTS.md`](docs/WINDOW_EVENTS.md)。
 
+## 分支维护
+
+- `main`：QML 主开发线；
+- `widgets-only`：纯 Widgets 回退线；
+
+两条线的范围、cherry-pick 流程和发布检查见 [`docs/BRANCHES.md`](docs/BRANCHES.md)。
+
 ## 操作
 
 | 按键 | 动作 |

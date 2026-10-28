@@ -4,6 +4,8 @@
 
 窗口事件、QML 覆盖层和准星流程见 [`docs/WINDOW_EVENTS.md`](docs/WINDOW_EVENTS.md)。
 
+长期维护 `main`（QML）与 `widgets-only`（纯 Widgets）两条线，同步规则见 [`docs/BRANCHES.md`](docs/BRANCHES.md)。
+
 ## 设计原则
 
 1. **一个工作只做一次**
