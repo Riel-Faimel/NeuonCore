@@ -79,6 +79,8 @@ public:
         setupFailureOverlay();
     }
 
+    ~GameWindow() override { hideGameCursor(false); }
+
 protected:
     void paintEvent(QPaintEvent *event) override
     {
@@ -144,6 +146,38 @@ protected:
         }
     }
 
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched != resultOverlay_ && watched != failureOverlay_) {
+            return QWidget::eventFilter(watched, event);
+        }
+        if (event->type() == QEvent::MouseMove
+            || event->type() == QEvent::HoverMove) {
+            auto *mouse = static_cast<QMouseEvent *>(event);
+            auto *widget = static_cast<QWidget *>(watched);
+            const QPoint global = widget->mapTo(
+                this, mouse->position().toPoint());
+            BaseService.pointerMoveTo(toGamePos(QPointF(global)));
+            BaseService.pointerSetVisible(true);
+        } else if (event->type() == QEvent::Enter) {
+            BaseService.pointerSetVisible(true);
+        } else if (event->type() == QEvent::Leave) {
+            BaseService.pointerSetVisible(false);
+        }
+        return false;
+    }
+
+    void hideGameCursor(bool hidden)
+    {
+        if (hidden && !cursorOverridden_) {
+            QGuiApplication::setOverrideCursor(Qt::BlankCursor);
+            cursorOverridden_ = true;
+        } else if (!hidden && cursorOverridden_) {
+            QGuiApplication::restoreOverrideCursor();
+            cursorOverridden_ = false;
+        }
+    }
+
     // 指针在窗口内：隐藏系统光标，由全局准星代替。
     void enterEvent(QEnterEvent *event) override
     {
@@ -152,6 +186,7 @@ protected:
         menu_.mouseMove(position);
         BaseService.pointerMoveTo(position);
         BaseService.pointerSetVisible(true);
+        hideGameCursor(true);
         QWidget::enterEvent(event);
     }
 
@@ -160,6 +195,7 @@ protected:
     {
         setCursor(Qt::ArrowCursor);
         BaseService.pointerSetVisible(false);
+        hideGameCursor(false);
         QWidget::leaveEvent(event);
     }
 
@@ -223,6 +259,8 @@ private:
             return;
         }
         resultQmlRoot_ = resultOverlay_->rootObject();
+        resultOverlay_->setMouseTracking(true);
+        resultOverlay_->installEventFilter(this);
         resultOverlay_->setGeometry(rect());
         resultOverlay_->hide();
     }
@@ -293,6 +331,8 @@ private:
             return;
         }
         failureQmlRoot_ = failureOverlay_->rootObject();
+        failureOverlay_->setMouseTracking(true);
+        failureOverlay_->installEventFilter(this);
         failureOverlay_->setGeometry(rect());
         failureOverlay_->hide();
     }
@@ -354,6 +394,7 @@ private:
     QTimer timer_;
     QElapsedTimer clock_;
     bool centered_ = false;
+    bool cursorOverridden_ = false;
 };
 
 int main(int argc, char *argv[])
