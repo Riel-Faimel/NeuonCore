@@ -21,6 +21,7 @@
 #include <QPainter>
 #include <QQmlEngine>
 #include <QQuickWidget>
+#include <QQuickWindow>
 #include <QQuickItem>
 #include <QUrl>
 #include <QPixmap>
@@ -51,17 +52,10 @@ public:
         : QWidget(parent), menu_(true, offline, host, port)
     {
         setWindowTitle(QStringLiteral("星核协议 · NEON CORE"));
-        // QWidget/QML 使用逻辑像素；不要再按 devicePixelRatio 缩小窗口。
-        // 只在屏幕逻辑可用区域不足 1280x720 时整体等比缩放。
-        qreal uiScale = 1.0;
-        if (QScreen *primary = QGuiApplication::primaryScreen()) {
-            const QRect available = primary->availableGeometry();
-            uiScale = std::min({1.0,
-                                double(available.width()) / GameConfig::ScreenWidth,
-                                double(available.height()) / GameConfig::ScreenHeight});
-        }
-        setFixedSize(qRound(GameConfig::ScreenWidth * uiScale),
-                     qRound(GameConfig::ScreenHeight * uiScale));
+        // 窗口可自由缩放；QML 的 1280x720 stage 会等比适配。
+        // 默认给一个小一些的窗口，避免高 DPI 下整屏过大的压迫感。
+        setMinimumSize(800, 450);
+        resize(1024, 576);
         setFocusPolicy(Qt::StrongFocus);
         setMouseTracking(true);
         setAttribute(Qt::WA_OpaquePaintEvent);
@@ -461,6 +455,7 @@ int main(int argc, char *argv[])
         qputenv("QT_SCALE_FACTOR", "1");
     }
 
+    QQuickWindow::setTextRenderType(QQuickWindow::NativeTextRendering);
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("NeonCore"));
     QApplication::setOrganizationName(QStringLiteral("NeonCore"));

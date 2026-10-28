@@ -69,6 +69,8 @@ Item {
     }
 
     Text {
+
+        renderType: Text.NativeRendering
         anchors.horizontalCenter: parent.horizontalCenter
         y: 158
         text: "CONNECTION FAILED  //  NO AUTHORITATIVE SERVER"
@@ -80,6 +82,8 @@ Item {
     }
 
     Text {
+
+        renderType: Text.NativeRendering
         anchors.horizontalCenter: parent.horizontalCenter
         y: 208
         text: root.title
@@ -93,6 +97,8 @@ Item {
     }
 
     Text {
+
+        renderType: Text.NativeRendering
         anchors.horizontalCenter: parent.horizontalCenter
         y: 275
         text: "本机没有连接到可用的房间服务器。"
@@ -102,6 +108,8 @@ Item {
     }
 
     Text {
+
+        renderType: Text.NativeRendering
         anchors.horizontalCenter: parent.horizontalCenter
         y: 312
         width: 820
@@ -136,6 +144,8 @@ Item {
         }
 
         Text {
+
+            renderType: Text.NativeRendering
             x: 40
             y: 14
             text: "TARGET  目标地址"
@@ -146,6 +156,8 @@ Item {
         }
 
         Text {
+
+            renderType: Text.NativeRendering
             x: 40
             y: 38
             text: root.endpoint.length > 0 ? root.endpoint : "未指定服务器"
@@ -155,6 +167,8 @@ Item {
         }
 
         Text {
+
+            renderType: Text.NativeRendering
             anchors.right: parent.right
             anchors.rightMargin: 24
             anchors.verticalCenter: parent.verticalCenter
@@ -183,6 +197,8 @@ Item {
             border.color: "#53e8ff"
 
             Text {
+
+                renderType: Text.NativeRendering
                 anchors.centerIn: parent
                 text: "ENTER  重试连接"
                 color: "#53e8ff"
@@ -208,6 +224,8 @@ Item {
             border.color: "#41687c"
 
             Text {
+
+                renderType: Text.NativeRendering
                 anchors.centerIn: parent
                 text: "ESC  返回主菜单"
                 color: "#bed7e4"
@@ -226,6 +244,8 @@ Item {
     }
 
     Text {
+
+        renderType: Text.NativeRendering
         anchors.horizontalCenter: parent.horizontalCenter
         y: 592
         text: "这不是对局结算：房间从未进入战斗，或主机已关闭房间。"

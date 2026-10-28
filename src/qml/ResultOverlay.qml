@@ -75,6 +75,8 @@ Item {
     }
 
     Text {
+
+        renderType: Text.NativeRendering
         anchors.horizontalCenter: parent.horizontalCenter
         y: 145
         text: root.victory
@@ -102,6 +104,8 @@ Item {
             ]
 
             Text {
+
+                renderType: Text.NativeRendering
                 required property var modelData
                 anchors.centerIn: parent
                 anchors.horizontalCenterOffset: modelData.x
@@ -116,6 +120,8 @@ Item {
         }
 
         Text {
+
+            renderType: Text.NativeRendering
             anchors.centerIn: parent
             text: root.victory ? "星核已稳定" : "防线失守"
             color: root.titleColor
@@ -127,6 +133,8 @@ Item {
     }
 
     Text {
+
+        renderType: Text.NativeRendering
         anchors.horizontalCenter: parent.horizontalCenter
         y: 267
         text: root.victory ? "你守住了最后一道光。" : "星核在黑暗中熄灭。"
@@ -136,6 +144,8 @@ Item {
     }
 
     Text {
+
+        renderType: Text.NativeRendering
         anchors.horizontalCenter: parent.horizontalCenter
         y: 302
         text: root.levelName
@@ -174,6 +184,8 @@ Item {
                 }
 
                 Text {
+
+                    renderType: Text.NativeRendering
                     x: (parent.width - width) / 2
                     y: 0
                     text: statCell.modelData.label
@@ -183,6 +195,8 @@ Item {
                 }
 
                 Text {
+
+                    renderType: Text.NativeRendering
                     x: (parent.width - width) / 2
                     y: 27
                     text: statCell.modelData.value
@@ -210,6 +224,8 @@ Item {
             border.color: root.accent
 
             Text {
+
+                renderType: Text.NativeRendering
                 anchors.centerIn: parent
                 text: "R  重新部署"
                 color: root.accent
@@ -236,6 +252,8 @@ Item {
             border.color: "#41687c"
 
             Text {
+
+                renderType: Text.NativeRendering
                 anchors.centerIn: parent
                 text: "ESC  返回主菜单"
                 color: "#bed7e4"
