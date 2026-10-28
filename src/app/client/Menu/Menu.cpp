@@ -472,7 +472,7 @@ void Menu::keyPress(int key, bool autoRepeat)
         break;
     }
     case Screen::Failure: {
-        if ((key == Qt::Key_Return || key == Qt::Key_Enter)
+        if ((key == Qt::Key_R || key == Qt::Key_Return || key == Qt::Key_Enter)
             && failureView().retryable) {
             retryFailure();
         } else if (key == Qt::Key_Escape || key == Qt::Key_Q) {
@@ -494,7 +494,7 @@ void Menu::keyPress(int key, bool autoRepeat)
         }
         break;
     case Screen::Result: {
-        if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+        if (key == Qt::Key_R || key == Qt::Key_Return || key == Qt::Key_Enter) {
             retry();
         } else if (key == Qt::Key_Escape || key == Qt::Key_Q) {
             returnToMenu();

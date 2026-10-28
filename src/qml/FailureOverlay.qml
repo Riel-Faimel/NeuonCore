@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick 2.15
 
 Item {
@@ -12,102 +13,210 @@ Item {
     property bool retryRequested: false
     property bool backRequested: false
 
+    readonly property color accent: "#ff4858"
+    readonly property color titleColor: "#ff8b96"
+    readonly property color ink: "#e9f6ff"
+    readonly property color muted: "#7792ab"
+
     Rectangle {
         anchors.fill: parent
-        color: "#050b14"
-        opacity: 0.96
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: "#18080f" }
+            GradientStop { position: 0.55; color: "#09050c" }
+            GradientStop { position: 1.0; color: "#020207" }
+        }
+    }
+
+    // 旧 Failure 的稀疏红点星尘。
+    Repeater {
+        model: 90
+
+        Rectangle {
+            id: dust
+            required property int index
+            x: (dust.index * 149 + 53) % 1280
+            y: (dust.index * 89 + 31) % 720
+            width: 2
+            height: 2
+            radius: 1
+            color: "#e45c70"
+            opacity: 0.10 + (dust.index % 4) * 0.035
+        }
     }
 
     Rectangle {
-        width: 760
-        height: 430
-        anchors.centerIn: parent
-        radius: 14
-        color: "#07111f"
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: 132
+        width: 500
+        height: 1
+        color: root.accent
+        opacity: 0.78
+    }
+
+    Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: 158
+        text: "CONNECTION FAILED  //  NO AUTHORITATIVE SERVER"
+        color: root.accent
+        font.family: "Bahnschrift"
+        font.pixelSize: 14
+        font.letterSpacing: 1.8
+        opacity: 0.9
+    }
+
+    Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: 208
+        text: root.title
+        color: root.titleColor
+        font.family: "Microsoft YaHei"
+        font.pixelSize: 44
+        font.bold: true
+        style: Text.Outline
+        styleColor: "#40ff7785"
+        opacity: 0.98
+    }
+
+    Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: 275
+        text: "本机没有连接到可用的房间服务器。"
+        color: "#dcbfc8"
+        font.family: "Microsoft YaHei"
+        font.pixelSize: 19
+    }
+
+    Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: 312
+        width: 820
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+        text: root.detail
+        color: root.muted
+        font.family: "Microsoft YaHei"
+        font.pixelSize: 16
+    }
+
+    Rectangle {
+        x: 320
+        y: 362
+        width: 640
+        height: 92
+        radius: 10
         border.width: 1
-        border.color: "#ff5d7a"
+        border.color: "#82ff4858"
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: "#f0180c14" }
+            GradientStop { position: 1.0; color: "#f009060c" }
+        }
 
-        Column {
-            anchors.centerIn: parent
-            spacing: 18
+        Rectangle {
+            x: 24
+            y: 32
+            width: 6
+            height: 6
+            radius: 3
+            color: root.accent
+        }
+
+        Text {
+            x: 40
+            y: 14
+            text: "TARGET  目标地址"
+            color: root.muted
+            font.family: "Bahnschrift"
+            font.pixelSize: 12
+            font.letterSpacing: 1.0
+        }
+
+        Text {
+            x: 40
+            y: 38
+            text: root.endpoint.length > 0 ? root.endpoint : "未指定服务器"
+            color: "#f4fbff"
+            font.family: "Bahnschrift"
+            font.pixelSize: 18
+        }
+
+        Text {
+            anchors.right: parent.right
+            anchors.rightMargin: 24
+            anchors.verticalCenter: parent.verticalCenter
+            width: 300
+            horizontalAlignment: Text.AlignRight
+            wrapMode: Text.WordWrap
+            text: "确认主机已启动、地址端口正确；若房主已解散，请让房主重新开房。"
+            color: root.muted
+            font.family: "Microsoft YaHei"
+            font.pixelSize: 13
+        }
+    }
+
+    Row {
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: 508
+        spacing: 40
+
+        Rectangle {
+            width: 250
+            height: 48
+            radius: 9
+            visible: root.retryable
+            color: retryArea.containsMouse ? "#0b2433" : "#07121f"
+            border.width: 1
+            border.color: "#53e8ff"
 
             Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: root.title
-                color: "#ff5d7a"
-                font.pixelSize: 38
-                font.bold: true
-                font.family: "Microsoft YaHei"
+                anchors.centerIn: parent
+                text: "ENTER  重试连接"
+                color: "#53e8ff"
+                font.family: "Bahnschrift"
+                font.pixelSize: 14
+                font.letterSpacing: 1.0
             }
 
-            Text {
-                width: 640
-                anchors.horizontalCenter: parent.horizontalCenter
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-                text: root.detail
-                color: "#e8f4ff"
-                font.pixelSize: 18
-                font.family: "Microsoft YaHei"
-            }
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: root.endpoint
-                color: "#8fb6c8"
-                font.pixelSize: 15
-                font.family: "Microsoft YaHei"
-            }
-
-            Row {
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 28
-
-                Rectangle {
-                    width: 210
-                    height: 52
-                    radius: 9
-                    visible: root.retryable
-                    color: retryArea.containsMouse ? "#123c4b" : "#0a1e2c"
-                    border.width: 1
-                    border.color: "#5ee7df"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "ENTER  重试"
-                        color: "#e8f4ff"
-                        font.pixelSize: 18
-                        font.family: "Microsoft YaHei"
-                    }
-                    MouseArea {
-                        id: retryArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: root.retryRequested = true
-                    }
-                }
-
-                Rectangle {
-                    width: 210
-                    height: 52
-                    radius: 9
-                    color: backArea.containsMouse ? "#2a1820" : "#150b10"
-                    border.width: 1
-                    border.color: "#7d4a57"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "ESC  返回标题"
-                        color: "#e8f4ff"
-                        font.pixelSize: 18
-                        font.family: "Microsoft YaHei"
-                    }
-                    MouseArea {
-                        id: backArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: root.backRequested = true
-                    }
-                }
+            MouseArea {
+                id: retryArea
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: root.retryRequested = true
             }
         }
+
+        Rectangle {
+            width: 250
+            height: 48
+            radius: 9
+            color: backArea.containsMouse ? "#0b1d2b" : "#070e19"
+            border.width: 1
+            border.color: "#41687c"
+
+            Text {
+                anchors.centerIn: parent
+                text: "ESC  返回主菜单"
+                color: "#bed7e4"
+                font.family: "Bahnschrift"
+                font.pixelSize: 14
+                font.letterSpacing: 1.0
+            }
+
+            MouseArea {
+                id: backArea
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: root.backRequested = true
+            }
+        }
+    }
+
+    Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: 592
+        text: "这不是对局结算：房间从未进入战斗，或主机已关闭房间。"
+        color: "#9a7a84"
+        font.family: "Microsoft YaHei"
+        font.pixelSize: 13
+        opacity: 0.9
     }
 }
