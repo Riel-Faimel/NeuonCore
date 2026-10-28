@@ -1,5 +1,7 @@
 # 星核协议 / NEON CORE — C++ / Qt 6 版
 
+> 本分支是 `widgets-only`（纯 Widgets 回退线）。QML 主开发线是 `main`；两条线维护规则见 [docs/BRANCHES.md](docs/BRANCHES.md)。
+
 这是 Python + pygame 版本的 C++ 复刻版。玩法、数值和状态机对照 `main.py` 移植，没有改动机制：
 
 - 8 个波次、4 种普通敌人、最终 Boss「虚空吞噬者」；胜负只看台本是否打完，Boss 只是强敌，放在第几波都不改变结束条件
